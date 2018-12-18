@@ -70,6 +70,10 @@ public class Syntax {
 				return stmts.length;
 			}
 
+			public String lifetime() {
+				return lifetime;
+			}
+
 			public Stmt get(int index) {
 				return stmts[index];
 			}
@@ -95,6 +99,10 @@ public class Syntax {
 			public Variable(String name) {
 				this.name = name;
 			}
+
+			public String name() {
+				return name;
+			}
 		}
 
 		public class Dereference implements Expr, LVal {
@@ -103,10 +111,22 @@ public class Syntax {
 			public Dereference(Expr operand) {
 				this.operand = operand;
 			}
+
+			public Expr operand() {
+				return operand;
+			}
 		}
 
-		public class HeapAllocation implements Expr {
+		public class Box implements Expr {
+			private final Expr operand;
 
+			public Box(Expr operand) {
+				this.operand = operand;
+			}
+
+			public Expr operand() {
+				return operand;
+			}
 		}
 	}
 

@@ -29,7 +29,7 @@ public class TestInputGenerator {
 		 *
 		 * @return
 		 */
-		public int size();
+		public long size();
 
 		/**
 		 * Generate an instance of the given kind
@@ -37,18 +37,18 @@ public class TestInputGenerator {
 		 * @param kind
 		 * @return
 		 */
-		public T generate(int index);
+		public T generate(long index);
 	}
 
 	public static class BoolGenerator implements Generator<Boolean> {
 
 		@Override
-		public int size() {
+		public long size() {
 			return 2;
 		}
 
 		@Override
-		public Boolean generate(int index) {
+		public Boolean generate(long index) {
 			return index == 0;
 		}
 	}
@@ -63,13 +63,13 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
+		public long size() {
 			return upper - lower + 1;
 		}
 
 		@Override
-		public Integer generate(int index) {
-			return lower + index;
+		public Integer generate(long index) {
+			return lower + (int) index;
 		}
 	}
 
@@ -81,13 +81,13 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
+		public long size() {
 			return items.length;
 		}
 
 		@Override
-		public T generate(int index) {
-			return items[index];
+		public T generate(long index) {
+			return items[(int) index];
 		}
 	}
 
@@ -99,12 +99,12 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
+		public long size() {
 			return generator.size();
 		}
 
 		@Override
-		public T generate(int index) {
+		public T generate(long index) {
 			S s = generator.generate(index);
 			return generate(s);
 		}
@@ -122,13 +122,13 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
+		public long size() {
 			return left.size() * right.size();
 		}
 
 		@Override
-		public T generate(int index) {
-			int left_size = left.size();
+		public T generate(long index) {
+			long left_size = left.size();
 			L l = left.generate(index % left_size);
 			R r = right.generate(index / left_size);
 			return generate(l,r);
@@ -147,23 +147,23 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
-			int generator_size = generator.size();
-			int size = 0;
+		public long size() {
+			long generator_size = generator.size();
+			long size = 0;
 			for (int i = 0; i <= max; ++i) {
-				int delta = delta(generator_size,i);
+				long delta = delta(generator_size,i);
 				size = size + delta;
 			}
 			return size;
 		}
 
 		@Override
-		public T generate(int index) {
+		public T generate(long index) {
 			ArrayList<S> items = new ArrayList<>();
-			final int generator_size = generator.size();
+			final long generator_size = generator.size();
 			// Yes, this one is a tad complex
 			for (int i = 0; i <= max; ++i) {
-				int delta = delta(generator_size,i);
+				long delta = delta(generator_size,i);
 				if (index < delta) {
 					for (int j = 0; j < i; ++j) {
 						items.add(generator.generate(index % generator_size));
@@ -176,12 +176,12 @@ public class TestInputGenerator {
 			return generate(items);
 		}
 
-		private static int delta(int base, int power) {
+		private static long delta(long base, int power) {
 			if (power == 0) {
 				// special case as only one empty list
 				return 1;
 			} else {
-				int r = base;
+				long r = base;
 				for (int i = 1; i < power; ++i) {
 					r = r * base;
 				}
@@ -200,8 +200,8 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
-			int sum = 0;
+		public long size() {
+			long sum = 0;
 			for (int i = 0; i != generators.length; ++i) {
 				sum = sum + generators[i].size();
 			}
@@ -209,11 +209,11 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public T generate(int index) {
-			int sum = 0;
+		public T generate(long index) {
+			long sum = 0;
 			for (int i = 0; i != generators.length; ++i) {
 				Generator<? extends T> ith = generators[i];
-				int size = ith.size();
+				long size = ith.size();
 				if (index < (sum + size)) {
 					return ith.generate(index-sum);
 				}
@@ -243,13 +243,13 @@ public class TestInputGenerator {
 		}
 
 		@Override
-		public int size() {
+		public long size() {
 			return names.length;
 		}
 
 		@Override
-		public Variable generate(int index) {
-			return new Expr.Variable(names[index]);
+		public Variable generate(long index) {
+			return new Expr.Variable(names[(int) index]);
 		}
 	}
 
@@ -372,57 +372,56 @@ public class TestInputGenerator {
 		Generator<Stmt> stmtGenerator = buildStmtGenerator(1, 2, exprGenerator, "x", "y", "z");
 		BlockGenerator blockGenerator = new BlockGenerator(3,stmtGenerator);
 		BigStepSemantics semantics = new BigStepSemantics();
-		int total = 0;
-		int valid = 0;
-		int invalid = 0;
-		int falsepos = 0;
-		int falseneg = 0;
+		long valid = 0;
+		long invalid = 0;
+		long falsepos = 0;
+		long falseneg = 0;
+		long size = blockGenerator.size();
 		//
-		System.out.println("SIZE: " + blockGenerator.size());
-//		for (int i = 0; i != blockGenerator.size(); ++i) {
-//			String input = blockGenerator.generate(i).toString();
-//			// Scan block
-//			Stmt.Block stmt;
-//			try {
-//				List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-//				// Parse block
-//				stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context());
-//			} catch (SyntaxError e) {
-//				System.out.println("GENERATED: " + input + " ... [MALFORMED]");
-//				continue;
-//			}
-//			//
-//			boolean ran = false;
-//			boolean checked = false;
-//			// See whether or not it borrow checks
-//			try {
-//				new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
-//				checked = true;
-//			} catch(SyntaxError e) { }
-//			// See whether or not it executes
-//			try {
-//				semantics.apply(new AbstractSemantics.State(), "*", stmt);
-//				ran = true;
-//			} catch(Exception e) { }
-//			//
-//			total = total + 1;
-//			System.out.print("GENERATED: " + input + " ... ");
-//			if(checked && ran) {
-//				System.out.println("[VALID]");
-//				valid++;
-//			} else if(checked) {
-//				System.out.println("[FALSE NEGATIVE]");
-//				falseneg++;
-//			} else if(ran) {
-//				System.out.println("[FALSE POSITIVE]");
-//				falsepos++;
-//			} else {
-//				invalid++;
-//				System.out.println("[INVALID]");
-//			}
-//		}
+		for (long i = 0; i != size; ++i) {
+			String input = blockGenerator.generate(i).toString();
+			// Scan block
+			Stmt.Block stmt;
+			try {
+				List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
+				// Parse block
+				stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context());
+			} catch (SyntaxError e) {
+				System.out.println("GENERATED: " + input + " ... [MALFORMED]");
+				continue;
+			}
+			//
+			boolean ran = false;
+			boolean checked = false;
+			// See whether or not it borrow checks
+			try {
+				new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
+				checked = true;
+			} catch(SyntaxError e) { }
+			// See whether or not it executes
+			try {
+				semantics.apply(new AbstractSemantics.State(), "*", stmt);
+				ran = true;
+			} catch(Exception e) { }
+			//
+			double percent = (i * 100) / size;
+			System.out.print("[" + i + " (" + percent + "%)]: " + input + " ... ");
+			if(checked && ran) {
+				System.out.println("[VALID]");
+				valid++;
+			} else if(checked) {
+				System.out.println("[FALSE NEGATIVE]");
+				falseneg++;
+			} else if(ran) {
+				System.out.println("[FALSE POSITIVE]");
+				falsepos++;
+			} else {
+				invalid++;
+				System.out.println("[INVALID]");
+			}
+		}
 		System.out.println("================================");
-		System.out.println("TOTAL: " + total);
+		System.out.println("TOTAL: " + size);
 		System.out.println("VALID: " + valid);
 		System.out.println("INVALID: " + invalid);
 		System.out.println("FALSEPOS: " + falsepos);

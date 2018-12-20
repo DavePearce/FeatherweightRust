@@ -61,9 +61,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.Assignment stmt) {
-		String var = stmt.leftOperand().name();
+		String x = stmt.leftOperand().name();
 		// Extract variable's existing type
-		Cell C1 = R1.get(var);
+		Cell C1 = R1.get(x);
 		check(C1 != null, UNDECLARED_VARIABLE, stmt.leftOperand());
 		Type T1 = C1.type();
 		// Type operand
@@ -71,7 +71,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Environment R2 = p.first();
 		Type T2 = p.second();
 		// Check borrow status
-		check(!borrowed(R2,var), BORROWED_VARIABLE_ASSIGNMENT, stmt.leftOperand());
+		check(!borrowed(R2,x), BORROWED_VARIABLE_ASSIGNMENT, stmt.leftOperand());
 		// lifetime check
 
 		// FIXME: implement lifetime check
@@ -79,15 +79,51 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Check compatibility
 		check(compatible(T1, T2), INCOMPATIBLE_TYPE, stmt.rightOperand());
 		// Update environment
-		Environment R3 = R2.put(var, T2, C1.lifetime());
+		Environment R3 = R2.put(x, T2, C1.lifetime());
 		//
 		return new Pair<>(R3, null);
 	}
 
+	/**
+	 * T-IndAssign
+	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment state, String lifetime, Stmt.IndirectAssignment stmt) {
-		// TODO:
-		return null;
+	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.IndirectAssignment stmt) {
+		String x = stmt.leftOperand().name();
+		// (1) Extract x's type info
+		Cell C0 = R1.get(x);
+		check(C0 != null, UNDECLARED_VARIABLE, stmt.leftOperand());
+		Type T0 = C0.type();
+		//
+		if(T0 instanceof Type.Borrow && ((Type.Borrow) T0).isMutable()) {
+			Type.Borrow b = (Type.Borrow) T0;
+			String y = b.name();
+			//
+			// (2) Extract y's type
+			Cell C1 = R1.get(y);
+			check(C1 != null, UNDECLARED_VARIABLE, b);
+			Type T1 = C1.type();
+			//
+			// (3) Type operand
+			Pair<Environment, Type> p = apply(R1, stmt.rightOperand());
+			Environment R2 = p.first();
+			Type T2 = p.second();
+			// (4) Check lifetimes
+			//
+			// FIXME: implement lifetime check
+			//
+			// (5) Check compatibility
+			check(compatible(T1, T2), INCOMPATIBLE_TYPE, stmt.rightOperand());
+			// Update environment
+			Environment R3 = R2.put(y, T2, C1.lifetime());
+			//
+			return new Pair<>(R3, null);
+		} else if(T0 instanceof Type.Box) {
+			throw new RuntimeException("implement me");
+		} else {
+			syntaxError("expected mutable reference",stmt.leftOperand());
+			return null; // deadcode
+		}
 	}
 
 	/**

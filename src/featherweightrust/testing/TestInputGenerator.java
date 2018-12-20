@@ -3,6 +3,7 @@ package featherweightrust.testing;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import featherweightrust.core.BigStepSemantics;
@@ -148,9 +149,10 @@ public class TestInputGenerator {
 		@Override
 		public int size() {
 			int generator_size = generator.size();
-			int size = 1;
-			for (int i = 1; i <= max; ++i) {
-				size = size + (i * generator_size);
+			int size = 0;
+			for (int i = 0; i <= max; ++i) {
+				int delta = delta(generator_size,i);
+				size = size + delta;
 			}
 			return size;
 		}
@@ -160,20 +162,31 @@ public class TestInputGenerator {
 			ArrayList<S> items = new ArrayList<>();
 			final int generator_size = generator.size();
 			// Yes, this one is a tad complex
-			if (index > 0) {
-				for (int i = 1; i <= max; ++i) {
-					int delta = i * generator_size;
-					if (index < delta) {
-						for (int j = 0; j < i; ++j) {
-							items.add(generator.generate(index % generator_size));
-							index = index / generator_size;
-						}
-						break;
+			for (int i = 0; i <= max; ++i) {
+				int delta = delta(generator_size,i);
+				if (index < delta) {
+					for (int j = 0; j < i; ++j) {
+						items.add(generator.generate(index % generator_size));
+						index = index / generator_size;
 					}
-					index = index - delta;
+					break;
 				}
+				index = index - delta;
 			}
 			return generate(items);
+		}
+
+		private static int delta(int base, int power) {
+			if (power == 0) {
+				// special case as only one empty list
+				return 1;
+			} else {
+				int r = base;
+				for (int i = 1; i < power; ++i) {
+					r = r * base;
+				}
+				return r;
+			}
 		}
 
 		public abstract T generate(List<S> items);
@@ -355,8 +368,8 @@ public class TestInputGenerator {
 	}
 
 	public static void main(String[] args) throws IOException {
-		Generator<Expr> exprGenerator = buildExprGenerator(2, "x", "y", "z");
-		Generator<Stmt> stmtGenerator = buildStmtGenerator(2, 2, exprGenerator, "x", "y", "z");
+		Generator<Expr> exprGenerator = buildExprGenerator(0, "x", "y", "z");
+		Generator<Stmt> stmtGenerator = buildStmtGenerator(1, 2, exprGenerator, "x", "y", "z");
 		BlockGenerator blockGenerator = new BlockGenerator(3,stmtGenerator);
 		BigStepSemantics semantics = new BigStepSemantics();
 		int total = 0;
@@ -364,48 +377,50 @@ public class TestInputGenerator {
 		int invalid = 0;
 		int falsepos = 0;
 		int falseneg = 0;
-		for (int i = 0; i != blockGenerator.size(); ++i) {
-			String input = blockGenerator.generate(i).toString();
-			// Scan block
-			Stmt.Block stmt;
-			try {
-				List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-				// Parse block
-				stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context());
-			} catch (SyntaxError e) {
-				System.out.println("GENERATED: " + input + " ... [MALFORMED]");
-				continue;
-			}
-			//
-			boolean ran = false;
-			boolean checked = false;
-			// See whether or not it borrow checks
-			try {
-				new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
-				checked = true;
-			} catch(SyntaxError e) { }
-			// See whether or not it executes
-			try {
-				semantics.apply(new AbstractSemantics.State(), "*", stmt);
-				ran = true;
-			} catch(Exception e) { }
-			//
-			total = total + 1;
-			System.out.print("GENERATED: " + input + " ... ");
-			if(checked && ran) {
-				System.out.println("[VALID]");
-				valid++;
-			} else if(checked) {
-				System.out.println("[FALSE NEGATIVE]");
-				falseneg++;
-			} else if(ran) {
-				System.out.println("[FALSE POSITIVE]");
-				falsepos++;
-			} else {
-				invalid++;
-				System.out.println("[INVALID]");
-			}
-		}
+		//
+		System.out.println("SIZE: " + blockGenerator.size());
+//		for (int i = 0; i != blockGenerator.size(); ++i) {
+//			String input = blockGenerator.generate(i).toString();
+//			// Scan block
+//			Stmt.Block stmt;
+//			try {
+//				List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
+//				// Parse block
+//				stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context());
+//			} catch (SyntaxError e) {
+//				System.out.println("GENERATED: " + input + " ... [MALFORMED]");
+//				continue;
+//			}
+//			//
+//			boolean ran = false;
+//			boolean checked = false;
+//			// See whether or not it borrow checks
+//			try {
+//				new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
+//				checked = true;
+//			} catch(SyntaxError e) { }
+//			// See whether or not it executes
+//			try {
+//				semantics.apply(new AbstractSemantics.State(), "*", stmt);
+//				ran = true;
+//			} catch(Exception e) { }
+//			//
+//			total = total + 1;
+//			System.out.print("GENERATED: " + input + " ... ");
+//			if(checked && ran) {
+//				System.out.println("[VALID]");
+//				valid++;
+//			} else if(checked) {
+//				System.out.println("[FALSE NEGATIVE]");
+//				falseneg++;
+//			} else if(ran) {
+//				System.out.println("[FALSE POSITIVE]");
+//				falsepos++;
+//			} else {
+//				invalid++;
+//				System.out.println("[INVALID]");
+//			}
+//		}
 		System.out.println("================================");
 		System.out.println("TOTAL: " + total);
 		System.out.println("VALID: " + valid);

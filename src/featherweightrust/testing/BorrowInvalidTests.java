@@ -87,6 +87,12 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_24() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &x; let mut z = &mut y; { let mut w = 1; *z = &w; } }";
+		checkInvalid(input);
+	}
+
 	// ==============================================================
 	// Mutable Borrowing Examples
 	// ==============================================================
@@ -103,6 +109,7 @@ public class BorrowInvalidTests {
 			fail("test shouldn't have passed borrow checking");
 		} catch (SyntaxError e) {
 			// If we get here, then the borrow checker raised an exception
+			e.outputSourceError(System.out);
 		}
 	}
 }

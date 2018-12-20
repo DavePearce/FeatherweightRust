@@ -18,7 +18,6 @@
 package featherweightrust.core;
 
 import featherweightrust.core.Syntax.Expr;
-import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
@@ -33,6 +32,50 @@ import featherweightrust.util.Pair;
  *
  */
 public class BigStepSemantics extends AbstractSemantics {
+
+
+	/**
+	 * Rule R-Assign.
+	 */
+	@Override
+	public Pair<State, Stmt> apply(State state, String lifetime, Stmt.Assignment stmt) {
+		// Extract variable being assigned
+		Expr.Variable lhs = stmt.leftOperand();
+		// Evaluate right hand side operand
+		Pair<State, Expr> rhs = apply(state, stmt.rightOperand());
+		// Extract the location being assigned
+		Location loc = state.locate(lhs.name());
+		// Perform the assignment
+		state = rhs.first().write(loc, (Value) rhs.second());
+		// Done
+		return new Pair<>(state, null);
+	}
+
+	/**
+	 * Rule R-Block.
+	 */
+	@Override
+	public Pair<State, Stmt> apply(State state, String lifetime, Stmt.Block stmt) {
+		// Save current bindings so they can be restored
+		StackFrame originalBindings = state.frame();
+		//
+		for (int i = 0; i != stmt.size(); ++i) {
+			Pair<State, Stmt> p = apply(state, stmt.lifetime(), stmt.get(i));
+			Stmt s = p.second();
+			state = p.first();
+			//
+			if(s != null || s instanceof Value) {
+				// Either we're stuck, or we produced a return value.
+				return new Pair<>(state,s);
+			}
+		}
+		// drop all bindings created within block
+		state = new State(originalBindings, state.store());
+		// drop all allocated locations
+		state = state.drop(stmt.lifetime());
+		//
+		return new Pair<>(state, null);
+	}
 
 	/**
 	 * Rule R-Declare.
@@ -50,59 +93,21 @@ public class BigStepSemantics extends AbstractSemantics {
 	}
 
 	/**
-	 * Rule R-Assign.
+	 * Rule R-IndAssign.
 	 */
 	@Override
-	public Pair<State, Stmt> apply(State state, String lifetime, Stmt.Assignment stmt) {
-		// Evaluate left hand side operand
-		Pair<State, LVal> lhs = apply(state, stmt.leftOperand());
+	public Pair<State, Stmt> apply(State state, String lifetime, Stmt.IndirectAssignment stmt) {
+		// Extract variable being indirectly assigned
+		Expr.Variable lhs = stmt.leftOperand();
 		// Evaluate right hand side operand
-		Pair<State, Expr> rhs = apply(lhs.first(), stmt.rightOperand());
+		Pair<State, Expr> rhs = apply(state, stmt.rightOperand());
+		// Update state
+		state = rhs.first();
 		// Extract the location being assigned
-		Location loc = (Location) lhs.second();
-		// Perform the assignment
-		state = rhs.first().write(loc, (Value) rhs.second());
+		Location loc = (Location) state.read(state.locate(lhs.name()));
+		// Perform the indirect assignment
+		state = state.write(loc, (Value) rhs.second());
 		// Done
-		return new Pair<>(state, null);
-	}
-
-	/**
-	 * Case for Rule R-Assign
-	 */
-	@Override
-	public Pair<State, LVal> apply(State state, LVal.Dereference lval) {
-		// Evaluate operand
-		Pair<State, Expr> p = apply(state, lval.operand());
-		// Done
-		return new Pair<>(p.first(), (Location) p.second());
-	}
-
-	/**
-	 * Case for Rule R-Assign
-	 */
-	@Override
-	public Pair<State, LVal> apply(State state, LVal.Variable lval) {
-		Location loc = state.locate(lval.name());
-		return new Pair<>(state, loc);
-	}
-
-	/**
-	 * Rule R-Block.
-	 */
-	@Override
-	public Pair<State, Stmt> apply(State state, String lifetime, Stmt.Block stmt) {
-		// Save current bindings so they can be restored
-		StackFrame originalBindings = state.frame();
-		//
-		for (int i = 0; i != stmt.size(); ++i) {
-			Pair<State, Stmt> p = apply(state, stmt.lifetime(), stmt.get(i));
-			state = p.first();
-		}
-		// drop all bindings created within block
-		state = new State(originalBindings, state.store());
-		// drop all allocated locations
-		state = state.drop(stmt.lifetime());
-		//
 		return new Pair<>(state, null);
 	}
 
@@ -126,10 +131,10 @@ public class BigStepSemantics extends AbstractSemantics {
 	 */
 	@Override
 	public Pair<State, Expr> apply(State state, Expr.Borrow expr) {
-		// Evaluate operand
-		Pair<State, LVal> pe = apply(state, expr.operand());
+		// Locate operand
+		Location loc = state.locate(expr.operand().name());
 		// Done
-		return new Pair<>(pe.first(), (Expr) pe.second());
+		return new Pair<>(state, loc);
 	}
 
 	/**
@@ -155,5 +160,4 @@ public class BigStepSemantics extends AbstractSemantics {
 		// Read location from store
 		return new Pair<>(state, state.read(loc));
 	}
-
 }

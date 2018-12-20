@@ -18,39 +18,33 @@
 package featherweightrust.util;
 
 import featherweightrust.core.Syntax.Expr;
-import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 
-public abstract class AbstractTransformer<T,S,E,L> {
+public abstract class AbstractTransformer<T,S,E extends S> {
 
-	public Pair<T,S> apply(T state, String lifetime, Stmt stmt) {
-		if (stmt instanceof Stmt.Let) {
-			return apply(state, lifetime, (Stmt.Let) stmt);
-		} else if (stmt instanceof Stmt.Assignment) {
+	public Pair<T, S> apply(T state, String lifetime, Stmt stmt) {
+		if (stmt instanceof Stmt.Assignment) {
 			return apply(state, lifetime, (Stmt.Assignment) stmt);
-		} else {
+		} else if (stmt instanceof Stmt.Block) {
 			return apply(state, lifetime, (Stmt.Block) stmt);
+		} else if (stmt instanceof Stmt.IndirectAssignment) {
+			return apply(state, lifetime, (Stmt.IndirectAssignment) stmt);
+		} else if (stmt instanceof Stmt.Let) {
+			return apply(state, lifetime, (Stmt.Let) stmt);
+		} else {
+			Pair<T,E> p = apply(state, (Expr) stmt);
+			return new Pair<>(p.first(),p.second());
 		}
 	}
-
-	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Let stmt);
 
 	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Assignment stmt);
 
 	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Block stmt);
 
-	public Pair<T,L> apply(T state, LVal lval) {
-		if (lval instanceof LVal.Dereference) {
-			return apply(state, (LVal.Dereference) lval);
-		} else {
-			return apply(state, (LVal.Variable) lval);
-		}
-	}
+	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.IndirectAssignment stmt);
 
-	public abstract Pair<T,L> apply(T state, LVal.Dereference expr);
-
-	public abstract Pair<T,L> apply(T state, LVal.Variable expr);
+	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Let stmt);
 
 	public Pair<T,E> apply(T state, Expr expr) {
 		if(expr instanceof Value.Integer) {

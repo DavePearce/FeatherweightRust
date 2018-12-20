@@ -22,12 +22,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 import featherweightrust.core.Syntax.Expr;
-import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 
-public abstract class AbstractSemantics extends AbstractTransformer<AbstractSemantics.State, Stmt, Expr, LVal> {
+public abstract class AbstractSemantics extends AbstractTransformer<AbstractSemantics.State, Stmt, Expr> {
 
 
 	@Override

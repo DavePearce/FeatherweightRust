@@ -21,7 +21,7 @@ import featherweightrust.util.SyntacticElement;
 
 public class Syntax {
 
-	public interface Stmt {
+	public interface Stmt extends SyntacticElement {
 
 		/**
 		 * Represents a variable declaration of the form:
@@ -67,23 +67,51 @@ public class Syntax {
 		 *
 		 * <pre>
 		 * x = e
-		 * *x = e
 		 * </pre>
 		 *
 		 * @author djp
 		 *
 		 */
 		public class Assignment extends SyntacticElement.Impl implements Stmt {
-			public final LVal lhs;
+			public final Expr.Variable lhs;
 			public final Expr rhs;
 
-			public Assignment(LVal lhs, Expr rhs, Attribute... attributes) {
+			public Assignment(Expr.Variable lhs, Expr rhs, Attribute... attributes) {
 				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
 
-			public LVal leftOperand() {
+			public Expr.Variable leftOperand() {
+				return lhs;
+			}
+
+			public Expr rightOperand() {
+				return rhs;
+			}
+		}
+
+		/**
+		 * Represents an indirect assignment such as the following:
+		 *
+		 * <pre>
+		 * *x = e
+		 * </pre>
+		 *
+		 * @author djp
+		 *
+		 */
+		public class IndirectAssignment extends SyntacticElement.Impl implements Stmt {
+			private final Expr.Variable lhs;
+			private final Expr rhs;
+
+			public IndirectAssignment(Expr.Variable lhs, Expr rhs, Attribute... attributes) {
+				super(attributes);
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr.Variable leftOperand() {
 				return lhs;
 			}
 
@@ -124,23 +152,10 @@ public class Syntax {
 			public Stmt get(int index) {
 				return stmts[index];
 			}
-		}
-	}
 
-	/**
-	 * Represents the subset of expressions which can be used on the left-hand side
-	 * of an assignment.
-	 *
-	 * @author djp
-	 *
-	 */
-	public interface LVal {
-		public interface Variable extends LVal {
-			public String name();
-		}
-
-		public interface Dereference extends LVal {
-			Expr operand();
+			public Stmt[] toArray() {
+				return stmts;
+			}
 		}
 	}
 
@@ -151,9 +166,9 @@ public class Syntax {
 	 * @author djp
 	 *
 	 */
-	public interface Expr extends SyntacticElement {
+	public interface Expr extends Stmt {
 
-		public class Variable extends SyntacticElement.Impl implements Expr, LVal.Variable {
+		public class Variable extends SyntacticElement.Impl implements Expr {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
@@ -161,13 +176,12 @@ public class Syntax {
 				this.name = name;
 			}
 
-			@Override
 			public String name() {
 				return name;
 			}
 		}
 
-		public class Dereference extends SyntacticElement.Impl implements Expr, LVal.Dereference {
+		public class Dereference extends SyntacticElement.Impl implements Expr {
 			private final Expr operand;
 
 			public Dereference(Expr operand, Attribute... attributes) {
@@ -175,7 +189,6 @@ public class Syntax {
 				this.operand = operand;
 			}
 
-			@Override
 			public Expr operand() {
 				return operand;
 			}
@@ -183,16 +196,16 @@ public class Syntax {
 
 
 		public class Borrow extends SyntacticElement.Impl implements Expr {
-			private final LVal operand;
+			private final Expr.Variable operand;
 			private final boolean mutable;
 
-			public Borrow(LVal operand, boolean mutable, Attribute... attributes) {
+			public Borrow(Expr.Variable operand, boolean mutable, Attribute... attributes) {
 				super(attributes);
 				this.operand = operand;
 				this.mutable = mutable;
 			}
 
-			public LVal operand() {
+			public Expr.Variable operand() {
 				return operand;
 			}
 
@@ -225,6 +238,10 @@ public class Syntax {
 				this.value = value;
 			}
 
+			public int value() {
+				return value;
+			}
+
 			@Override
 			public int hashCode() {
 				return value;
@@ -241,7 +258,7 @@ public class Syntax {
 			}
 		}
 
-		public class Location extends SyntacticElement.Impl implements Value, LVal {
+		public class Location extends SyntacticElement.Impl implements Value {
 			private final int address;
 
 			public Location(int value, Attribute... attributes) {
@@ -277,36 +294,45 @@ public class Syntax {
 			}
 		}
 
-		public abstract class Reference extends SyntacticElement.Impl implements Type {
+		public class Borrow extends SyntacticElement.Impl implements Type {
+
+			private final boolean mut;
+			private final String name;
+
+			public Borrow(boolean mut, String name, Attribute... attributes) {
+				super(attributes);
+				this.mut = mut;
+				this.name = name;
+			}
+
+			public boolean isMutable() {
+				return mut;
+			}
+
+			public String name() {
+				return name;
+			}
+
+			@Override
+			public String toString() {
+				if(mut) {
+					return "&mut " + name;
+				} else {
+					return "&" + name;
+				}
+			}
+		}
+
+		public class Box extends SyntacticElement.Impl implements Type {
 			protected final Type element;
 
-			public Reference(Type element, Attribute... attributes) {
+			public Box(Type element, Attribute... attributes) {
 				super(attributes);
 				this.element = element;
 			}
 
 			public Type element() {
 				return element;
-			}
-		}
-
-		public class Borrow extends Reference {
-
-			private final boolean mut;
-
-			public Borrow(Type element, boolean mut, Attribute... attributes) {
-				super(element,attributes);
-				this.mut = mut;
-			}
-
-			public boolean isMutable() {
-				return mut;
-			}
-		}
-
-		public class Box extends Reference {
-			public Box(Type element, Attribute... attributes) {
-				super(element,attributes);
 			}
 		}
 	}

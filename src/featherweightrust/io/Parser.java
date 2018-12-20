@@ -20,7 +20,6 @@ package featherweightrust.io;
 import java.util.*;
 
 import featherweightrust.core.Syntax.Expr;
-import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer.*;
@@ -28,12 +27,12 @@ import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
 
 public class Parser {
-	private String filename;
+	private String sourcefile;
 	private ArrayList<Token> tokens;
 	private int index;
 
-	public Parser(String filename, List<Token> tokens) {
-		this.filename = filename;
+	public Parser(String sourcefile, List<Token> tokens) {
+		this.sourcefile = sourcefile;
 		this.tokens = new ArrayList<>(tokens);
 	}
 
@@ -52,7 +51,12 @@ public class Parser {
 		match("{");
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		while (index < tokens.size() && !(tokens.get(index) instanceof RightCurly)) {
-			stmts.add(parseStatement(context));
+			Stmt stmt = parseStatement(context);
+			stmts.add(stmt);
+			if (stmt instanceof Expr) {
+				// force expressions at the end.
+				break;
+			}
 		}
 		match("}");
 
@@ -73,10 +77,6 @@ public class Parser {
 	/**
 	 * Parse a given statement.
 	 *
-	 * @param withSemiColon
-	 *            Indicates whether to match semi-colons after the statement
-	 *            (where appropriate). This is useful as in some very special
-	 *            cases (e.g. for-loops) we don't want to match semi-colons.
 	 * @return
 	 */
 	public Stmt parseStatement(Context context) {
@@ -90,12 +90,12 @@ public class Parser {
 			return parseStatementBlock(context);
 		} else {
 			// assignment
-			return parseAssignStmt(context);
+			return parseAssignStmtOrExpr(context);
 		}
 	}
 
 	/**
-	 * Parse an assignment statement, of the form:
+	 * Parse an assignment statement of the form:
 	 *
 	 * <pre>
 	 * AssignStmt ::= LVal '=' Expr ';'
@@ -107,18 +107,31 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Stmt parseAssignStmt(Context context) {
+	public Stmt parseAssignStmtOrExpr(Context context) {
 		// standard assignment
 		int start = index;
 		Expr lhs = parseExpr(context);
-		if (!(lhs instanceof LVal)) {
+		if(index < tokens.size() && tokens.get(index) instanceof Equals) {
+			// This is an assignment statement
+			match("=");
+			Expr rhs = parseExpr(context);
+			match(";");
+			int end = index;
+			// Sanity check permitted lvals
+			if (lhs instanceof Expr.Variable) {
+				return new Stmt.Assignment((Expr.Variable) lhs, rhs, sourceAttr(start, end - 1));
+			} else if (lhs instanceof Expr.Dereference) {
+				Expr.Dereference e = (Expr.Dereference) lhs;
+				if (e.operand() instanceof Expr.Variable) {
+					return new Stmt.IndirectAssignment((Expr.Variable) e.operand(), rhs, sourceAttr(start, end - 1));
+				}
+			}
 			syntaxError("expecting lval, found " + lhs + ".", lhs);
+			return null; // deadcode
+		} else {
+			// This is an expression as a statement
+			return lhs;
 		}
-		match("=");
-		Expr rhs = parseExpr(context);
-		match(";");
-		int end = index;
-		return new Stmt.Assignment((LVal) lhs, rhs, sourceAttr(start, end - 1));
 	}
 
 	/**
@@ -194,10 +207,10 @@ public class Parser {
 			mutable = true;
 		}
 		Expr operand = parseExpr(context);
-		if (!(operand instanceof LVal)) {
-			syntaxError("expecting lval, found " + operand + ".", operand);
+		if (!(operand instanceof Expr.Variable)) {
+			syntaxError("expecting variable, found " + operand + ".", operand);
 		}
-		return new Expr.Borrow((LVal) operand, mutable, sourceAttr(start, index - 1));
+		return new Expr.Borrow((Expr.Variable) operand, mutable, sourceAttr(start, index - 1));
 	}
 
 	public Expr parseDereference(Context context) {
@@ -216,7 +229,7 @@ public class Parser {
 
 	private void checkNotEof() {
 		if (index >= tokens.size()) {
-			throw new SyntaxError("unexpected end-of-file", filename, index - 1, index - 1);
+			throw new SyntaxError("unexpected end-of-file", sourcefile, index - 1, index - 1);
 		}
 		return;
 	}
@@ -275,11 +288,11 @@ public class Parser {
 
 	private void syntaxError(String msg, Expr e) {
 		Attribute.Source loc = e.attribute(Attribute.Source.class);
-		throw new SyntaxError(msg, filename, loc.start, loc.end);
+		throw new SyntaxError(msg, sourcefile, loc.start, loc.end);
 	}
 
 	private void syntaxError(String msg, Token t) {
-		throw new SyntaxError(msg, filename, t.start, t.start + t.text.length() - 1);
+		throw new SyntaxError(msg, sourcefile, t.start, t.start + t.text.length() - 1);
 	}
 
 	/**

@@ -131,8 +131,13 @@ public class BigStepSemantics extends AbstractSemantics {
 	 */
 	@Override
 	public Pair<State, Expr> apply(State state, Expr.Borrow expr) {
+		String name = expr.operand().name();
 		// Locate operand
 		Location loc = state.locate(expr.operand().name());
+		//
+		if(loc == null) {
+			throw new RuntimeException("invalid variable \"" + name + "\"");
+		}
 		// Done
 		return new Pair<>(state, loc);
 	}

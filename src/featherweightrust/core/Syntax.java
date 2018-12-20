@@ -60,6 +60,11 @@ public class Syntax {
 			public Expr initialiser() {
 				return initialiser;
 			}
+
+			@Override
+			public String toString() {
+				return "let mut " + name + " = " + initialiser + ";";
+			}
 		}
 
 		/**
@@ -89,6 +94,11 @@ public class Syntax {
 			public Expr rightOperand() {
 				return rhs;
 			}
+
+			@Override
+			public String toString() {
+				return lhs.name + " = " + rhs + ";";
+			}
 		}
 
 		/**
@@ -117,6 +127,11 @@ public class Syntax {
 
 			public Expr rightOperand() {
 				return rhs;
+			}
+
+			@Override
+			public String toString() {
+				return "*" + lhs.name + " = " + rhs + ";";
 			}
 		}
 
@@ -156,6 +171,15 @@ public class Syntax {
 			public Stmt[] toArray() {
 				return stmts;
 			}
+
+			@Override
+			public String toString() {
+				String contents = "";
+				for(int i=0;i!=stmts.length;++i) {
+					contents += stmts[i] + " ";
+				}
+				return "{ " + contents + "}";
+			}
 		}
 	}
 
@@ -179,6 +203,11 @@ public class Syntax {
 			public String name() {
 				return name;
 			}
+
+			@Override
+			public String toString() {
+				return name;
+			}
 		}
 
 		public class Dereference extends SyntacticElement.Impl implements Expr {
@@ -191,6 +220,11 @@ public class Syntax {
 
 			public Expr operand() {
 				return operand;
+			}
+
+			@Override
+			public String toString() {
+				return "*" + operand.toString();
 			}
 		}
 
@@ -212,6 +246,15 @@ public class Syntax {
 			public boolean isMutable() {
 				return mutable;
 			}
+
+			@Override
+			public String toString() {
+				if(mutable) {
+					return "&mut " + operand.name;
+				} else {
+					return "&" + operand.name;
+				}
+			}
 		}
 
 
@@ -225,6 +268,11 @@ public class Syntax {
 
 			public Expr operand() {
 				return operand;
+			}
+
+			@Override
+			public String toString() {
+				return "box " + operand;
 			}
 		}
 	}

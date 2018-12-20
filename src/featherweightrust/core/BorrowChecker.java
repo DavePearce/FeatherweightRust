@@ -145,6 +145,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment env, Expr.Variable expr) {
+		check(env.get(expr.name()) != null, UNDECLARED_VARIABLE, expr);
 		// Extract type from current environment
 		Type type = env.get(expr.name()).type();
 		//

@@ -53,10 +53,6 @@ public class Parser {
 		while (index < tokens.size() && !(tokens.get(index) instanceof RightCurly)) {
 			Stmt stmt = parseStatement(context);
 			stmts.add(stmt);
-			if (stmt instanceof Expr) {
-				// force expressions at the end.
-				break;
-			}
 		}
 		match("}");
 
@@ -190,12 +186,7 @@ public class Parser {
 	public Expr parseVariable(Context context) {
 		int start = index;
 		Identifier var = matchIdentifier();
-		if(context.isDeclared(var.text)) {
-			return new Expr.Variable(var.text, sourceAttr(start, index - 1));
-		} else {
-			syntaxError("unknown variable " + var.text, var);
-			return null;
-		}
+		return new Expr.Variable(var.text, sourceAttr(start, index - 1));
 	}
 
 	public Expr parseBorrow(Context context) {

@@ -33,6 +33,8 @@ import featherweightrust.util.SyntaxError;
 import featherweightrust.util.SyntacticElement.Attribute;
 
 public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment, Type, Type> {
+	public final static Environment EMPTY_ENVIRONMENT = new Environment();
+	// Error messages
 	private final static String UNDECLARED_VARIABLE = "variable undeclared";
 	private final static String BORROWED_VARIABLE_ASSIGNMENT = "cannot assign because borrowed";
 	private final static String INCOMPATIBLE_TYPE = "incompatible type";
@@ -434,6 +436,10 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 	private void syntaxError(String msg, SyntacticElement e) {
 		Attribute.Source loc = e.attribute(Attribute.Source.class);
-		throw new SyntaxError(msg, sourcefile, loc.start, loc.end);
+		if(loc != null) {
+			throw new SyntaxError(msg, sourcefile, loc.start, loc.end);
+		} else {
+			throw new SyntaxError(msg, sourcefile, 0, 0);
+		}
 	}
 }

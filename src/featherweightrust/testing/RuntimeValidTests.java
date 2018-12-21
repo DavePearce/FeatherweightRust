@@ -161,6 +161,12 @@ public class RuntimeValidTests {
 		check(input, 123);
 	}
 
+	@Test
+	public void test_100() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &x; { let mut z = 1; y = &z; } }";
+		check(input,null);
+	}
+
 	public static void check(String input, Integer output) throws IOException {
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();

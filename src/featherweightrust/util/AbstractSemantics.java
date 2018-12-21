@@ -18,6 +18,7 @@
 package featherweightrust.util;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -28,6 +29,7 @@ import featherweightrust.core.Syntax.Value.Location;
 
 public abstract class AbstractSemantics extends AbstractTransformer<AbstractSemantics.State, Stmt, Expr> {
 
+	public static final State EMPTY_STATE = new AbstractSemantics.State();
 
 	@Override
 	public Pair<State, Expr> apply(State state, Value.Integer value) {
@@ -254,7 +256,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 			// Create new cell using given contents
 			ncells[cells.length] = new Cell(lifetime, v);
 			// Return updated store and location
-			return new Pair<>(new Store(ncells), new Location(cells.length));
+			return new Pair<>(new Store(ncells), new Location(cells.length, true));
 		}
 
 		/**
@@ -307,6 +309,17 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 				if (ncell != null && ncell.lifetime().equals(lifetime)) {
 					// drop individual cell
 					ncells[i] = null;
+					finalise(ncells,ncell);
+				}
+			}
+			// Check reference invariant
+			for (int i = 0; i != ncells.length; ++i) {
+				Cell ncell = ncells[i];
+				if(ncell != null && ncell.value instanceof Value.Location) {
+					Value.Location loc = (Location) ncell.value;
+					if(ncells[loc.getAddress()] == null) {
+						throw new IllegalArgumentException("dangling reference created");
+					}
 				}
 			}
 			//
@@ -316,6 +329,30 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		@Override
 		public String toString() {
 			return Arrays.toString(cells);
+		}
+
+		public Cell[] toArray() {
+			return cells;
+		}
+
+		/**
+		 * When a given cell is collected, we need to finalise it by collected any owned
+		 * locations.
+		 *
+		 * @param cells Cells to update
+		 * @param cell Cell being finalised
+		 * @return
+		 */
+		private static void finalise(Cell[] cells, Cell cell) {
+			Value v = cell.value;
+			if(v instanceof Value.Location) {
+				Value.Location loc = (Value.Location) v;
+				if(loc.isOwner()) {
+					Cell lcell = cells[loc.getAddress()];
+					cells[loc.getAddress()] = null;
+					finalise(cells,lcell);
+				}
+			}
 		}
 	}
 

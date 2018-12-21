@@ -27,6 +27,8 @@ import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
 
 public class Parser {
+	public static final Context ROOT_CONTEXT = new Context();
+
 	private String sourcefile;
 	private ArrayList<Token> tokens;
 	private int index;

@@ -138,6 +138,8 @@ public class BigStepSemantics extends AbstractSemantics {
 		if(loc == null) {
 			throw new RuntimeException("invalid variable \"" + name + "\"");
 		}
+		// Strip ownership flag since is a borrow
+		loc = new Location(loc.getAddress(),false);
 		// Done
 		return new Pair<>(state, loc);
 	}

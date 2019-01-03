@@ -49,7 +49,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment env, String lifetime, Stmt.Let stmt) {
+	public Pair<Environment, Type> apply(Environment env, String lifetime, Stmt.Let<Expr> stmt) {
 		// Type operand
 		Pair<Environment, Type> p = apply(env, stmt.initialiser());
 		// Update environment and discard type (as unused for statements)
@@ -62,7 +62,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Assign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.Assignment stmt) {
+	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.Assignment<Expr> stmt) {
 		String x = stmt.leftOperand().name();
 		// Extract variable's existing type
 		Cell C1 = R1.get(x);
@@ -90,7 +90,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-IndAssign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.IndirectAssignment stmt) {
+	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.IndirectAssignment<Expr> stmt) {
 		String x = stmt.leftOperand().name();
 		// (1) Extract x's type info
 		Cell C0 = R1.get(x);
@@ -162,7 +162,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Deref
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Expr.Dereference expr) {
+	public Pair<Environment, Type> apply(Environment env, Expr.Dereference<Expr> expr) {
 		// Type operand
 		Pair<Environment, Type> p = apply(env, expr.operand());
 		// Check operand has reference type
@@ -218,7 +218,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Box
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Expr.Box expr) {
+	public Pair<Environment, Type> apply(Environment env, Expr.Box<Expr> expr) {
 		// Type operand
 		Pair<Environment, Type> p = apply(env, expr.operand());
 		//

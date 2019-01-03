@@ -25,7 +25,7 @@ import java.util.List;
 
 import org.junit.*;
 
-import featherweightrust.core.BigStepSemantics;
+import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
@@ -175,7 +175,7 @@ public class RuntimeValidTests {
 			// Borrow Check block
 			new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
 			// Execute block in outermost lifetime "*")
-			Pair<BigStepSemantics.State,Stmt> r = new BigStepSemantics().apply(new BigStepSemantics.State(), "*", stmt);
+			Pair<OperationalSemantics.State,Stmt> r = new OperationalSemantics().apply(new OperationalSemantics.State(), "*", stmt);
 			//
 			check(output,r.second());
 			//

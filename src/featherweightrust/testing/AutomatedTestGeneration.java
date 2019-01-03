@@ -9,7 +9,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
 
-import featherweightrust.core.BigStepSemantics;
+import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Expr.Dereference;
@@ -558,7 +558,7 @@ public class AutomatedTestGeneration {
 //		printStats(size);
 //	}
 
-	public static final 	BigStepSemantics semantics = new BigStepSemantics();
+	public static final 	OperationalSemantics semantics = new OperationalSemantics();
 	public static final BorrowChecker checker = new BorrowChecker("");
 	public static long malformed = 0;
 	public static long valid = 0;

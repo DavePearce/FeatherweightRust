@@ -23,40 +23,42 @@ import featherweightrust.core.Syntax.Value;
 
 public abstract class AbstractTransformer<T,S,E extends S> {
 
+	@SuppressWarnings("unchecked")
 	public Pair<T, S> apply(T state, String lifetime, Stmt stmt) {
 		if (stmt instanceof Stmt.Assignment) {
-			return apply(state, lifetime, (Stmt.Assignment) stmt);
+			return apply(state, lifetime, (Stmt.Assignment<Expr>) stmt);
 		} else if (stmt instanceof Stmt.Block) {
 			return apply(state, lifetime, (Stmt.Block) stmt);
 		} else if (stmt instanceof Stmt.IndirectAssignment) {
-			return apply(state, lifetime, (Stmt.IndirectAssignment) stmt);
+			return apply(state, lifetime, (Stmt.IndirectAssignment<Expr>) stmt);
 		} else if (stmt instanceof Stmt.Let) {
-			return apply(state, lifetime, (Stmt.Let) stmt);
+			return apply(state, lifetime, (Stmt.Let<Expr>) stmt);
 		} else {
 			Pair<T,E> p = apply(state, (Expr) stmt);
 			return new Pair<>(p.first(),p.second());
 		}
 	}
 
-	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Assignment stmt);
+	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Assignment<Expr> stmt);
 
 	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Block stmt);
 
-	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.IndirectAssignment stmt);
+	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.IndirectAssignment<Expr> stmt);
 
-	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Let stmt);
+	public abstract Pair<T,S> apply(T state, String lifetime, Stmt.Let<Expr> stmt);
 
+	@SuppressWarnings("unchecked")
 	public Pair<T,E> apply(T state, Expr expr) {
 		if(expr instanceof Value.Integer) {
 			return apply(state, (Value.Integer) expr);
 		} else if(expr instanceof Value.Location) {
 			return apply(state, (Value.Location) expr);
 		} else if (expr instanceof Expr.Dereference) {
-			return apply(state, (Expr.Dereference) expr);
+			return apply(state, (Expr.Dereference<Expr>) expr);
 		} else if (expr instanceof Expr.Borrow) {
 			return apply(state, (Expr.Borrow) expr);
 		} else if (expr instanceof Expr.Box) {
-			return apply(state, (Expr.Box) expr);
+			return apply(state, (Expr.Box<Expr>) expr);
 		} else {
 			return apply(state, (Expr.Variable) expr);
 		}
@@ -67,11 +69,11 @@ public abstract class AbstractTransformer<T,S,E extends S> {
 
 	public abstract Pair<T,E> apply(T state, Value.Location value);
 
-	public abstract Pair<T,E> apply(T state, Expr.Dereference expr);
+	public abstract Pair<T,E> apply(T state, Expr.Dereference<Expr> expr);
 
 	public abstract Pair<T,E> apply(T state, Expr.Borrow expr);
 
-	public abstract Pair<T,E> apply(T state, Expr.Box expr);
+	public abstract Pair<T,E> apply(T state, Expr.Box<Expr> expr);
 
 	public abstract Pair<T,E> apply(T state, Expr.Variable expr);
 }

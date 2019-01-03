@@ -26,10 +26,61 @@ import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.util.AbstractSemantics.State;
 
 public abstract class AbstractSemantics extends AbstractTransformer<AbstractSemantics.State, Stmt, Expr> {
 
 	public static final State EMPTY_STATE = new AbstractSemantics.State();
+
+	@Override
+	final public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.Assignment<Expr> stmt) {
+		// Evaluate right hand side operand
+		Pair<State, Expr> rhs = apply(S1, stmt.rightOperand());
+		State S2 = rhs.first();
+		Value v = (Value) rhs.second();
+		// Reduce right hand side
+		return apply2(S2, lifetime, new Stmt.Assignment<>(stmt.leftOperand(), v));
+	}
+
+	@Override
+	final public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.Let<Expr> stmt) {
+		// Evaluate right hand side operand
+		Pair<State, Expr> rhs = apply(S1, stmt.initialiser());
+		State S2 = rhs.first();
+		Value v = (Value) rhs.second();
+		// Reduce right hand side
+		return apply2(S2, lifetime, new Stmt.Let<>(stmt.name(), v));
+	}
+
+	@Override
+	final public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.IndirectAssignment<Expr> stmt) {
+		// Evaluate right hand side operand
+		Pair<State, Expr> rhs = apply(S1, stmt.rightOperand());
+		State S2 = rhs.first();
+		Value v = (Value) rhs.second();
+		// Reduce right hand side
+		return apply2(S2, lifetime, new Stmt.IndirectAssignment<>(stmt.leftOperand(), v));
+	}
+
+	@Override
+	public Pair<State, Expr> apply(State S1, Expr.Dereference<Expr> e) {
+		// Evaluate right hand side operand
+		Pair<State, Expr> rhs = apply(S1, e.operand());
+		State S2 = rhs.first();
+		Value v = (Value) rhs.second();
+		// Reduce indirect assignment
+		return apply2(S2, new Expr.Dereference<>(v));
+	}
+
+	@Override
+	public Pair<State, Expr> apply(State S1, Expr.Box<Expr> e) {
+		// Evaluate right hand side operand
+		Pair<State, Expr> rhs = apply(S1, e.operand());
+		State S2 = rhs.first();
+		Value v = (Value) rhs.second();
+		// Reduce indirect assignment
+		return apply2(S2, new Expr.Box<>(v));
+	}
 
 	@Override
 	public Pair<State, Expr> apply(State state, Value.Integer value) {
@@ -40,6 +91,16 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	public Pair<State, Expr> apply(State state, Value.Location value) {
 		return new Pair<>(state, value);
 	}
+
+	public abstract Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.Assignment<Value> stmt);
+
+	public abstract Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.Let<Value> stmt);
+
+	public abstract Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.IndirectAssignment<Value> stmt);
+
+	public abstract Pair<State, Expr> apply2(State S1, Expr.Dereference<Value> e);
+
+	public abstract Pair<State, Expr> apply2(State S1, Expr.Box<Value> e);
 
 	/**
 	 * Represents the state before and after each transition by the operation

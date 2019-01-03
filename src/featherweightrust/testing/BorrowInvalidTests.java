@@ -25,7 +25,7 @@ import java.util.List;
 
 import org.junit.*;
 
-import featherweightrust.core.BigStepSemantics;
+import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;

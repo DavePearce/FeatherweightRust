@@ -177,7 +177,7 @@ public class RuntimeValidTests {
 			// Borrow Check block
 			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
-			Pair<OperationalSemantics.State, Stmt> r = new OperationalSemantics()
+			Pair<OperationalSemantics.State, Stmt> r = new OperationalSemantics.BigStep()
 					.apply(new OperationalSemantics.State(), globalLifetime, stmt);
 			//
 			check(output, r.second());

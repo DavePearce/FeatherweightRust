@@ -35,7 +35,7 @@ public interface SyntacticElement {
 	 *
 	 * @return
 	 */
-	public List<Attribute> attributes();
+	public Attribute[] attributes();
 
 	/**
 	 * Get the first attribute of the given class type. This is useful short-hand.
@@ -47,30 +47,18 @@ public interface SyntacticElement {
 
 	public class Impl implements SyntacticElement {
 
-		private List<Attribute> attributes;
-
-		public Impl() {
-			// I use copy on write here, since for the most part I don't expect
-			// attributes to change, and hence can be safely aliased. But, when they
-			// do change I need fresh copies.
-			attributes = new CopyOnWriteArrayList<>();
-		}
+		private Attribute[] attributes;
 
 		public Impl(Attribute x) {
-			attributes = new ArrayList<>();
-			attributes.add(x);
-		}
-
-		public Impl(Collection<Attribute> attributes) {
-			this.attributes = new ArrayList<>(attributes);
+			attributes = new Attribute[]{x};
 		}
 
 		public Impl(Attribute[] attributes) {
-			this.attributes = new ArrayList<>(Arrays.asList(attributes));
+			this.attributes = attributes;
 		}
 
 		@Override
-		public List<Attribute> attributes() {
+		public Attribute[] attributes() {
 			return attributes;
 		}
 

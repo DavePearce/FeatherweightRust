@@ -35,23 +35,23 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class Let<E extends Expr> extends SyntacticElement.Impl implements Stmt  {
-			private final String name;
-			private final E initialiser;
+		public class Let extends SyntacticElement.Impl implements Stmt  {
+			private final Expr.Variable variable;
+			private final Expr initialiser;
 
-			public Let(String name, E initialiser, Attribute... attributes) {
+			public Let(Expr.Variable variable, Expr initialiser, Attribute... attributes) {
 				super(attributes);
-				this.name = name;
+				this.variable = variable;
 				this.initialiser = initialiser;
 			}
 
 			/**
-			 * Return the name of the variable being declared.
+			 * Return the variable being declared.
 			 *
 			 * @return
 			 */
-			public String name() {
-				return name;
+			public Expr.Variable variable() {
+				return variable;
 			}
 
 			/**
@@ -59,13 +59,13 @@ public class Syntax {
 			 *
 			 * @return
 			 */
-			public E initialiser() {
+			public Expr initialiser() {
 				return initialiser;
 			}
 
 			@Override
 			public String toString() {
-				return "let mut " + name + " = " + initialiser + ";";
+				return "let mut " + variable.name() + " = " + initialiser + ";";
 			}
 		}
 
@@ -79,11 +79,11 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class Assignment<E extends Expr> extends SyntacticElement.Impl implements Stmt {
+		public class Assignment extends SyntacticElement.Impl implements Stmt {
 			public final Expr.Variable lhs;
-			public final E rhs;
+			public final Expr rhs;
 
-			public Assignment(Expr.Variable lhs, E rhs, Attribute... attributes) {
+			public Assignment(Expr.Variable lhs, Expr rhs, Attribute... attributes) {
 				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
@@ -93,7 +93,7 @@ public class Syntax {
 				return lhs;
 			}
 
-			public E rightOperand() {
+			public Expr rightOperand() {
 				return rhs;
 			}
 
@@ -113,11 +113,11 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class IndirectAssignment<E extends Expr> extends SyntacticElement.Impl implements Stmt {
+		public class IndirectAssignment extends SyntacticElement.Impl implements Stmt {
 			private final Expr.Variable lhs;
-			private final E rhs;
+			private final Expr rhs;
 
-			public IndirectAssignment(Expr.Variable lhs, E rhs, Attribute... attributes) {
+			public IndirectAssignment(Expr.Variable lhs, Expr rhs, Attribute... attributes) {
 				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
@@ -127,7 +127,7 @@ public class Syntax {
 				return lhs;
 			}
 
-			public E rightOperand() {
+			public Expr rightOperand() {
 				return rhs;
 			}
 
@@ -212,15 +212,15 @@ public class Syntax {
 			}
 		}
 
-		public class Dereference<E extends Expr> extends SyntacticElement.Impl implements Expr {
-			private final E operand;
+		public class Dereference extends SyntacticElement.Impl implements Expr {
+			private final Expr operand;
 
-			public Dereference(E operand, Attribute... attributes) {
+			public Dereference(Expr operand, Attribute... attributes) {
 				super(attributes);
 				this.operand = operand;
 			}
 
-			public E operand() {
+			public Expr operand() {
 				return operand;
 			}
 
@@ -260,15 +260,15 @@ public class Syntax {
 		}
 
 
-		public class Box<E extends Expr> extends SyntacticElement.Impl implements Expr {
-			private final E operand;
+		public class Box extends SyntacticElement.Impl implements Expr {
+			private final Expr operand;
 
-			public Box(E operand, Attribute... attributes) {
+			public Box(Expr operand, Attribute... attributes) {
 				super(attributes);
 				this.operand = operand;
 			}
 
-			public E operand() {
+			public Expr operand() {
 				return operand;
 			}
 

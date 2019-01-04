@@ -301,7 +301,7 @@ public class AutomatedTestGeneration {
 
 		@Override
 		public Stmt.Let generate(String name, Expr initialiser) {
-			return new Stmt.Let(name, initialiser);
+			return new Stmt.Let(new Expr.Variable(name), initialiser);
 		}
 	}
 
@@ -564,7 +564,7 @@ public class AutomatedTestGeneration {
 //		printStats(size);
 //	}
 
-	public static final 	OperationalSemantics semantics = new OperationalSemantics();
+	public static final 	OperationalSemantics semantics = new OperationalSemantics.BigStep();
 	public static final BorrowChecker checker = new BorrowChecker("");
 	public static long malformed = 0;
 	public static long valid = 0;

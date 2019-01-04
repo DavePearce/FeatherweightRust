@@ -50,11 +50,11 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Stmt.Let<Expr> stmt) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Stmt.Let stmt) {
 		// Type operand
 		Pair<Environment, Type> p = apply(env, lifetime, stmt.initialiser());
 		// Update environment and discard type (as unused for statements)
-		env = p.first().put(stmt.name(), p.second(), lifetime);
+		env = p.first().put(stmt.variable().name(), p.second(), lifetime);
 		// Done
 		return new Pair<>(env, null);
 	}
@@ -63,7 +63,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Assign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.Assignment<Expr> stmt) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.Assignment stmt) {
 		String x = stmt.leftOperand().name();
 		// Extract variable's existing type
 		Cell C1 = R1.get(x);
@@ -91,7 +91,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-IndAssign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.IndirectAssignment<Expr> stmt) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.IndirectAssignment stmt) {
 		String x = stmt.leftOperand().name();
 		// (1) Extract x's type info
 		Cell C0 = R1.get(x);
@@ -163,7 +163,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Deref
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Dereference<Expr> expr) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Dereference expr) {
 		// Type operand
 		Pair<Environment, Type> p = apply(env, lifetime, expr.operand());
 		// Check operand has reference type
@@ -219,7 +219,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Box
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Box<Expr> expr) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Box expr) {
 		// Type operand
 		Pair<Environment, Type> p = apply(env, lifetime, expr.operand());
 		//

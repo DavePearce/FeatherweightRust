@@ -148,16 +148,16 @@ public class Parser {
 		int start = index;
 		matchKeyword("let");
 		matchKeyword("mut");
-		// Match and check declared variable name
-		Identifier id = matchIdentifier();
-		context.declare(id.text);
+		// Match and declare variable name
+		Expr.Variable variable = parseVariable(context);
+		context.declare(variable.name());
 		// A variable declaration may optionally be assigned an initialiser
 		// expression.
 		match("=");
 		Expr initialiser = parseExpr(context);
 		match(";");
 		// Done.
-		return new Stmt.Let(id.text, initialiser, sourceAttr(start, index - 1));
+		return new Stmt.Let(variable, initialiser, sourceAttr(start, index - 1));
 	}
 
 	public Expr parseExpr(Context context) {
@@ -188,13 +188,13 @@ public class Parser {
 		return null;
 	}
 
-	public Expr parseVariable(Context context) {
+	public Expr.Variable parseVariable(Context context) {
 		int start = index;
 		Identifier var = matchIdentifier();
 		return new Expr.Variable(var.text, sourceAttr(start, index - 1));
 	}
 
-	public Expr parseBorrow(Context context) {
+	public Expr.Borrow parseBorrow(Context context) {
 		int start = index;
 		boolean mutable = false;
 		match("&");
@@ -209,14 +209,14 @@ public class Parser {
 		return new Expr.Borrow((Expr.Variable) operand, mutable, sourceAttr(start, index - 1));
 	}
 
-	public Expr parseDereference(Context context) {
+	public Expr.Dereference parseDereference(Context context) {
 		int start = index;
 		match("*");
 		Expr operand = parseExpr(context);
 		return new Expr.Dereference(operand, sourceAttr(start, index - 1));
 	}
 
-	public Expr parseBox(Context context) {
+	public Expr.Box parseBox(Context context) {
 		int start = index;
 		matchKeyword("box");
 		Expr operand = parseExpr(context);

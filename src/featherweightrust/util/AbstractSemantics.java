@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
@@ -33,9 +34,9 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	public static final State EMPTY_STATE = new AbstractSemantics.State();
 
 	@Override
-	final public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.Assignment<Expr> stmt) {
+	final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Assignment<Expr> stmt) {
 		// Evaluate right hand side operand
-		Pair<State, Expr> rhs = apply(S1, stmt.rightOperand());
+		Pair<State, Expr> rhs = apply(S1, lifetime, stmt.rightOperand());
 		State S2 = rhs.first();
 		Value v = (Value) rhs.second();
 		// Reduce right hand side
@@ -43,9 +44,9 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	}
 
 	@Override
-	final public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.Let<Expr> stmt) {
+	final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Let<Expr> stmt) {
 		// Evaluate right hand side operand
-		Pair<State, Expr> rhs = apply(S1, stmt.initialiser());
+		Pair<State, Expr> rhs = apply(S1, lifetime, stmt.initialiser());
 		State S2 = rhs.first();
 		Value v = (Value) rhs.second();
 		// Reduce right hand side
@@ -53,9 +54,9 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	}
 
 	@Override
-	final public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.IndirectAssignment<Expr> stmt) {
+	final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.IndirectAssignment<Expr> stmt) {
 		// Evaluate right hand side operand
-		Pair<State, Expr> rhs = apply(S1, stmt.rightOperand());
+		Pair<State, Expr> rhs = apply(S1, lifetime, stmt.rightOperand());
 		State S2 = rhs.first();
 		Value v = (Value) rhs.second();
 		// Reduce right hand side
@@ -63,9 +64,9 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	}
 
 	@Override
-	public Pair<State, Expr> apply(State S1, Expr.Dereference<Expr> e) {
+	public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Dereference<Expr> e) {
 		// Evaluate right hand side operand
-		Pair<State, Expr> rhs = apply(S1, e.operand());
+		Pair<State, Expr> rhs = apply(S1, lifetime, e.operand());
 		State S2 = rhs.first();
 		Value v = (Value) rhs.second();
 		// Reduce indirect assignment
@@ -73,13 +74,13 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	}
 
 	@Override
-	public Pair<State, Expr> apply(State S1, Expr.Box<Expr> e) {
+	public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Box<Expr> e) {
 		// Evaluate right hand side operand
-		Pair<State, Expr> rhs = apply(S1, e.operand());
+		Pair<State, Expr> rhs = apply(S1, lifetime, e.operand());
 		State S2 = rhs.first();
 		Value v = (Value) rhs.second();
 		// Reduce indirect assignment
-		return apply2(S2, new Expr.Box<>(v));
+		return apply2(S2, lifetime, new Expr.Box<>(v));
 	}
 
 	@Override
@@ -92,15 +93,15 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		return new Pair<>(state, value);
 	}
 
-	public abstract Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.Assignment<Value> stmt);
+	public abstract Pair<State, Stmt> apply2(State S1, Lifetime lifetime, Stmt.Assignment<Value> stmt);
 
-	public abstract Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.Let<Value> stmt);
+	public abstract Pair<State, Stmt> apply2(State S1, Lifetime lifetime, Stmt.Let<Value> stmt);
 
-	public abstract Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.IndirectAssignment<Value> stmt);
+	public abstract Pair<State, Stmt> apply2(State S1, Lifetime lifetime, Stmt.IndirectAssignment<Value> stmt);
 
 	public abstract Pair<State, Expr> apply2(State S1, Expr.Dereference<Value> e);
 
-	public abstract Pair<State, Expr> apply2(State S1, Expr.Box<Value> e);
+	public abstract Pair<State, Expr> apply2(State S1, Lifetime lifetime, Expr.Box<Value> e);
 
 	/**
 	 * Represents the state before and after each transition by the operation
@@ -160,7 +161,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 *            Initial value to be used for allocated cell
 		 * @return
 		 */
-		public Pair<State, Location> allocate(String lifetime, Value v) {
+		public Pair<State, Location> allocate(Lifetime lifetime, Value v) {
 			// Allocate cell in store
 			Pair<Store, Location> p = store.allocate(lifetime, v);
 			// Return updated state
@@ -207,12 +208,27 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		}
 
 		/**
+		 * Drop any cells referred to by a given value.
+		 *
+		 * @param lifetime
+		 * @return
+		 */
+		public State drop(Value value) {
+			if (value instanceof Location) {
+				Store nstore = store.drop((Location) value);
+				return new State(stack, nstore);
+			} else {
+				return this;
+			}
+		}
+
+		/**
 		 * Drop all locations created within a given lifetime.
 		 *
 		 * @param lifetime
 		 * @return
 		 */
-		public State drop(String lifetime) {
+		public State drop(Lifetime lifetime) {
 			Store nstore = store.drop(lifetime);
 			return new State(stack, nstore);
 		}
@@ -311,7 +327,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 *
 		 * @return
 		 */
-		public Pair<Store, Location> allocate(String lifetime, Value v) {
+		public Pair<Store, Location> allocate(Lifetime lifetime, Value v) {
 			// Create space for new cell at end of array
 			Cell[] ncells = Arrays.copyOf(cells, cells.length + 1);
 			// Create new cell using given contents
@@ -356,33 +372,47 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		}
 
 		/**
-		 * Drop all cells with a given lifetime.
+		 * Drop the cell at a given location. This recursively drops all reachable and
+		 * uniquely owned locations.
 		 *
 		 * @param lifetime
 		 * @return
 		 */
-		public Store drop(String lifetime) {
+		public Store drop(Location location) {
+			// Prepare for drop by copying cells
+			Cell[] ncells = Arrays.copyOf(cells, cells.length);
+			// Locate cell being dropped
+			Cell ncell = ncells[location.getAddress()];
+			// Recursively drop owned locations
+			finalise(ncells, ncell);
+			// Check reference invariant
+			checkReferenceInvariant(ncells);
+			// Done
+			return new Store(ncells);
+		}
+
+		/**
+		 * Drop all cells with a given lifetime. This recursively drops all reachable
+		 * and uniquely owned cells.
+		 *
+		 * @param lifetime
+		 * @return
+		 */
+		public Store drop(Lifetime lifetime) {
 			// Prepare for drop by copying cells
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
 			// Action the drop
 			for (int i = 0; i != ncells.length; ++i) {
 				Cell ncell = ncells[i];
-				if (ncell != null && ncell.lifetime().equals(lifetime)) {
+				if (ncell != null && ncell.lifetime() == lifetime) {
 					// drop individual cell
 					ncells[i] = null;
+					// Recursively drop owned locations
 					finalise(ncells,ncell);
 				}
 			}
 			// Check reference invariant
-			for (int i = 0; i != ncells.length; ++i) {
-				Cell ncell = ncells[i];
-				if(ncell != null && ncell.value instanceof Value.Location) {
-					Value.Location loc = (Location) ncell.value;
-					if(ncells[loc.getAddress()] == null) {
-						throw new IllegalArgumentException("dangling reference created");
-					}
-				}
-			}
+			checkReferenceInvariant(ncells);
 			//
 			return new Store(ncells);
 		}
@@ -394,6 +424,25 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 
 		public Cell[] toArray() {
 			return cells;
+		}
+
+		/**
+		 * Check the reference invariant for a given array of cells. Specifically, for
+		 * every cell which points to another cell (i.e. holds its address), that other
+		 * cell must exist (i.e. is not null).
+		 *
+		 * @param ncells
+		 */
+		private static void checkReferenceInvariant(Cell[] ncells) {
+			for (int i = 0; i != ncells.length; ++i) {
+				Cell ncell = ncells[i];
+				if(ncell != null && ncell.value instanceof Value.Location) {
+					Value.Location loc = (Location) ncell.value;
+					if(ncells[loc.getAddress()] == null) {
+						throw new IllegalArgumentException("dangling reference created");
+					}
+				}
+			}
 		}
 
 		/**
@@ -424,10 +473,10 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	 *
 	 */
 	public static class Cell {
-		private final String lifetime;
+		private final Lifetime lifetime;
 		private final Value value;
 
-		public Cell(String lifetime, Value value) {
+		public Cell(Lifetime lifetime, Value value) {
 			this.lifetime = lifetime;
 			this.value = value;
 		}
@@ -437,7 +486,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 *
 		 * @return
 		 */
-		public String lifetime() {
+		public Lifetime lifetime() {
 			return lifetime;
 		}
 

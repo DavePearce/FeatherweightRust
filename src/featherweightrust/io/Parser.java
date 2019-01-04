@@ -20,6 +20,7 @@ package featherweightrust.io;
 import java.util.*;
 
 import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer.*;
@@ -47,18 +48,20 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Stmt.Block parseStatementBlock(Context context) {
+	public Stmt.Block parseStatementBlock(Context context, Lifetime lifetime) {
 		int start = index;
+
+		Lifetime myLifetime = lifetime.freshWithin();
 
 		match("{");
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		while (index < tokens.size() && !(tokens.get(index) instanceof RightCurly)) {
-			Stmt stmt = parseStatement(context);
+			Stmt stmt = parseStatement(context, myLifetime);
 			stmts.add(stmt);
 		}
 		match("}");
 
-		return new Stmt.Block(freshLifetime(), stmts.toArray(new Stmt[stmts.size()]), sourceAttr(start, index - 1));
+		return new Stmt.Block(myLifetime, stmts.toArray(new Stmt[stmts.size()]), sourceAttr(start, index - 1));
 	}
 
 	public static int lifetime = 0;
@@ -77,7 +80,7 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Stmt parseStatement(Context context) {
+	public Stmt parseStatement(Context context, Lifetime lifetime) {
 		checkNotEof();
 		Token lookahead = tokens.get(index);
 		//
@@ -85,7 +88,7 @@ public class Parser {
 			return parseVariableDeclaration(context);
 		} else if(lookahead instanceof LeftCurly) {
 			// nested block
-			return parseStatementBlock(context);
+			return parseStatementBlock(context, lifetime);
 		} else {
 			// assignment
 			return parseAssignStmtOrExpr(context);

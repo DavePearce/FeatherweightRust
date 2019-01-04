@@ -27,6 +27,7 @@ import org.junit.*;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
@@ -168,16 +169,18 @@ public class RuntimeValidTests {
 	}
 
 	public static void check(String input, Integer output) throws IOException {
+		Lifetime globalLifetime = new Lifetime();
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
-			Stmt.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context());
+			Stmt.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
+			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
-			Pair<OperationalSemantics.State,Stmt> r = new OperationalSemantics().apply(new OperationalSemantics.State(), "*", stmt);
+			Pair<OperationalSemantics.State, Stmt> r = new OperationalSemantics()
+					.apply(new OperationalSemantics.State(), globalLifetime, stmt);
 			//
-			check(output,r.second());
+			check(output, r.second());
 			//
 			System.out.println(r.first() + " :> " + r.second());
 		} catch (SyntaxError e) {

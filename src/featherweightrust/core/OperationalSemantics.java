@@ -18,6 +18,7 @@
 package featherweightrust.core;
 
 import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
@@ -31,31 +32,32 @@ import featherweightrust.util.Pair;
  *
  */
 public class OperationalSemantics extends AbstractSemantics {
-
 	/**
 	 * Rule R-Assign.
 	 */
 	@Override
-	public Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.Assignment<Value> stmt) {
+	public Pair<State, Stmt> apply2(State S1, Lifetime lifetime, Stmt.Assignment<Value> stmt) {
 		// Extract variable being assigned
 		Expr.Variable lhs = stmt.leftOperand();
 		// Extract the location being assigned
 		Location l = S1.locate(lhs.name());
+		// Extract value being overwritten
+		Value v1 = S1.read(l);
 		// Extract value being assigned
 		Value v2 = stmt.rightOperand();
+		// Drop overwritten value
+		State S2 = S1.drop(v1);
 		// Perform the assignment
-		State S2 = S1.write(l, v2);
-		//
-		// TODO: drop?
+		State S3 = S2.write(l, v2);
 		// Done
-		return new Pair<>(S2, null);
+		return new Pair<>(S3, null);
 	}
 
 	/**
 	 * Rule R-Block.
 	 */
 	@Override
-	public Pair<State, Stmt> apply(State S1, String lifetime, Stmt.Block stmt) {
+	public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Block stmt) {
 		// Save current bindings so they can be restored
 		StackFrame outerFrame = S1.frame();
 		//
@@ -66,6 +68,9 @@ public class OperationalSemantics extends AbstractSemantics {
 			//
 			if(s != null || s instanceof Value) {
 				// Either we're stuck, or we produced a return value.
+
+				// FIXME: drop allocated locations!!
+
 				return new Pair<>(S1,s);
 			}
 		}
@@ -81,8 +86,8 @@ public class OperationalSemantics extends AbstractSemantics {
 	 * Rule R-Declare.
 	 */
 	@Override
-	public Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.Let<Value> stmt) {
-		// Extract initialiser value
+	public Pair<State, Stmt> apply2(State S1, Lifetime lifetime, Stmt.Let<Value> stmt) {
+		// Extract initializer value
 		Value v = stmt.initialiser();
 		// Allocate new location
 		Pair<State, Location> pl = S1.allocate(lifetime, v);
@@ -98,18 +103,21 @@ public class OperationalSemantics extends AbstractSemantics {
 	 * Rule R-IndAssign.
 	 */
 	@Override
-	public Pair<State, Stmt> apply2(State S1, String lifetime, Stmt.IndirectAssignment<Value> stmt) {
+	public Pair<State, Stmt> apply2(State S1, Lifetime lifetime, Stmt.IndirectAssignment<Value> stmt) {
 		// Extract variable being indirectly assigned
 		Expr.Variable lhs = stmt.leftOperand();
-		// Evaluate right hand side operand
-		Value v = stmt.rightOperand();
 		// Extract the location being assigned
 		Location l = (Location) S1.read(S1.locate(lhs.name()));
+		// Extract value being overwritten
+		Value v1 = S1.read(l);
+		// Extract value being assigned
+		Value v2 = stmt.rightOperand();
+		// Drop owned locations
+		State S2 = S1.drop(v1);
 		// Perform the indirect assignment
-		State S2 = S1.write(l, v);
-		// TODO: drop
+		State S3 = S2.write(l, v2);
 		// Done
-		return new Pair<>(S2, null);
+		return new Pair<>(S3, null);
 	}
 
 	/**
@@ -127,7 +135,7 @@ public class OperationalSemantics extends AbstractSemantics {
 	 * Rule R-Borrow.
 	 */
 	@Override
-	public Pair<State, Expr> apply(State state, Expr.Borrow expr) {
+	public Pair<State, Expr> apply(State state, Lifetime lifetime, Expr.Borrow expr) {
 		String name = expr.operand().name();
 		// Locate operand
 		Location loc = state.locate(expr.operand().name());
@@ -145,11 +153,12 @@ public class OperationalSemantics extends AbstractSemantics {
 	 * Rule R-Box.
 	 */
 	@Override
-	public Pair<State, Expr> apply2(State S1, Expr.Box<Value> e) {
+	public Pair<State, Expr> apply2(State S1, Lifetime lifetime, Expr.Box<Value> e) {
+		Lifetime globalLifetime = lifetime.getRoot();
 		// Extract operand
 		Value v = e.operand();
 		// Allocate new location
-		Pair<State, Location> pl = S1.allocate("*", v);
+		Pair<State, Location> pl = S1.allocate(globalLifetime, v);
 		State S2 = pl.first();
 		Location l = pl.second();
 		// Done
@@ -160,7 +169,7 @@ public class OperationalSemantics extends AbstractSemantics {
 	 * Rule R-Var.
 	 */
 	@Override
-	public Pair<State, Expr> apply(State state, Expr.Variable expr) {
+	public Pair<State, Expr> apply(State state, Lifetime lifetime, Expr.Variable expr) {
 		// Determine location bound by variable
 		Location loc = state.locate(expr.name());
 		// Read location from store

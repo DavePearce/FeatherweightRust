@@ -27,6 +27,7 @@ import org.junit.*;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
@@ -99,12 +100,13 @@ public class BorrowInvalidTests {
 
 
 	public static void checkInvalid(String input) throws IOException {
+		Lifetime globalLifetime = new Lifetime();
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
-			Stmt.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context());
+			Stmt.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			new BorrowChecker(input).apply(new BorrowChecker.Environment(), "*", stmt);
+			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			//
 			fail("test shouldn't have passed borrow checking");
 		} catch (SyntaxError e) {

@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
@@ -49,9 +50,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment env, String lifetime, Stmt.Let<Expr> stmt) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Stmt.Let<Expr> stmt) {
 		// Type operand
-		Pair<Environment, Type> p = apply(env, stmt.initialiser());
+		Pair<Environment, Type> p = apply(env, lifetime, stmt.initialiser());
 		// Update environment and discard type (as unused for statements)
 		env = p.first().put(stmt.name(), p.second(), lifetime);
 		// Done
@@ -62,14 +63,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Assign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.Assignment<Expr> stmt) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.Assignment<Expr> stmt) {
 		String x = stmt.leftOperand().name();
 		// Extract variable's existing type
 		Cell C1 = R1.get(x);
 		check(C1 != null, UNDECLARED_VARIABLE, stmt.leftOperand());
 		Type T1 = C1.type();
 		// Type operand
-		Pair<Environment, Type> p = apply(R1, stmt.rightOperand());
+		Pair<Environment, Type> p = apply(R1, lifetime, stmt.rightOperand());
 		Environment R2 = p.first();
 		Type T2 = p.second();
 		// Check borrow status
@@ -90,7 +91,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-IndAssign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.IndirectAssignment<Expr> stmt) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.IndirectAssignment<Expr> stmt) {
 		String x = stmt.leftOperand().name();
 		// (1) Extract x's type info
 		Cell C0 = R1.get(x);
@@ -107,7 +108,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			Type T1 = C1.type();
 			//
 			// (3) Type operand
-			Pair<Environment, Type> p = apply(R1, stmt.rightOperand());
+			Pair<Environment, Type> p = apply(R1, lifetime, stmt.rightOperand());
 			Environment R2 = p.first();
 			Type T2 = p.second();
 			// (4) Check lifetimes
@@ -132,7 +133,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Seq & T-Block
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, String lifetime, Stmt.Block stmt) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Stmt.Block stmt) {
 		Pair<Environment,Type> p = apply(R1,stmt.lifetime(),stmt.toArray());
 		Environment R2 = p.first();
 		//
@@ -146,7 +147,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	/**
 	 * T-Seq
 	 */
-	public Pair<Environment, Type> apply(Environment env, String lifetime, Stmt... stmts) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Stmt... stmts) {
 		for (int i = 0; i != stmts.length; ++i) {
 			// Type statement
 			Pair<Environment, Type> p = apply(env, lifetime, stmts[i]);
@@ -162,9 +163,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Deref
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Expr.Dereference<Expr> expr) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Dereference<Expr> expr) {
 		// Type operand
-		Pair<Environment, Type> p = apply(env, expr.operand());
+		Pair<Environment, Type> p = apply(env, lifetime, expr.operand());
 		// Check operand has reference type
 		if (p.second() instanceof Type.Box) {
 			Type.Box type = (Type.Box) p.second();
@@ -182,7 +183,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Var
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Expr.Variable expr) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Variable expr) {
 		check(env.get(expr.name()) != null, UNDECLARED_VARIABLE, expr);
 		// Extract type from current environment
 		Type type = env.get(expr.name()).type();
@@ -198,7 +199,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-MutBorrow and T-ImmBorrow
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Expr.Borrow e) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Expr.Borrow e) {
 		// FIXME: problem if allow rebinding of variables as require existential.
 		String name = e.operand().name();
 		check(R.get(name) != null, UNDECLARED_VARIABLE, e.operand());
@@ -218,9 +219,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Box
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment env, Expr.Box<Expr> expr) {
+	public Pair<Environment, Type> apply(Environment env, Lifetime lifetime, Expr.Box<Expr> expr) {
 		// Type operand
-		Pair<Environment, Type> p = apply(env, expr.operand());
+		Pair<Environment, Type> p = apply(env, lifetime, expr.operand());
 		//
 		return new Pair<>(p.first(), new Type.Box(p.second()));
 	}
@@ -319,7 +320,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param lifetime
 	 * @return
 	 */
-	public Environment drop(Environment env, String lifetime) {
+	public Environment drop(Environment env, Lifetime lifetime) {
 		for(String name : env.bindings()) {
 			Cell cell = env.get(name);
 			if(cell.lifetime().equals(lifetime)) {
@@ -377,7 +378,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		 * @param type
 		 * @return
 		 */
-		public Environment put(String name, Type type, String lifetime) {
+		public Environment put(String name, Type type, Lifetime lifetime) {
 			Environment nenv = new Environment(mapping);
 			nenv.mapping.put(name, new Cell(type,lifetime));
 			return nenv;
@@ -413,9 +414,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	private static class Cell extends Pair<Type,String> {
+	private static class Cell extends Pair<Type, Lifetime> {
 
-		public Cell(Type f, String s) {
+		public Cell(Type f, Lifetime s) {
 			super(f, s);
 		}
 
@@ -423,7 +424,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			return first();
 		}
 
-		public String lifetime() {
+		public Lifetime lifetime() {
 			return second();
 		}
 	}

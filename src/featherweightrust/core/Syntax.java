@@ -17,6 +17,8 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.util.Arrays;
+
 import featherweightrust.util.SyntacticElement;
 
 public class Syntax {
@@ -147,10 +149,10 @@ public class Syntax {
 		 *
 		 */
 		public class Block extends SyntacticElement.Impl implements Stmt {
-			private final String lifetime;
+			private final Lifetime lifetime;
 			private final Stmt[] stmts;
 
-			public Block(String lifetime, Stmt[] stmts, Attribute... attributes) {
+			public Block(Lifetime lifetime, Stmt[] stmts, Attribute... attributes) {
 				super(attributes);
 				this.lifetime = lifetime;
 				this.stmts = stmts;
@@ -160,7 +162,7 @@ public class Syntax {
 				return stmts.length;
 			}
 
-			public String lifetime() {
+			public Lifetime lifetime() {
 				return lifetime;
 			}
 
@@ -396,6 +398,74 @@ public class Syntax {
 			public Type element() {
 				return element;
 			}
+		}
+	}
+
+	/**
+	 * Implements the concept of a lifetime which permits the creation of fresh
+	 * "inner" lifetimes and the ability to test whether one lifetime is inside another.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public static class Lifetime {
+		private final Lifetime parent;
+		private Lifetime[] children;
+
+		public Lifetime() {
+			this.parent = null;
+			this.children = new Lifetime[0];
+		}
+
+		public Lifetime(Lifetime parent) {
+			this.parent = parent;
+			this.children = new Lifetime[0];
+		}
+
+		/**
+		 * Check whether a given lifetime is within this lifetime. This is achieved by
+		 * traversing the tree of lifetimes looking for the given lifetime in question.
+		 *
+		 * @param l
+		 * @return
+		 */
+		public boolean contains(Lifetime l) {
+			if (l == this) {
+				// Base case
+				return true;
+			} else {
+				// Recursive case
+				return contains(l.parent);
+			}
+		}
+
+		/**
+		 * Get the outermost lifetime which this lifetime is within.
+		 *
+		 * @return
+		 */
+		public Lifetime getRoot() {
+			if (parent == null) {
+				return this;
+			} else {
+				return parent.getRoot();
+			}
+		}
+
+		/**
+		 * Construct a fresh lifetime within this lifetime.
+		 *
+		 * @return
+		 */
+		public Lifetime freshWithin() {
+			// Create the new lifetime
+			Lifetime l = new Lifetime(this);
+			// Configure it as a child
+			int index = children.length;
+			children = Arrays.copyOf(children, index + 1);
+			children[index] = l;
+			//
+			return l;
 		}
 	}
 }

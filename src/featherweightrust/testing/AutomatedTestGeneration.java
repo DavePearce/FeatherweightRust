@@ -14,6 +14,7 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Expr.Dereference;
 import featherweightrust.core.Syntax.Expr.Variable;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Stmt.Block;
 import featherweightrust.core.Syntax.Stmt.Let;
@@ -330,13 +331,16 @@ public class AutomatedTestGeneration {
 	}
 
 	public static class BlockGenerator extends AbstractNaryGenerator<Stmt.Block, Stmt> {
-		public BlockGenerator(int maxWidth, Generator<Stmt> gen) {
+		private Lifetime lifetime;
+		//
+		public BlockGenerator(Lifetime lifetime, int maxWidth, Generator<Stmt> gen) {
 			super(maxWidth, gen);
+			this.lifetime = lifetime;
 		}
 
 		@Override
 		public Block generate(List<Stmt> s) {
-			return new Stmt.Block("?", s.toArray(new Stmt[s.size()]));
+			return new Stmt.Block(lifetime, s.toArray(new Stmt[s.size()]));
 		}
 	}
 
@@ -376,8 +380,8 @@ public class AutomatedTestGeneration {
 	}
 
 
-	public static Generator<Stmt> buildStmtGenerator(int depth, int width, Generator<Expr> exprGenerator,
-			int declared) {
+	public static Generator<Stmt> buildStmtGenerator(int depth, int width, Lifetime lifetime,
+			Generator<Expr> exprGenerator, int declared) {
 		LetGenerator letGenerator = new LetGenerator(exprGenerator, LET_VARIABLES[declared]);
 		AssignmentGenerator assignGenerator = new AssignmentGenerator(exprGenerator, VARIABLES[declared]);
 		IndirectAssignmentGenerator indAssignGenerator = new IndirectAssignmentGenerator(exprGenerator,
@@ -385,8 +389,8 @@ public class AutomatedTestGeneration {
 		if (depth == 0) {
 			return new SubclassGenerator<>(letGenerator, assignGenerator, indAssignGenerator);
 		} else {
-			Generator<Stmt> stmtGenerator = buildStmtGenerator(depth - 1, width, exprGenerator, declared);
-			BlockGenerator blockGenerator = new BlockGenerator(width, stmtGenerator);
+			Generator<Stmt> stmtGenerator = buildStmtGenerator(depth - 1, width, lifetime, exprGenerator, declared);
+			BlockGenerator blockGenerator = new BlockGenerator(lifetime.freshWithin(), width, stmtGenerator);
 			return new SubclassGenerator<>(letGenerator, assignGenerator, indAssignGenerator, blockGenerator);
 		}
 	}
@@ -400,10 +404,10 @@ public class AutomatedTestGeneration {
 
 	private static Generator<Stmt>[] STMT_GENERATORS = new Generator[]{
 			// Stmt depth always at zero since extensions handle separately
-			buildStmtGenerator(0, STMT_WIDTH, EXPR_GENERATORS[0], 0),
-			buildStmtGenerator(0, STMT_WIDTH, EXPR_GENERATORS[1], 1),
-			buildStmtGenerator(0, STMT_WIDTH, EXPR_GENERATORS[2], 2),
-			buildStmtGenerator(0, STMT_WIDTH, EXPR_GENERATORS[3], 3)
+			buildStmtGenerator(0, STMT_WIDTH, new Lifetime(), EXPR_GENERATORS[0], 0),
+			buildStmtGenerator(0, STMT_WIDTH, new Lifetime(), EXPR_GENERATORS[1], 1),
+			buildStmtGenerator(0, STMT_WIDTH, new Lifetime(), EXPR_GENERATORS[2], 2),
+			buildStmtGenerator(0, STMT_WIDTH, new Lifetime(), EXPR_GENERATORS[3], 3)
 	};
 
 	/**
@@ -414,8 +418,8 @@ public class AutomatedTestGeneration {
 	 * @param gen
 	 * @return
 	 */
-	public static List<Stmt> extendAll(List<Stmt> stmts, int declared) {
-		ArrayList<Stmt> results = new ArrayList<>();
+	public static <T extends Stmt> List<T> extendAll(List<T> stmts, int declared) {
+		ArrayList<T> results = new ArrayList<>();
 		for (int i = 0; i != stmts.size(); ++i) {
 			results.addAll(extend(stmts.get(i), declared, 0));
 		}
@@ -429,9 +433,9 @@ public class AutomatedTestGeneration {
 	 * @param gen
 	 * @return
 	 */
-	public static List<Stmt> extend(Stmt stmt, int declared, int depth) {
+	public static <T extends Stmt> List<T> extend(T stmt, int declared, int depth) {
 		if (depth < 2 && stmt instanceof Stmt.Block) {
-			ArrayList<Stmt> extensions = new ArrayList<>();
+			ArrayList<Stmt.Block> extensions = new ArrayList<>();
 			// Can only extend a block in some way
 			Stmt.Block block = (Stmt.Block) stmt;
 			// Replace any existing statements
@@ -454,14 +458,13 @@ public class AutomatedTestGeneration {
 			for (long i = 0; i != size; ++i) {
 				extensions.add(add(block, gen.generate(i)));
 			}
-			if(blocks < 1) {
+			if (blocks < 1) {
 				for (long i = 0; i != size; ++i) {
-					// FIXME: lifetimes hack
-					extensions.add(add(block, new Stmt.Block(block.lifetime(), new Stmt[] {gen.generate(i)})));
+					extensions.add(add(block, new Stmt.Block(block.lifetime(), new Stmt[] { gen.generate(i) })));
 				}
 			}
 			// Done
-			return extensions;
+			return (List<T>) extensions;
 		} else {
 			return Collections.EMPTY_LIST;
 		}
@@ -513,26 +516,29 @@ public class AutomatedTestGeneration {
 			// Scan input
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
-			return new Parser(input, tokens).parseStatementBlock(Parser.ROOT_CONTEXT);
+			return new Parser(input, tokens).parseStatementBlock(Parser.ROOT_CONTEXT, block.lifetime());
 		} catch (SyntaxError e) {
 			return null;
 		}
 	}
 
 	public static void main(String[] args) throws IOException {
-		List<Stmt> worklist = new ArrayList<>();
-		worklist.add(new Stmt.Block("*", new Stmt[0]));
+		Lifetime globalLifetime = new Lifetime();
+		//
+		List<Stmt.Block> worklist = new ArrayList<>();
+		worklist.add(new Stmt.Block(globalLifetime.freshWithin(), new Stmt[0]));
 		long total = 0;
-		for(int i=0;i!=4;++i) {
+		for (int i = 0; i != 4; ++i) {
 			// Make all one place extensions
-			worklist = extendAll(worklist,0);
+			worklist = extendAll(worklist, 0);
 			//
 			System.out.println("=======================================");
 			System.out.println("ITH: " + i + " SIZE: " + worklist.size());
 			System.out.println("=======================================");
-			for(int j=0;j!=worklist.size();++j) {
+			for (int j = 0; j != worklist.size(); ++j) {
+				Stmt.Block b = worklist.get(j);
 				System.out.println("GOT: " + worklist.get(j).toString());
-				runAndCheck(worklist.get(j));
+				runAndCheck(b, globalLifetime);
 			}
 			total += worklist.size();
 		}
@@ -566,18 +572,18 @@ public class AutomatedTestGeneration {
 	public static long falsepos = 0;
 	public static long falseneg = 0;
 
-	public static void runAndCheck(Stmt stmt) {
+	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime) {
 		boolean ran = false;
 		boolean checked = false;
 		// See whether or not it borrow checks
 		try {
-			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, "*", stmt);
+			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, lifetime, stmt);
 			checked = true;
 		} catch (SyntaxError e) {
 		}
 		// See whether or not it executes
 		try {
-			semantics.apply(AbstractSemantics.EMPTY_STATE, "*", stmt).first();
+			semantics.apply(AbstractSemantics.EMPTY_STATE, lifetime, stmt).first();
 			ran = true;
 		} catch (Exception e) {
 		}

@@ -310,20 +310,14 @@ public class Syntax {
 
 		public class Location extends SyntacticElement.Impl implements Value {
 			private final int address;
-			private final boolean owner;
 
-			public Location(int value, boolean owner, Attribute... attributes) {
+			public Location(int value, Attribute... attributes) {
 				super(attributes);
 				this.address = value;
-				this.owner = owner;
 			}
 
 			public int getAddress() {
 				return address;
-			}
-
-			public boolean isOwner() {
-				return owner;
 			}
 
 			@Override
@@ -335,18 +329,14 @@ public class Syntax {
 			public boolean equals(Object o) {
 				if (o instanceof Location) {
 					Location l = ((Location) o);
-					return l.address == address && l.owner == owner;
+					return l.address == address;
 				}
 				return false;
 			}
 
 			@Override
 			public String toString() {
-				if(owner) {
-					return "&!" + address;
-				} else {
-					return "&" + address;
-				}
+				return "&" + address;
 			}
 		}
 	}

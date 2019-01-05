@@ -103,7 +103,7 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 			throw new RuntimeException("invalid variable \"" + name + "\"");
 		}
 		// Strip ownership flag since is a borrow
-		loc = new Location(loc.getAddress(), false);
+		loc = new Location(loc.getAddress());
 		// Done
 		return new Pair<>(state, loc);
 	}

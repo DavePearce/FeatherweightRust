@@ -263,7 +263,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 			// Create new cell using given contents
 			ncells[cells.length] = new Cell(lifetime, v);
 			// Return updated store and location
-			return new Pair<>(new Store(ncells), new Location(cells.length, true));
+			return new Pair<>(new Store(ncells), new Location(cells.length));
 		}
 
 		/**
@@ -387,10 +387,10 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 			Value v = cell.value;
 			if(v instanceof Value.Location) {
 				Value.Location loc = (Value.Location) v;
-				if(loc.isOwner()) {
-					Cell lcell = cells[loc.getAddress()];
+				Cell lcell = cells[loc.getAddress()];
+				if (lcell != null && lcell.hasGlobalLifetime()) {
 					cells[loc.getAddress()] = null;
-					finalise(cells,lcell);
+					finalise(cells, lcell);
 				}
 			}
 		}
@@ -427,6 +427,17 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 */
 		public Value contents() {
 			return value;
+		}
+
+		/**
+		 * Check whether this cell was allocated in the global space or not. This
+		 * indicates whether or not the cell was allocated on the heap.
+		 *
+		 * @return
+		 */
+		public boolean hasGlobalLifetime() {
+			Lifetime globalLifetime = lifetime.getRoot();
+			return lifetime == globalLifetime;
 		}
 
 		@Override

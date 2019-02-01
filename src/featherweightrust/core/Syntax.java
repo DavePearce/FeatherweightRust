@@ -18,8 +18,12 @@
 package featherweightrust.core;
 
 import java.util.Arrays;
+import java.util.List;
 
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.util.SyntacticElement;
+import modelgen.core.Domain;
+import modelgen.util.AbstractDomain;
 
 public class Syntax {
 
@@ -35,7 +39,7 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class Let extends SyntacticElement.Impl implements Stmt  {
+		public class Let extends SyntacticElement.Impl implements Stmt {
 			private final Expr.Variable variable;
 			private final Expr initialiser;
 
@@ -66,6 +70,15 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "let mut " + variable.name() + " = " + initialiser + ";";
+			}
+
+			public static Domain<Let> toDomain(Domain<Expr.Variable> first, Domain<Expr> second) {
+				return new AbstractDomain.Binary<Let, Expr.Variable, Expr>(first, second) {
+					@Override
+					public Let get(Expr.Variable variable, Expr initialiser) {
+						return new Let(variable, initialiser);
+					}
+				};
 			}
 		}
 
@@ -101,6 +114,15 @@ public class Syntax {
 			public String toString() {
 				return lhs.name + " = " + rhs + ";";
 			}
+
+			public static Domain<Assignment> toDomain(Domain<Expr.Variable> first, Domain<Expr> second) {
+				return new AbstractDomain.Binary<Assignment, Expr.Variable, Expr>(first, second) {
+					@Override
+					public Assignment get(Expr.Variable variable, Expr initialiser) {
+						return new Assignment(variable, initialiser);
+					}
+				};
+			}
 		}
 
 		/**
@@ -134,6 +156,15 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "*" + lhs.name + " = " + rhs + ";";
+			}
+
+			public static Domain<IndirectAssignment> toDomain(Domain<Expr.Variable> first, Domain<Expr> second) {
+				return new AbstractDomain.Binary<IndirectAssignment, Expr.Variable, Expr>(first, second) {
+					@Override
+					public IndirectAssignment get(Expr.Variable variable, Expr initialiser) {
+						return new IndirectAssignment(variable, initialiser);
+					}
+				};
 			}
 		}
 
@@ -177,10 +208,56 @@ public class Syntax {
 			@Override
 			public String toString() {
 				String contents = "";
-				for(int i=0;i!=stmts.length;++i) {
+				for (int i = 0; i != stmts.length; ++i) {
 					contents += stmts[i] + " ";
 				}
 				return "{ " + contents + "}";
+			}
+
+			public static Domain<Block> toDomain(Lifetime lifetime, int maxWidth, Domain<Stmt> first) {
+				return new AbstractDomain.Nary<Block, Stmt>(maxWidth, first) {
+					@Override
+					public Block generate(List<Stmt> items) {
+						return new Block(lifetime, items.toArray(new Stmt[items.size()]));
+					}
+				};
+			}
+		}
+
+		/**
+		 * Construct a domain for statements with a maximum level of nesting.
+		 *
+		 * @param depth
+		 *            The maximum depth of block nesting.
+		 * @param width
+		 *            The maximum width of a block.
+		 * @param exprDepth
+		 *            The maximum depth of expressions.
+		 * @param lifetime
+		 *            The lifetime of the enclosing block
+		 * @param ints
+		 *            The domain of integer values to use
+		 * @param names
+		 *            The set of variable names
+		 * @return
+		 */
+		public static Domain<Stmt> toDomain(int depth, int width, Lifetime lifetime, Domain<Expr> expressions,
+				Domain<String> names) {
+			Domain<Expr.Variable> variables = Expr.Variable.toDomain(names);
+			Domain<Let> lets = Stmt.Let.toDomain(variables, expressions);
+			Domain<Assignment> assigns = Stmt.Assignment.toDomain(variables, expressions);
+			Domain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toDomain(variables, expressions);
+			if (depth == 0) {
+				return new Domain.Union<>(lets, assigns, indirects);
+			} else {
+				// Determine lifetime for blocks at this level
+				lifetime = lifetime.freshWithin();
+				// Recursively construct subdomain generator
+				Domain<Stmt> subdomain = toDomain(depth - 1, width, lifetime, expressions, names);
+				// Using this construct the block generator
+				Domain<Block> blocks = Stmt.Block.toDomain(lifetime, width, subdomain);
+				// Done
+				return new Domain.Union<>(lets, assigns, indirects, blocks);
 			}
 		}
 	}
@@ -210,6 +287,15 @@ public class Syntax {
 			public String toString() {
 				return name;
 			}
+
+			public static Domain<Variable> toDomain(Domain<String> subdomain) {
+				return new AbstractDomain.Unary<Variable, String>(subdomain) {
+					@Override
+					public Variable get(String name) {
+						return new Variable(name);
+					}
+				};
+			}
 		}
 
 		public class Dereference extends SyntacticElement.Impl implements Expr {
@@ -228,8 +314,16 @@ public class Syntax {
 			public String toString() {
 				return "*" + operand.toString();
 			}
-		}
 
+			public static Domain<Dereference> toDomain(Domain<Expr> subdomain) {
+				return new AbstractDomain.Unary<Dereference, Expr>(subdomain) {
+					@Override
+					public Dereference get(Expr e) {
+						return new Dereference(e);
+					}
+				};
+			}
+		}
 
 		public class Borrow extends SyntacticElement.Impl implements Expr {
 			private final Expr.Variable operand;
@@ -251,14 +345,22 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				if(mutable) {
+				if (mutable) {
 					return "&mut " + operand.name;
 				} else {
 					return "&" + operand.name;
 				}
 			}
-		}
 
+			public static Domain<Borrow> toDomain(Domain<Variable> first, Domain<Boolean> second) {
+				return new AbstractDomain.Binary<Borrow, Variable, Boolean>(first, second) {
+					@Override
+					public Borrow get(Variable operand, Boolean mutable) {
+						return new Borrow(operand, mutable);
+					}
+				};
+			}
+		}
 
 		public class Box extends SyntacticElement.Impl implements Expr {
 			private final Expr operand;
@@ -276,10 +378,34 @@ public class Syntax {
 			public String toString() {
 				return "box " + operand;
 			}
+
+			public static Domain<Box> toDomain(Domain<Expr> subdomain) {
+				return new AbstractDomain.Unary<Box, Expr>(subdomain) {
+					@Override
+					public Box get(Expr e) {
+						return new Box(e);
+					}
+				};
+			}
+		}
+
+		public static Domain<Expr> toDomain(int depth, Domain<Integer> ints, Domain<String> names) {
+			Domain<Value.Integer> integers = Value.Integer.toDomain(ints);
+			Domain<Expr.Variable> variables = Expr.Variable.toDomain(names);
+			Domain<Expr.Borrow> borrows = Expr.Borrow.toDomain(variables, new Domain.Bool());
+			if (depth == 0) {
+				return new Domain.Union<>(integers, variables, borrows);
+			} else {
+				Domain<Expr> subdomain = toDomain(depth - 1, ints, names);
+				Domain<Expr.Dereference> derefs = Expr.Dereference.toDomain(subdomain);
+				Domain<Expr.Box> boxes = Expr.Box.toDomain(subdomain);
+				return new Domain.Union<>(integers, variables, borrows, derefs, boxes);
+			}
 		}
 	}
 
 	public interface Value extends Expr {
+
 		public class Integer extends SyntacticElement.Impl implements Value {
 			private final int value;
 
@@ -305,6 +431,17 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return java.lang.Integer.toString(value);
+			}
+
+			public static Domain<Integer> toDomain(Domain<java.lang.Integer> subdomain) {
+				return new AbstractDomain.Unary<Integer, java.lang.Integer>(subdomain) {
+
+					@Override
+					public Integer get(java.lang.Integer i) {
+						return new Integer(i);
+					}
+
+				};
 			}
 		}
 
@@ -369,7 +506,7 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				if(mut) {
+				if (mut) {
 					return "&mut " + name;
 				} else {
 					return "&" + name;
@@ -393,7 +530,8 @@ public class Syntax {
 
 	/**
 	 * Implements the concept of a lifetime which permits the creation of fresh
-	 * "inner" lifetimes and the ability to test whether one lifetime is inside another.
+	 * "inner" lifetimes and the ability to test whether one lifetime is inside
+	 * another.
 	 *
 	 * @author David J. Pearce
 	 *

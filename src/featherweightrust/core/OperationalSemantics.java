@@ -177,11 +177,11 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 				}
 			}
 			// drop all bindings created within block
-			S1 = new State(outerFrame, S1.store());
+			State S2 = new State(outerFrame, S1.store());
 			// drop all allocated locations
-			S1 = S1.drop(stmt.lifetime());
+			State S3 = S2.drop(stmt.lifetime());
 			//
-			return new Pair<>(S1, returnValue);
+			return new Pair<>(S3, returnValue);
 		}
 
 		@Override

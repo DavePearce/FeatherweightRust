@@ -60,6 +60,8 @@ public abstract class AbstractTransformer<T,S,E extends S> {
 			return apply(state, lifetime, (Expr.Borrow) expr);
 		} else if (expr instanceof Expr.Box) {
 			return apply(state, lifetime, (Expr.Box) expr);
+		} else if (expr instanceof Expr.Copy){
+			return apply(state, lifetime, (Expr.Copy) expr);
 		} else {
 			return apply(state, lifetime, (Expr.Variable) expr);
 		}
@@ -77,4 +79,6 @@ public abstract class AbstractTransformer<T,S,E extends S> {
 	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Box expr);
 
 	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Variable expr);
+
+	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Copy expr);
 }

@@ -38,15 +38,15 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Assign.
 	 */
-	public Pair<State, Stmt> reduceAssignment(State S1, Lifetime lifetime, Expr.Variable x, Value v2) {
+	public Pair<State, Stmt> reduceAssignment(State S1, Lifetime l, Expr.Variable x, Value v2) {
 		// Extract the location being assigned
-		Location l = S1.locate(x.name());
+		Location lx = S1.locate(x.name());
 		// Extract value being overwritten
-		Value v1 = S1.read(l);
+		Value v1 = S1.read(lx);
 		// Drop overwritten value
-		State S2 = S1.drop(v1);
+		State S2 = S1.drop(lx);
 		// Perform the assignment
-		State S3 = S2.write(l, v2);
+		State S3 = S2.write(lx, v2);
 		// Done
 		return new Pair<>(S3, null);
 	}
@@ -54,13 +54,13 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Declare.
 	 */
-	public Pair<State, Stmt> reduceLet(State S1, Lifetime lifetime, Expr.Variable x, Value v) {
+	public Pair<State, Stmt> reduceLet(State S1, Lifetime l, Expr.Variable x, Value v) {
 		// Allocate new location
-		Pair<State, Location> pl = S1.allocate(lifetime, v);
+		Pair<State, Location> pl = S1.allocate(l, v);
 		State S2 = pl.first();
-		Location l = pl.second();
+		Location lx = pl.second();
 		// Bind variable to location
-		State S3 = S2.bind(x.name(), l);
+		State S3 = S2.bind(x.name(), lx);  // FIXME: what is this?
 		// Done
 		return new Pair<>(S3, null);
 	}
@@ -68,15 +68,15 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-IndAssign.
 	 */
-	public Pair<State, Stmt> reduceIndirectAssignment(State S1, Lifetime lifetime, Expr.Variable x, Value v2) {
-		// Extract the location being assigned
-		Location l = (Location) S1.read(S1.locate(x.name()));
-		// Extract value being overwritten
-		Value v1 = S1.read(l);
+	public Pair<State, Stmt> reduceIndirectAssignment(State S1, Lifetime l, Expr.Variable x, Value v) {
+		// Extract the location of x
+		Location lx = S1.locate(x.name());
+		// Extract target location being assigned
+		Location ly = (Location) S1.read(lx);
 		// Drop owned locations
-		State S2 = S1.drop(v1);
+ 		State S2 = S1.drop(ly);
 		// Perform the indirect assignment
-		State S3 = S2.write(l, v2);
+		State S3 = S2.write(lx, v);
 		// Done
 		return new Pair<>(S3, null);
 	}
@@ -84,51 +84,69 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Expr> reduceDereference(State S1, Lifetime lifetime, Value v) {
+	public Pair<State, Expr> reduceDereference(State S1, Lifetime l, Expr.Variable x) {
 		// Extract location, or throw exception otherwise
-		Location l = (Location) v;
+		Location lx = S1.locate(x.name());
+		// Read contents of x (which should be location)
+		Location ly = (Location) S1.read(lx);
 		// Read contents of cell at given location
-		return new Pair<>(S1, S1.read(l));
+		Value v = S1.read(ly);
+		//
+		return new Pair<>(S1, v);
 	}
 
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Expr> reduceBorrow(State state, Lifetime lifetime, Expr.Variable x) {
+	public Pair<State, Expr> reduceBorrow(State S, Lifetime l, Expr.Variable x) {
 		String name = x.name();
 		// Locate operand
-		Location loc = state.locate(x.name());
+		Location lx = S.locate(x.name());
 		//
-		if (loc == null) {
+		if (lx == null) {
 			throw new RuntimeException("invalid variable \"" + name + "\"");
 		}
 		// Strip ownership flag since is a borrow
-		loc = new Location(loc.getAddress());
+		lx = new Location(lx.getAddress()); // TODO: don't need this?
 		// Done
-		return new Pair<>(state, loc);
+		return new Pair<>(S, lx);
 	}
 
 	/**
 	 * Rule R-Box.
 	 */
-	public Pair<State, Expr> reduceBox(State S1, Lifetime lifetime, Value v) {
-		Lifetime globalLifetime = lifetime.getRoot();
+	public Pair<State, Expr> reduceBox(State S1, Lifetime l, Value v) {
+		Lifetime globalLifetime = l.getRoot();
 		// Allocate new location
 		Pair<State, Location> pl = S1.allocate(globalLifetime, v);
 		State S2 = pl.first();
-		Location l = pl.second();
+		Location ln = pl.second();
 		// Done
-		return new Pair<>(S2, l);
+		return new Pair<>(S2, ln);
 	}
 
 	/**
-	 * Rule R-Var.
+	 * Rule R-CopyVar.
 	 */
-	public Pair<State, Expr> reduceVariable(State state, Lifetime lifetime, Expr.Variable x) {
+	public Pair<State, Expr> reduceCopy(State S, Lifetime l, Expr.Variable x) {
 		// Determine location bound by variable
-		Location loc = state.locate(x.name());
+		Location lx = S.locate(x.name());
 		// Read location from store
-		return new Pair<>(state, state.read(loc));
+		return new Pair<>(S, S.read(lx));
+	}
+
+	/**
+	 * Rule R-MoveVar.
+	 */
+	public Pair<State, Expr> reduceVariable(State S1, Lifetime l, Expr.Variable x) {
+		// Determine location bound by variable
+		Location lx = S1.locate(x.name());
+		// Read value held by x
+		Value v = S1.read(lx);
+		// Render location unusable
+		State S2 = S1.write(lx, null);
+		// Read location from store
+		return new Pair<>(S2, v);
 	}
 
 	/**
@@ -143,20 +161,20 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	public static class BigStep extends OperationalSemantics {
 
 		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Assignment stmt) {
+		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Assignment s) {
 			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, lifetime, stmt.rightOperand());
+			Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
 			State S2 = rhs.first();
 			Value v = (Value) rhs.second();
 			// Reduce right hand side
-			return reduceAssignment(S2, lifetime, stmt.leftOperand(), v);
+			return reduceAssignment(S2, l, s.leftOperand(), v);
 		}
 
 		/**
 		 * Rule R-Block.
 		 */
 		@Override
-		public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Block stmt) {
+		public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Block b) {
 
 			// FIXME: need to figure out how to split this out into R-Seq and R-Block.
 			// Currently, cannot do small step because need to chain bindings properly
@@ -165,8 +183,8 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 			StackFrame outerFrame = S1.frame();
 			Stmt returnValue = null;
 			//
-			for (int i = 0; i != stmt.size(); ++i) {
-				Pair<State, Stmt> p = apply(S1, stmt.lifetime(), stmt.get(i));
+			for (int i = 0; i != b.size(); ++i) {
+				Pair<State, Stmt> p = apply(S1, b.lifetime(), b.get(i));
 				Stmt s = p.second();
 				S1 = p.first();
 				//
@@ -179,69 +197,69 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 			// drop all bindings created within block
 			State S2 = new State(outerFrame, S1.store());
 			// drop all allocated locations
-			State S3 = S2.drop(stmt.lifetime());
+			State S3 = S2.drop(b.lifetime());
 			//
 			return new Pair<>(S3, returnValue);
 		}
 
 		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Let stmt) {
+		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Let s) {
 			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, lifetime, stmt.initialiser());
+			Pair<State, Expr> rhs = apply(S1, l, s.initialiser());
 			State S2 = rhs.first();
 			Value v = (Value) rhs.second();
 			// Reduce right hand side
-			return reduceLet(S2, lifetime, stmt.variable(), v);
+			return reduceLet(S2, l, s.variable(), v);
 		}
 
 		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.IndirectAssignment stmt) {
+		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.IndirectAssignment s) {
 			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, lifetime, stmt.rightOperand());
+			Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
 			State S2 = rhs.first();
 			Value v = (Value) rhs.second();
 			// Reduce right hand side
-			return reduceIndirectAssignment(S2, lifetime, stmt.leftOperand(), v);
+			return reduceIndirectAssignment(S2, l, s.leftOperand(), v);
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State state, Lifetime lifetime, Expr.Borrow expr) {
-			return reduceBorrow(state, lifetime, expr.operand());
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Borrow e) {
+			return reduceBorrow(S, l, e.operand());
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Dereference e) {
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Dereference e) {
+			return reduceDereference(S, l, e.operand());
+		}
+
+		@Override
+		final public Pair<State, Expr> apply(State S1, Lifetime l, Expr.Box e) {
 			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, lifetime, e.operand());
+			Pair<State, Expr> rhs = apply(S1, l, e.operand());
 			State S2 = rhs.first();
 			Value v = (Value) rhs.second();
 			// Reduce indirect assignment
-			return reduceDereference(S2, lifetime, v);
+			return reduceBox(S2, l, v);
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Box e) {
-			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, lifetime, e.operand());
-			State S2 = rhs.first();
-			Value v = (Value) rhs.second();
-			// Reduce indirect assignment
-			return reduceBox(S2, lifetime, v);
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Variable e) {
+			return reduceVariable(S, l, e);
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Variable e) {
-			return reduceVariable(S1, lifetime, e);
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Copy e) {
+			return reduceCopy(S, l, e.operand());
 		}
 
 		@Override
-		public Pair<State, Expr> apply(State state, Value.Integer value) {
-			return new Pair<>(state, value);
+		public Pair<State, Expr> apply(State S, Value.Integer v) {
+			return new Pair<>(S, v);
 		}
 
 		@Override
-		public Pair<State, Expr> apply(State state, Value.Location value) {
-			return new Pair<>(state, value);
+		public Pair<State, Expr> apply(State S, Value.Location v) {
+			return new Pair<>(S, v);
 		}
 	}
 
@@ -258,79 +276,69 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	public static class SmallStep extends OperationalSemantics {
 
 		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Assignment stmt) {
-			if (stmt.rightOperand() instanceof Value) {
+		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Assignment s) {
+			if (s.rightOperand() instanceof Value) {
 				// Statement can be completely reduced
-				return reduceAssignment(S1, lifetime, stmt.leftOperand(), (Value) stmt.rightOperand());
+				return reduceAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
 			} else {
 				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, lifetime, stmt.rightOperand());
+				Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
 				// Construct reduce statement
-				stmt = new Stmt.Assignment(stmt.leftOperand(), rhs.second(), stmt.attributes());
+				s = new Stmt.Assignment(s.leftOperand(), rhs.second(), s.attributes());
 				// Done
-				return new Pair<>(rhs.first(),stmt);
+				return new Pair<>(rhs.first(),s);
 			}
 		}
 
 		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.Let stmt) {
-			if (stmt.initialiser() instanceof Value) {
+		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Let s) {
+			if (s.initialiser() instanceof Value) {
 				// Statement can be completely reduced
-				Value v = (Value) stmt.initialiser();
-				return reduceLet(S1, lifetime, stmt.variable(), v);
+				Value v = (Value) s.initialiser();
+				return reduceLet(S1, l, s.variable(), v);
 			} else {
 				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, lifetime, stmt.initialiser());
+				Pair<State, Expr> rhs = apply(S1, l, s.initialiser());
 				// Construct reduce statement
-				stmt = new Stmt.Let(stmt.variable(), rhs.second(), stmt.attributes());
+				s = new Stmt.Let(s.variable(), rhs.second(), s.attributes());
 				// Done
-				return new Pair<>(rhs.first(), stmt);
+				return new Pair<>(rhs.first(), s);
 			}
 		}
 
 		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Stmt.IndirectAssignment stmt) {
-			if (stmt.rightOperand() instanceof Value) {
+		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.IndirectAssignment s) {
+			if (s.rightOperand() instanceof Value) {
 				// Statement can be completely reduced
-				return reduceIndirectAssignment(S1, lifetime, stmt.leftOperand(), (Value) stmt.rightOperand());
+				return reduceIndirectAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
 			} else {
 				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, lifetime, stmt.rightOperand());
+				Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
 				// Construct reduce statement
-				stmt = new Stmt.IndirectAssignment(stmt.leftOperand(), rhs.second(), stmt.attributes());
+				s = new Stmt.IndirectAssignment(s.leftOperand(), rhs.second(), s.attributes());
 				// Done
-				return new Pair<>(rhs.first(),stmt);
+				return new Pair<>(rhs.first(),s);
 			}
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State state, Lifetime lifetime, Expr.Borrow expr) {
-			return reduceBorrow(state, lifetime, expr.operand());
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Borrow e) {
+			return reduceBorrow(S, l, e.operand());
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Dereference e) {
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Dereference e) {
+			return reduceDereference(S, l, e.operand());
+		}
+
+		@Override
+		final public Pair<State, Expr> apply(State S1, Lifetime l, Expr.Box e) {
 			if (e.operand() instanceof Value) {
 				// Statement can be completely reduced
-				return reduceDereference(S1, lifetime, (Value) e.operand());
+				return reduceBox(S1, l, (Value) e.operand());
 			} else {
 				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, lifetime, e.operand());
-				// Construct reduce statement
-				e = new Expr.Dereference(rhs.second(), e.attributes());
-				// Done
-				return new Pair<>(rhs.first(), e);
-			}
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Box e) {
-			if (e.operand() instanceof Value) {
-				// Statement can be completely reduced
-				return reduceBox(S1, lifetime, (Value) e.operand());
-			} else {
-				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, lifetime, e.operand());
+				Pair<State, Expr> rhs = apply(S1, l, e.operand());
 				// Construct reduce statement
 				e = new Expr.Box(rhs.second(), e.attributes());
 				// Done
@@ -339,18 +347,23 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime lifetime, Expr.Variable e) {
-			return reduceVariable(S1, lifetime, e);
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Variable e) {
+			return reduceVariable(S, l, e);
 		}
 
 		@Override
-		public Pair<State, Expr> apply(State state, Value.Integer value) {
-			return new Pair<>(state, value);
+		final public Pair<State, Expr> apply(State S, Lifetime lifetime, Expr.Copy e) {
+			return reduceCopy(S, lifetime, e.operand());
 		}
 
 		@Override
-		public Pair<State, Expr> apply(State state, Value.Location value) {
-			return new Pair<>(state, value);
+		public Pair<State, Expr> apply(State S, Value.Integer v) {
+			return new Pair<>(S, v);
+		}
+
+		@Override
+		public Pair<State, Expr> apply(State S, Value.Location v) {
+			return new Pair<>(S, v);
 		}
 	}
 }

@@ -20,14 +20,35 @@ package featherweightrust.core;
 import java.util.Arrays;
 import java.util.List;
 
-import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.util.SyntacticElement;
-import modelgen.core.Domain;
-import modelgen.util.AbstractDomain;
+import jmodelgen.core.Domain;
+import jmodelgen.core.Mutable;
+import jmodelgen.util.AbstractDomain;
 
 public class Syntax {
 
-	public interface Stmt extends SyntacticElement {
+	public interface Stmt extends Mutable<Stmt>, SyntacticElement {
+
+		public static class AbstractStmt extends SyntacticElement.Impl implements Stmt {
+			public AbstractStmt(Attribute... attributes) {
+				super(attributes);
+			}
+
+			@Override
+			public int size() {
+				return 0;
+			}
+
+			@Override
+			public Stmt get(int i) {
+				throw new IndexOutOfBoundsException();
+			}
+
+			@Override
+			public Stmt replace(int i, Stmt child) {
+				throw new IndexOutOfBoundsException();
+			}
+		}
 
 		/**
 		 * Represents a variable declaration of the form:
@@ -39,7 +60,7 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class Let extends SyntacticElement.Impl implements Stmt {
+		public class Let extends AbstractStmt {
 			private final Expr.Variable variable;
 			private final Expr initialiser;
 
@@ -92,7 +113,7 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class Assignment extends SyntacticElement.Impl implements Stmt {
+		public class Assignment extends AbstractStmt {
 			public final Expr.Variable lhs;
 			public final Expr rhs;
 
@@ -135,7 +156,7 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class IndirectAssignment extends SyntacticElement.Impl implements Stmt {
+		public class IndirectAssignment extends AbstractStmt {
 			private final Expr.Variable lhs;
 			private final Expr rhs;
 
@@ -179,7 +200,7 @@ public class Syntax {
 		 * @author djp
 		 *
 		 */
-		public class Block extends SyntacticElement.Impl implements Stmt {
+		public class Block extends AbstractStmt implements Extensible<Stmt> {
 			private final Lifetime lifetime;
 			private final Stmt[] stmts;
 
@@ -189,6 +210,7 @@ public class Syntax {
 				this.stmts = stmts;
 			}
 
+			@Override
 			public int size() {
 				return stmts.length;
 			}
@@ -197,8 +219,38 @@ public class Syntax {
 				return lifetime;
 			}
 
+			@Override
 			public Stmt get(int index) {
 				return stmts[index];
+			}
+
+			/**
+			 * Replace a given statement in this block, producing an updated copy of the
+			 * block.
+			 *
+			 * @param i
+			 * @param stmt
+			 * @return
+			 */
+			@Override
+			public Stmt.Block replace(int i, Stmt stmt) {
+				Stmt[] nstmts = Arrays.copyOf(stmts, stmts.length);
+				nstmts[i] = stmt;
+				return new Stmt.Block(lifetime, nstmts);
+			}
+
+			/**
+			 * Append a given statement to this block, producing an updated copy of the
+			 * block.
+			 *
+			 * @param stmt
+			 * @return
+			 */
+			@Override
+			public Stmt.Block append(Stmt stmt) {
+				Stmt[] nstmts = Arrays.copyOf(stmts, stmts.length + 1);
+				nstmts[stmts.length] = stmt;
+				return new Stmt.Block(lifetime, nstmts);
 			}
 
 			public Stmt[] toArray() {
@@ -231,29 +283,35 @@ public class Syntax {
 		 *            The maximum depth of block nesting.
 		 * @param width
 		 *            The maximum width of a block.
-		 * @param exprDepth
-		 *            The maximum depth of expressions.
 		 * @param lifetime
 		 *            The lifetime of the enclosing block
-		 * @param ints
-		 *            The domain of integer values to use
-		 * @param names
-		 *            The set of variable names
+		 * @param expressions
+		 *            The domain of expressions to use
+		 * @param declared
+		 *            The set of variable names for variables which have already been
+		 *            declared.
+		 * @param undeclared The set of variable names for variables which have not
+		 *        already been declared.
 		 * @return
 		 */
 		public static Domain<Stmt> toDomain(int depth, int width, Lifetime lifetime, Domain<Expr> expressions,
-				Domain<String> names) {
-			Domain<Expr.Variable> variables = Expr.Variable.toDomain(names);
-			Domain<Let> lets = Stmt.Let.toDomain(variables, expressions);
-			Domain<Assignment> assigns = Stmt.Assignment.toDomain(variables, expressions);
-			Domain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toDomain(variables, expressions);
+				Domain<String> declared, Domain<String> undeclared) {
+			// Construct corresponding domains for variable expressions.
+			Domain<Expr.Variable> undeclaredVariables = Expr.Variable.toDomain(undeclared);
+			Domain<Expr.Variable> declaredVariables = Expr.Variable.toDomain(declared);
+			// Let statements can only be constructed from undeclared variables
+			Domain<Let> lets = Stmt.Let.toDomain(undeclaredVariables, expressions);
+			// Assignments can only use declared variables
+			Domain<Assignment> assigns = Stmt.Assignment.toDomain(declaredVariables, expressions);
+			// Indirect assignments can only use declared variables
+			Domain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toDomain(declaredVariables, expressions);
 			if (depth == 0) {
 				return new Domain.Union<>(lets, assigns, indirects);
 			} else {
 				// Determine lifetime for blocks at this level
 				lifetime = lifetime.freshWithin();
 				// Recursively construct subdomain generator
-				Domain<Stmt> subdomain = toDomain(depth - 1, width, lifetime, expressions, names);
+				Domain<Stmt> subdomain = toDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
 				// Using this construct the block generator
 				Domain<Block> blocks = Stmt.Block.toDomain(lifetime, width, subdomain);
 				// Done
@@ -271,7 +329,7 @@ public class Syntax {
 	 */
 	public interface Expr extends Stmt {
 
-		public class Variable extends SyntacticElement.Impl implements Expr {
+		public class Variable extends AbstractStmt implements Expr {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
@@ -298,15 +356,15 @@ public class Syntax {
 			}
 		}
 
-		public class Dereference extends SyntacticElement.Impl implements Expr {
-			private final Expr operand;
+		public class Dereference extends AbstractStmt implements Expr {
+			private final Expr.Variable operand;
 
-			public Dereference(Expr operand, Attribute... attributes) {
+			public Dereference(Expr.Variable operand, Attribute... attributes) {
 				super(attributes);
 				this.operand = operand;
 			}
 
-			public Expr operand() {
+			public Expr.Variable operand() {
 				return operand;
 			}
 
@@ -315,17 +373,17 @@ public class Syntax {
 				return "*" + operand.toString();
 			}
 
-			public static Domain<Dereference> toDomain(Domain<Expr> subdomain) {
-				return new AbstractDomain.Unary<Dereference, Expr>(subdomain) {
+			public static Domain<Dereference> toDomain(Domain<Expr.Variable> subdomain) {
+				return new AbstractDomain.Unary<Dereference, Expr.Variable>(subdomain) {
 					@Override
-					public Dereference get(Expr e) {
+					public Dereference get(Expr.Variable e) {
 						return new Dereference(e);
 					}
 				};
 			}
 		}
 
-		public class Borrow extends SyntacticElement.Impl implements Expr {
+		public class Borrow extends AbstractStmt implements Expr {
 			private final Expr.Variable operand;
 			private final boolean mutable;
 
@@ -362,7 +420,7 @@ public class Syntax {
 			}
 		}
 
-		public class Box extends SyntacticElement.Impl implements Expr {
+		public class Box extends AbstractStmt implements Expr {
 			private final Expr operand;
 
 			public Box(Expr operand, Attribute... attributes) {
@@ -391,22 +449,50 @@ public class Syntax {
 
 		public static Domain<Expr> toDomain(int depth, Domain<Integer> ints, Domain<String> names) {
 			Domain<Value.Integer> integers = Value.Integer.toDomain(ints);
-			Domain<Expr.Variable> variables = Expr.Variable.toDomain(names);
-			Domain<Expr.Borrow> borrows = Expr.Borrow.toDomain(variables, new Domain.Bool());
+			Domain<Expr.Variable> moves = Expr.Variable.toDomain(names);
+			Domain<Expr.Borrow> borrows = Expr.Borrow.toDomain(moves, new Domain.Bool());
+			Domain<Expr.Dereference> derefs = Expr.Dereference.toDomain(moves);
+			Domain<Expr.Copy> copys = Expr.Copy.toDomain(moves);
 			if (depth == 0) {
-				return new Domain.Union<>(integers, variables, borrows);
+				return new Domain.Union<>(integers, moves, copys, borrows, derefs);
 			} else {
 				Domain<Expr> subdomain = toDomain(depth - 1, ints, names);
-				Domain<Expr.Dereference> derefs = Expr.Dereference.toDomain(subdomain);
 				Domain<Expr.Box> boxes = Expr.Box.toDomain(subdomain);
-				return new Domain.Union<>(integers, variables, borrows, derefs, boxes);
+				return new Domain.Union<>(integers, moves, copys, borrows, derefs, boxes);
+			}
+		}
+
+		public class Copy extends AbstractStmt implements Expr {
+			private final Expr.Variable operand;
+
+			public Copy(Expr.Variable operand, Attribute... attributes) {
+				super(attributes);
+				this.operand = operand;
+			}
+
+			public Expr.Variable operand() {
+				return operand;
+			}
+
+			@Override
+			public String toString() {
+				return "!" + operand.toString();
+			}
+
+			public static Domain<Copy> toDomain(Domain<Expr.Variable> subdomain) {
+				return new AbstractDomain.Unary<Copy, Expr.Variable>(subdomain) {
+					@Override
+					public Copy get(Expr.Variable e) {
+						return new Copy(e);
+					}
+				};
 			}
 		}
 	}
 
 	public interface Value extends Expr {
 
-		public class Integer extends SyntacticElement.Impl implements Value {
+		public class Integer extends AbstractStmt implements Value {
 			private final int value;
 
 			public Integer(int value, Attribute... attributes) {
@@ -445,7 +531,7 @@ public class Syntax {
 			}
 		}
 
-		public class Location extends SyntacticElement.Impl implements Value {
+		public class Location extends AbstractStmt implements Value {
 			private final int address;
 
 			public Location(int value, Attribute... attributes) {
@@ -594,6 +680,11 @@ public class Syntax {
 			children[index] = l;
 			//
 			return l;
+		}
+
+		@Override
+		public String toString() {
+			return "l" + System.identityHashCode(this);
 		}
 	}
 }

@@ -124,6 +124,18 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		}
 
 		/**
+		 * Remove a given location from the store, thus rendering it inaccessible.
+		 *
+		 * @param location
+		 *            Location to update
+		 * @return
+		 */
+		public State remove(Location location) {
+			Store nstore = store.remove(location);
+			return new State(stack, nstore);
+		}
+
+		/**
 		 * Bind a name to a given location, thus creating an updated state.
 		 *
 		 * @param name
@@ -143,13 +155,8 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @param lifetime
 		 * @return
 		 */
-		public State drop(Value value) {
-			if (value instanceof Location) {
-				Store nstore = store.drop((Location) value);
-				return new State(stack, nstore);
-			} else {
-				return this;
-			}
+		public State drop(Location psi) {
+			return new State(stack, store.drop(psi));
 		}
 
 		/**
@@ -301,6 +308,19 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 			return new Store(ncells);
 		}
 
+		public Store remove(Location location) {
+			Cell cell = cells[location.getAddress()];
+			if (cell == null) {
+				throw new IllegalArgumentException("invalid cell");
+			}
+			// Copy cells ahead of write
+			Cell[] ncells = Arrays.copyOf(cells, cells.length);
+			// Perform actual write
+			ncells[location.getAddress()] = null;
+			// Done
+			return new Store(ncells);
+		}
+
 		/**
 		 * Drop the cell at a given location. This recursively drops all reachable and
 		 * uniquely owned locations.
@@ -315,6 +335,8 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 			Cell ncell = ncells[location.getAddress()];
 			// Recursively drop owned locations
 			finalise(ncells, ncell);
+			// Physically drop the location
+			ncells[location.getAddress()] = new Cell(ncell.lifetime,null);
 			// Check reference invariant
 			checkReferenceInvariant(ncells);
 			// Done
@@ -369,7 +391,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 				if(ncell != null && ncell.value instanceof Value.Location) {
 					Value.Location loc = (Location) ncell.value;
 					if(ncells[loc.getAddress()] == null) {
-						throw new IllegalArgumentException("dangling reference created");
+						throw new IllegalArgumentException("dangling reference created: &" + i);
 					}
 				}
 			}

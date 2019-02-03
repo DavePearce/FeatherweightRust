@@ -110,7 +110,7 @@ public class Lexer {
 		return new Int(r, input.substring(start, pos), start);
 	}
 
-	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';' };
+	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', '!' };
 
 	public boolean isOperatorStart(char c) {
 		for (char o : opStarts) {
@@ -140,8 +140,10 @@ public class Lexer {
 			return new RightCurly(pos++);
 		} else if (c == '=') {
 			return new Equals(pos++);
-		} if (c == '*') {
+		} else if (c == '*') {
 			return new Star(pos++);
+		} else if (c == '!') {
+			return new Shreak(pos++);
 		}
 
 		syntaxError("unknown operator encountered: " + c);
@@ -329,6 +331,12 @@ public class Lexer {
 	public static class Star extends Token {
 		public Star(int pos) {
 			super("*", pos);
+		}
+	}
+
+	public static class Shreak extends Token {
+		public Shreak(int pos) {
+			super("!", pos);
 		}
 	}
 }

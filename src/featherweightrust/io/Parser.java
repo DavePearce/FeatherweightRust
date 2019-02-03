@@ -176,6 +176,8 @@ public class Parser {
 			return parseBorrow(context);
 		} else if (token instanceof Star) {
 			return parseDereference(context);
+		} else if (token instanceof Shreak) {
+			return parseCopy(context);
 		} else if (token instanceof Identifier) {
 			return parseVariable(context);
 		} else if (token instanceof Int) {
@@ -213,7 +215,20 @@ public class Parser {
 		int start = index;
 		match("*");
 		Expr operand = parseExpr(context);
-		return new Expr.Dereference(operand, sourceAttr(start, index - 1));
+		if (!(operand instanceof Expr.Variable)) {
+			syntaxError("expecting variable, found " + operand + ".", operand);
+		}
+		return new Expr.Dereference((Expr.Variable) operand, sourceAttr(start, index - 1));
+	}
+
+	public Expr.Copy parseCopy(Context context) {
+		int start = index;
+		match("!");
+		Expr operand = parseExpr(context);
+		if (!(operand instanceof Expr.Variable)) {
+			syntaxError("expecting variable, found " + operand + ".", operand);
+		}
+		return new Expr.Copy((Expr.Variable) operand, sourceAttr(start, index - 1));
 	}
 
 	public Expr.Box parseBox(Context context) {

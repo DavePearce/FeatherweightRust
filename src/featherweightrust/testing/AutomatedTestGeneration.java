@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiFunction;
 
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
 
@@ -22,102 +23,15 @@ import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
 import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.SyntaxError;
-import modelgen.core.Domain;
-import modelgen.util.AbstractDomain;
+import jmodelgen.core.Domain;
+import jmodelgen.core.Mutable;
+import jmodelgen.core.Transformer;
+import jmodelgen.util.AbstractDomain;
+import jmodelgen.util.IterativeGenerator;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 
 public class AutomatedTestGeneration {
-
-	/**
-	 * Given one or more statements, extend each one by generating all valid "one
-	 * place" extensions.
-	 *
-	 * @param stmts
-	 * @param gen
-	 * @return
-	 */
-//	public static <T extends Stmt> List<T> extendAll(List<T> stmts, int declared) {
-//		ArrayList<T> results = new ArrayList<>();
-//		for (int i = 0; i != stmts.size(); ++i) {
-//			results.addAll(extend(stmts.get(i), declared, 0));
-//		}
-//		return results;
-//	}
-
-	/**
-	 * Given a statement, attempt to generate all valid "one place" extensions.
-	 *
-	 * @param stmt
-	 * @param gen
-	 * @return
-	 */
-//	public static <T extends Stmt> List<T> extend(T stmt, int declared, int depth) {
-//		// FIXME: what does depth do?
-//		if (depth < 2 && stmt instanceof Stmt.Block) {
-//			ArrayList<Stmt.Block> extensions = new ArrayList<>();
-//			// Can only extend a block in some way
-//			Stmt.Block block = (Stmt.Block) stmt;
-//			// Replace any existing statements
-//			int blocks = 0;
-//			for (int i = 0; i != block.size(); ++i) {
-//				Stmt ith = block.get(i);
-//				if (ith instanceof Stmt.Let) {
-//					declared++;
-//				} else if(ith instanceof Stmt.Block) {
-//					blocks++;
-//				}
-//				List<Stmt> es = extend(ith, declared, depth+1);
-//				for (int j = 0; j != es.size(); ++j) {
-//					extensions.add(replace(block, i, es.get(j)));
-//				}
-//			}
-//			// Extends the block itself
-//			Domain<Stmt> gen = STMT_GENERATORS[declared];
-//			long size = gen.size();
-//			for (long i = 0; i != size; ++i) {
-//				extensions.add(add(block, gen.generate(i)));
-//			}
-//			if (blocks < 1) {
-//				for (long i = 0; i != size; ++i) {
-//					extensions.add(add(block, new Stmt.Block(block.lifetime(), new Stmt[] { gen.generate(i) })));
-//				}
-//			}
-//			// Done
-//			return (List<T>) extensions;
-//		} else {
-//			return Collections.EMPTY_LIST;
-//		}
-//	}
-
-	/**
-	 * Replace ith item in a given statement block.
-	 *
-	 * @param block
-	 * @param i
-	 * @param item
-	 * @return
-	 */
-	private static Stmt.Block replace(Stmt.Block block, int i, Stmt item) {
-		Stmt[] stmts = Arrays.copyOf(block.toArray(), block.size());
-		stmts[i] = item;
-		return new Stmt.Block(block.lifetime(), stmts);
-	}
-
-	/**
-	 * Add item to end of a given statement block.
-	 *
-	 * @param block
-	 * @param i
-	 * @param item
-	 * @return
-	 */
-	private static Stmt.Block add(Stmt.Block block, Stmt item) {
-		int size = block.size();
-		Stmt[] stmts = Arrays.copyOf(block.toArray(), size + 1);
-		stmts[size] = item;
-		return new Stmt.Block(block.lifetime(), stmts);
-	}
 
 	/**
 	 * Rebuild the given input in such a way that it contains line information. This
@@ -166,26 +80,136 @@ public class AutomatedTestGeneration {
 //	}
 //
 
-	public static Domain<Stmt.Block> toDomain(int nesting, int width, int depth, Lifetime context, Domain<Integer>ints,
-			Domain<String> names) {
-		Domain<Expr> expressions = Expr.toDomain(depth, ints, names);
-		Domain<Stmt> statements = Stmt.toDomain(nesting, width, context, expressions, names);
-		return Stmt.Block.toDomain(context, width, statements);
+	/**
+	 * The def use statement domain is a specialised domain which records
+	 * information about which variables are declared and uses this to limit the way
+	 * that statements are created. For example, it won't allow a redeclaration of
+	 * the same variable. Likewise, it won't allow a variable to be used which has
+	 * not already been declared.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public static class DefUseDomain extends AbstractDomain<Stmt> implements Domain<Stmt> {
+		/**
+		 * The root lifetime to use
+		 */
+		private final Lifetime root;
+		/**
+		 * The domain of integers to use
+		 */
+		private final Domain<Integer> ints;
+		/**
+		 * The domain of all names
+		 */
+		private final Domain<String> names;
+		/**
+		 * The number of variables which have been declared
+		 */
+		private int declared;
+		/**
+		 * The constructed subdomain reflecting the above
+		 */
+		private Domain<Stmt> subdomain;
+
+		public DefUseDomain(Lifetime root, Domain<Integer> ints, Domain<String> names, int declared) {
+			this.root = root;
+			this.ints = ints;
+			this.names = names;
+			this.declared = declared;
+			subdomain = construct(names,declared);
+		}
+
+		@Override
+		public long size() {
+			return subdomain.size();
+		}
+
+		@Override
+		public Stmt get(long index) {
+			return subdomain.get(index);
+		}
+
+		/**
+		 * Construct an updated domain where one more variable has been declared.
+		 *
+		 * @return
+		 */
+		public DefUseDomain declare() {
+			if(declared == names.size()) {
+				throw new IllegalArgumentException("cannot declare any more variables!");
+			}
+			return new DefUseDomain(root, ints, names, declared + 1);
+		}
+
+		/**
+		 * Construct the domain assuming that the first n variables have been declared.
+		 *
+		 * @param names
+		 *            The domain of variable names.
+		 * @param n
+		 *            The first n variables in the domain have already been declared.
+		 *            Hence, these variables are available to be used, but not declared.
+		 * @return
+		 */
+		private Domain<Stmt> construct(Domain<String> names, int n) {
+			// Create the domain of declared variables from domain of all variables.
+			Domain<String> declared = names.slice(0,n);
+			// Create the domain of undeclared variables from a single variable. This
+			// ensures that we will attempt to declare at most one additional variable.
+			Domain<String> undeclared = names.slice(n, Math.min(names.size(), n + 1));
+			// Construct domain of expressions over *declared* variables
+			Domain<Expr> expressions = Expr.toDomain(1, ints, declared);
+			// Construct domain of statements over declared and undeclared variables
+			return Stmt.toDomain(1, 0, root, expressions, declared, undeclared);
+		}
+	}
+
+	/**
+	 * The transformer is responsible for narrowing a given domain based upon
+	 * statements which are already defined. For example, initially there are no
+	 * variables declared and, hence, we cannot construct any statements other than
+	 * a declaration.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public static class DefUseTransformer implements BiFunction<Stmt,DefUseDomain,DefUseDomain> {
+
+		@Override
+		public DefUseDomain apply(Stmt stmt, DefUseDomain domain) {
+			if(stmt instanceof Stmt.Let) {
+				return domain.declare();
+			} else {
+				return domain;
+			}
+		}
+
 	}
 
 	public static void main(String[] args) throws IOException {
-		Lifetime context = new Lifetime();
+		Lifetime root = new Lifetime();
+		// The domain of all integers
 		Domain<Integer> ints = new Domain.Int(0,0);
-		Domain<String> names = new Domain.Finite<>("x", "y", "z");
-		Domain<Block> blocks = toDomain(1, 1, 0, context, ints, names);
-		long size = blocks.size();
+		// The domain of all variable names
+		Domain<String> names = new Domain.Finite<>("x");
+		// The specialised domain for creating statements
+		DefUseDomain statements = new DefUseDomain(root, ints, names, 0);
+		// Construct a suitable mutator
+		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransformer());
 		//
-		System.out.println("SIZE: " + size);
-		for (long i = 0; i != size; ++i) {
-			//runAndCheck(blocks.get(i), context);
+		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(new Stmt.Block(root, new Stmt[0]), 2,
+				extender);
+		//
+		int i = 0;
+		for(Stmt s : generator) {
+			System.out.println((Stmt.Block) s);
+			runAndCheck((Stmt.Block) s, root);
+			++i;
 		}
-
-		printStats(size);
+		//
+		System.out.println("GENERATED: " + i);
+		printStats(i);
 	}
 
 	public static final 	OperationalSemantics semantics = new OperationalSemantics.BigStep();
@@ -199,23 +223,26 @@ public class AutomatedTestGeneration {
 	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime) {
 		boolean ran = false;
 		boolean checked = false;
+		Exception error = null;
 		// See whether or not it borrow checks
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, lifetime, stmt);
 			checked = true;
 		} catch (SyntaxError e) {
+			error = e;
 		}
 		// See whether or not it executes
 		try {
 			semantics.apply(AbstractSemantics.EMPTY_STATE, lifetime, stmt).first();
 			ran = true;
 		} catch (Exception e) {
+			error = e;
 		}
 		// Update statistics
 		if (checked && ran) {
 			valid++;
 		} else if (checked) {
-			System.out.println("*** ERROR: " + stmt.toString());
+			System.out.println("*** ERROR(" + error.getMessage() + "): " + stmt.toString());
 			falseneg++;
 		} else if (ran) {
 			falsepos++;

@@ -25,6 +25,7 @@ import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.SyntaxError;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Mutable;
+import jmodelgen.core.Mutable.Transfer;
 import jmodelgen.core.Transformer;
 import jmodelgen.util.AbstractDomain;
 import jmodelgen.util.IterativeGenerator;
@@ -91,6 +92,7 @@ public class AutomatedTestGeneration {
 	 *
 	 */
 	public static class DefUseDomain extends AbstractDomain<Stmt> implements Domain<Stmt> {
+		private final DefUseDomain parent;
 		/**
 		 * The root lifetime to use
 		 */
@@ -104,19 +106,34 @@ public class AutomatedTestGeneration {
 		 */
 		private final Domain<String> names;
 		/**
+		 * Maximum number of blocks to allow
+		 */
+		private final int maxBlocks;
+		/**
 		 * The number of variables which have been declared
 		 */
 		private int declared;
+		/**
+		 * The block count
+		 */
+		private int blocks;
 		/**
 		 * The constructed subdomain reflecting the above
 		 */
 		private Domain<Stmt> subdomain;
 
-		public DefUseDomain(Lifetime root, Domain<Integer> ints, Domain<String> names, int declared) {
+		public DefUseDomain(Lifetime root, Domain<Integer> ints, Domain<String> names, int maxBlocks) {
+			this(root, ints, names, maxBlocks, null, 0, 0);
+		}
+
+		public DefUseDomain(Lifetime root, Domain<Integer> ints, Domain<String> names, int maxBlocks, DefUseDomain parent, int declared, int depth) {
+			this.parent = parent;
 			this.root = root;
 			this.ints = ints;
 			this.names = names;
+			this.maxBlocks = maxBlocks;
 			this.declared = declared;
+			this.blocks = depth;
 			subdomain = construct(names,declared);
 		}
 
@@ -139,7 +156,16 @@ public class AutomatedTestGeneration {
 			if(declared == names.size()) {
 				throw new IllegalArgumentException("cannot declare any more variables!");
 			}
-			return new DefUseDomain(root, ints, names, declared + 1);
+			return new DefUseDomain(root, ints, names, maxBlocks, parent, declared + 1, blocks);
+		}
+
+		public DefUseDomain enter() {
+			return new DefUseDomain(root, ints, names, maxBlocks, this, declared, blocks + 1);
+		}
+
+		public DefUseDomain leave() {
+			// When leaving we revert to the parent with the update block information
+			return new DefUseDomain(root, ints, names, maxBlocks, parent.parent, parent.declared, blocks);
 		}
 
 		/**
@@ -160,8 +186,10 @@ public class AutomatedTestGeneration {
 			Domain<String> undeclared = names.slice(n, Math.min(names.size(), n + 1));
 			// Construct domain of expressions over *declared* variables
 			Domain<Expr> expressions = Expr.toDomain(1, ints, declared);
+			// Calculate depth argument
+			int d = blocks < maxBlocks ? 1 : 0;
 			// Construct domain of statements over declared and undeclared variables
-			return Stmt.toDomain(1, 0, root, expressions, declared, undeclared);
+			return Stmt.toDomain(d, 0, root, expressions, declared, undeclared);
 		}
 	}
 
@@ -174,12 +202,23 @@ public class AutomatedTestGeneration {
 	 * @author David J. Pearce
 	 *
 	 */
-	public static class DefUseTransformer implements BiFunction<Stmt,DefUseDomain,DefUseDomain> {
+	public static class DefUseTransfer implements Transfer<Stmt,DefUseDomain> {
 
 		@Override
-		public DefUseDomain apply(Stmt stmt, DefUseDomain domain) {
+		public DefUseDomain enter(Stmt stmt, DefUseDomain context) {
+			if(stmt instanceof Stmt.Block) {
+				return context.enter();
+			} else {
+				return context;
+			}
+		}
+
+		@Override
+		public DefUseDomain leave(Stmt stmt, DefUseDomain domain) {
 			if(stmt instanceof Stmt.Let) {
 				return domain.declare();
+			} else if(stmt instanceof Stmt.Block){
+				return domain.leave();
 			} else {
 				return domain;
 			}
@@ -192,23 +231,26 @@ public class AutomatedTestGeneration {
 		// The domain of all integers
 		Domain<Integer> ints = new Domain.Int(0,0);
 		// The domain of all variable names
-		Domain<String> names = new Domain.Finite<>("x");
+		Domain<String> names = new Domain.Finite<>("x","y","z");
 		// The specialised domain for creating statements
-		DefUseDomain statements = new DefUseDomain(root, ints, names, 0);
-		// Construct a suitable mutator
-		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransformer());
-		//
-		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(new Stmt.Block(root, new Stmt[0]), 2,
-				extender);
+		DefUseDomain statements = new DefUseDomain(root, ints, names, 2);
+		// Construct a suitable mutator (restricting to width 3)
+		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransfer(), 3);
+		// Construct empty block as seed (which cannot have the root lifetime)
+		Stmt seed = new Stmt.Block(root.freshWithin(), new Stmt[0]);
+		// Construct Iterative Generator from see
+		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 5, extender);
 		//
 		int i = 0;
 		for(Stmt s : generator) {
-			System.out.println((Stmt.Block) s);
+//			//if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
+//			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
+//				System.out.println((Stmt.Block) s);
+//			}
 			runAndCheck((Stmt.Block) s, root);
 			++i;
 		}
 		//
-		System.out.println("GENERATED: " + i);
 		printStats(i);
 	}
 
@@ -242,6 +284,7 @@ public class AutomatedTestGeneration {
 		if (checked && ran) {
 			valid++;
 		} else if (checked) {
+			error.printStackTrace(System.out);
 			System.out.println("*** ERROR(" + error.getMessage() + "): " + stmt.toString());
 			falseneg++;
 		} else if (ran) {

@@ -17,9 +17,13 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.util.Arrays;
+import java.util.Set;
+
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Stmt.Block;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.util.AbstractSemantics;
@@ -74,9 +78,9 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		// Extract target location being assigned
 		Location ly = (Location) S1.read(lx);
 		// Drop owned locations
- 		State S2 = S1.drop(ly);
+		State S2 = S1.drop(ly);
 		// Perform the indirect assignment
-		State S3 = S2.write(lx, v);
+		State S3 = S2.write(ly, v);
 		// Done
 		return new Pair<>(S3, null);
 	}
@@ -84,15 +88,15 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Expr> reduceDereference(State S1, Lifetime l, Expr.Variable x) {
+	public Pair<State, Expr> reduceDereference(State S, Lifetime l, Expr.Variable x) {
 		// Extract location, or throw exception otherwise
-		Location lx = S1.locate(x.name());
+		Location lx = S.locate(x.name());
 		// Read contents of x (which should be location)
-		Location ly = (Location) S1.read(lx);
+		Location ly = (Location) S.read(lx);
 		// Read contents of cell at given location
-		Value v = S1.read(ly);
+		Value v = S.read(ly);
 		//
-		return new Pair<>(S1, v);
+		return new Pair<>(S, v);
 	}
 
 	/**
@@ -196,8 +200,10 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 			}
 			// drop all bindings created within block
 			State S2 = new State(outerFrame, S1.store());
-			// drop all allocated locations
-			State S3 = S2.drop(b.lifetime());
+			// Identify locations allocated in this lifetime
+			Set<Location> phi = S2.findAll(b.lifetime());
+			// drop all matching locations
+			State S3 = S2.drop(phi);
 			//
 			return new Pair<>(S3, returnValue);
 		}
@@ -274,6 +280,11 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	 *
 	 */
 	public static class SmallStep extends OperationalSemantics {
+
+		@Override
+		public Pair<State, Stmt> apply(State state, Lifetime lifetime, Block stmt) {
+			throw new IllegalArgumentException("Implement me!");
+		}
 
 		@Override
 		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Assignment s) {

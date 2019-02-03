@@ -17,10 +17,13 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.util;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
@@ -165,9 +168,22 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @param lifetime
 		 * @return
 		 */
-		public State drop(Lifetime lifetime) {
-			Store nstore = store.drop(lifetime);
+		public State drop(Set<Location> locations) {
+			Store nstore = store;
+			for (Location location : locations) {
+				nstore = nstore.drop(location);
+			}
 			return new State(stack, nstore);
+		}
+
+		/**
+		 * Find all locations allocated in a given lifetime
+		 *
+		 * @param lifetime
+		 * @return
+		 */
+		public Set<Location> findAll(Lifetime lifetime) {
+			return store.findAll(lifetime);
 		}
 
 		public void push(Map<String, Location> frame) {
@@ -322,6 +338,21 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		}
 
 		/**
+		 * Drop all cells at the given locations. This recursively drops all reachable
+		 * and uniquely owned locations.
+		 *
+		 * @param location
+		 * @return
+		 */
+		public Store drop(Location... locations) {
+			Store store = this;
+			for (int i = 0; i != locations.length; ++i) {
+				store = store.drop(locations[i]);
+			}
+			return store;
+		}
+
+		/**
 		 * Drop the cell at a given location. This recursively drops all reachable and
 		 * uniquely owned locations.
 		 *
@@ -344,29 +375,22 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		}
 
 		/**
-		 * Drop all cells with a given lifetime. This recursively drops all reachable
-		 * and uniquely owned cells.
+		 * Identify all cells with a given lifetime.
 		 *
 		 * @param lifetime
 		 * @return
 		 */
-		public Store drop(Lifetime lifetime) {
-			// Prepare for drop by copying cells
-			Cell[] ncells = Arrays.copyOf(cells, cells.length);
+		public Set<Location> findAll(Lifetime lifetime) {
+			HashSet<Location> matches = new HashSet<>();
 			// Action the drop
-			for (int i = 0; i != ncells.length; ++i) {
-				Cell ncell = ncells[i];
+			for (int i = 0; i != cells.length; ++i) {
+				Cell ncell = cells[i];
 				if (ncell != null && ncell.lifetime() == lifetime) {
-					// drop individual cell
-					ncells[i] = null;
-					// Recursively drop owned locations
-					finalise(ncells,ncell);
+					matches.add(new Location(i));
 				}
 			}
-			// Check reference invariant
-			checkReferenceInvariant(ncells);
-			//
-			return new Store(ncells);
+			// Convert results to array
+			return matches;
 		}
 
 		@Override

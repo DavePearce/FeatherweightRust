@@ -98,8 +98,13 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.IndirectAssignment s) {
 		String x = s.leftOperand().name();
-		// (1) Extract x's type info
-		Cell C0 = R1.get(x);
+		// (1) Type operand
+		Pair<Environment, Type> p = apply(R1, l, s.rightOperand());
+		Environment R2 = p.first();
+		Type T2 = p.second();
+		// (2) Extract x's type info
+		// NOTE: differs from paper because of bug!!
+		Cell C0 = R2.get(x);
 		check(C0 != null, UNDECLARED_VARIABLE, s.leftOperand());
 		Type T0 = C0.type();
 		//
@@ -107,17 +112,12 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// T-BorrowAssign
 			Type.Borrow b = (Type.Borrow) T0;
 			String y = b.name();
-			//
 			// (2) Extract y's type
-			Cell C1 = R1.get(y);
+			// NOTE: differs from paper because of bug!!
+			Cell C1 = R2.get(y);
 			check(C1 != null, UNDECLARED_VARIABLE, b);
 			Type T1 = C1.type();
 			Lifetime m = C1.lifetime();
-			//
-			// (3) Type operand
-			Pair<Environment, Type> p = apply(R1, l, s.rightOperand());
-			Environment R2 = p.first();
-			Type T2 = p.second();
 			// (4) Check lifetimes
 			check(within(R2,T2,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
 			// (5) Check compatibility
@@ -130,10 +130,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			Lifetime m = C0.lifetime();
 			// T-BoxAssign
 			Type T1 = ((Type.Box) T0).element();
-			// (2) Type operand
-			Pair<Environment, Type> p = apply(R1, l, s.rightOperand());
-			Environment R2 = p.first();
-			Type T2 = p.second();
 			// (3) Check lifetimes
 			check(within(R2,T2,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
 			// (4) Check compatibility
@@ -182,25 +178,28 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime l, Expr.Dereference e) {
+		Expr.Variable x = e.operand();
+		//
+		check(R.get(x.name()) != null, UNDECLARED_VARIABLE, e);
 		// Locate operand type
-		Cell C1 = R.get(e.operand().name());
+		Cell C1 = R.get(x.name());
 		// Check operand has reference type
 		if (C1.type() instanceof Type.Box) {
 			// T-BoxDeref
 			Type T = ((Type.Box) C1.type()).element;
 			//
-			check(copyable(T), VARIABLE_NOT_COPY, e.operand());
+			check(copyable(T), VARIABLE_NOT_COPY, x);
 			//
 			return new Pair<>(R, T);
 		} else if (C1.type() instanceof Type.Borrow) {
 			// T-BorrowDeref
 			Type T = R.get(((Type.Borrow) C1.type()).name()).type();
 			//
-			check(copyable(T), VARIABLE_NOT_COPY, e.operand());
+			check(copyable(T), VARIABLE_NOT_COPY, x);
 			//
 			return new Pair<>(R, T);
 		} else {
-			syntaxError(EXPECTED_REFERENCE, e.operand());
+			syntaxError(EXPECTED_REFERENCE, x);
 			return null; // deadcode
 		}
 	}
@@ -292,7 +291,17 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	public boolean copyable(Type t) {
-		return (t instanceof Type.Int) || (t instanceof Type.Borrow);
+		// NOTE: checking whether the borrow is mutable is necessary to follow Rust
+		// semantics. However, in the calculus as presented we can actually allow
+		// mutable references to be copied within creating dangling references. Why is
+		// that?
+		if(t instanceof Type.Borrow) {
+			Type.Borrow b = (Type.Borrow) t;
+			// Don't allow copying mutable borrows
+			return !b.isMutable();
+		} else {
+			return (t instanceof Type.Int);
+		}
 	}
 
 	/**
@@ -309,6 +318,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			return true;
 		} else if(T instanceof Type.Borrow) {
 			Type.Borrow t = (Type.Borrow) T;
+			check(R.get(t.name()) != null, UNDECLARED_VARIABLE, t);
 			Cell C = R.get(t.name());
 			return C.lifetime().contains(l);
 		} else {

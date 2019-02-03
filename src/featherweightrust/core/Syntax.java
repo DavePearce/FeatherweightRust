@@ -450,9 +450,9 @@ public class Syntax {
 		public static Domain<Expr> toDomain(int depth, Domain<Integer> ints, Domain<String> names) {
 			Domain<Value.Integer> integers = Value.Integer.toDomain(ints);
 			Domain<Expr.Variable> moves = Expr.Variable.toDomain(names);
+			Domain<Expr.Copy> copys = Expr.Copy.toDomain(moves);
 			Domain<Expr.Borrow> borrows = Expr.Borrow.toDomain(moves, new Domain.Bool());
 			Domain<Expr.Dereference> derefs = Expr.Dereference.toDomain(moves);
-			Domain<Expr.Copy> copys = Expr.Copy.toDomain(moves);
 			if (depth == 0) {
 				return new Domain.Union<>(integers, moves, copys, borrows, derefs);
 			} else {
@@ -625,15 +625,18 @@ public class Syntax {
 	public static class Lifetime {
 		private final Lifetime parent;
 		private Lifetime[] children;
+		private int size;
 
 		public Lifetime() {
 			this.parent = null;
-			this.children = new Lifetime[0];
+			this.children = new Lifetime[32];
+			this.size = 0;
 		}
 
 		public Lifetime(Lifetime parent) {
 			this.parent = parent;
-			this.children = new Lifetime[0];
+			this.children = new Lifetime[32];
+			this.size = 0;
 		}
 
 		/**
@@ -644,7 +647,9 @@ public class Syntax {
 		 * @return
 		 */
 		public boolean contains(Lifetime l) {
-			if (l == this) {
+			if(l == null) {
+				return false;
+			} else if (l == this) {
 				// Base case
 				return true;
 			} else {
@@ -675,9 +680,11 @@ public class Syntax {
 			// Create the new lifetime
 			Lifetime l = new Lifetime(this);
 			// Configure it as a child
-			int index = children.length;
-			children = Arrays.copyOf(children, index + 1);
-			children[index] = l;
+			if(size == children.length) {
+				// Need to create more space!
+				children = Arrays.copyOf(children, children.length * 2);
+			}
+			children[size++] = l;
 			//
 			return l;
 		}

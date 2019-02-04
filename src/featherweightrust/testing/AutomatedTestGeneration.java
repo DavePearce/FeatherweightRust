@@ -238,15 +238,15 @@ public class AutomatedTestGeneration {
 		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransfer(), 3);
 		// Construct empty block as seed (which cannot have the root lifetime)
 		Stmt seed = new Stmt.Block(root.freshWithin(), new Stmt[0]);
-		// Construct Iterative Generator from see
+		// Construct Iterative Generator from seed
 		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 5, extender);
 		//
 		int i = 0;
 		for(Stmt s : generator) {
-//			//if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
+			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 //			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
-//				System.out.println((Stmt.Block) s);
-//			}
+				System.out.println((Stmt.Block) s);
+			}
 			runAndCheck((Stmt.Block) s, root);
 			++i;
 		}

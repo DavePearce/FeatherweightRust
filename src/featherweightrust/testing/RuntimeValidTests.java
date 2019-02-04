@@ -96,13 +96,13 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_21() throws IOException {
-		String input = "{ let mut x = *(box 123); x }";
+		String input = "{ let mut y = box 123; let mut x = *y; x }";
 		check(input,123);
 	}
 
 	@Test
 	public void test_22() throws IOException {
-		String input = "{ let mut x = **(box (box 123)); x }";
+		String input = "{ let mut y = 123; let mut z = box &y; let mut x = *z; *x }";
 		check(input, 123);
 	}
 
@@ -124,7 +124,7 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_40() throws IOException {
-		String input = "{ let mut x = 123; let mut x = &x; *x }";
+		String input = "{ let mut x = 123; let mut y = &x; *y }";
 		check(input, 123);
 	}
 
@@ -152,20 +152,14 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_60() throws IOException {
-		String input = "{ let mut x = 1; let mut y = &mut x; { let mut y = 123; let mut z = &y; *z } }";
+		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
 		check(input, 123);
 	}
 
 	@Test
 	public void test_61() throws IOException {
-		String input = "{ let mut x = 1; let mut y = &mut x; { let mut x = 123; let mut z = &x; *z } }";
+		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
 		check(input, 123);
-	}
-
-	@Test
-	public void test_100() throws IOException {
-		String input = "{ let mut x = 1; let mut y = &x; { let mut z = 1; y = &z; } }";
-		check(input,null);
 	}
 
 	public static void check(String input, Integer output) throws IOException {

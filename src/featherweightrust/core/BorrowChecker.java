@@ -38,6 +38,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
 	private final static String UNDECLARED_VARIABLE = "variable undeclared";
+	private final static String VARIABLE_ALREADY_DECLARED = "variable already declared";
 	private final static String BORROWED_VARIABLE_ASSIGNMENT = "cannot assign because borrowed";
 	private final static String NOTWITHIN_VARIABLE_ASSIGNMENT = "cannot assign because lifetime not within";
 	private final static String INCOMPATIBLE_TYPE = "incompatible type";
@@ -55,12 +56,16 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.Let s) {
+		// Sanity check variable not already declared
+		String x = s.variable().name();
+		Cell C1 = R1.get(x);
+		check(C1 == null, VARIABLE_ALREADY_DECLARED, s.variable());
 		// Type operand
 		Pair<Environment, Type> p = apply(R1, l, s.initialiser());
 		Environment R2 = p.first();
 		Type T = p.second();
 		// Update environment and discard type (as unused for statements)
-		Environment R3 = R2.put(s.variable().name(), T, l);
+		Environment R3 = R2.put(x, T, l);
 		// Done
 		return new Pair<>(R3, null);
 	}

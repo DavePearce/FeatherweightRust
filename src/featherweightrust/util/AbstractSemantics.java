@@ -126,6 +126,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 			return new State(stack, nstore);
 		}
 
+
 		/**
 		 * Remove a given location from the store, thus rendering it inaccessible.
 		 *
@@ -153,13 +154,17 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		}
 
 		/**
-		 * Drop any cells referred to by a given value.
+		 * Drop an overwritten value, this creating an updated state. In the process,
+		 * any owned locations will be dropped.
 		 *
-		 * @param lifetime
+		 * @param location
+		 *            Location to overwrite
+		 * @param value
+		 *            Value to be written
 		 * @return
 		 */
-		public State drop(Location psi) {
-			return new State(stack, store.drop(psi));
+		public State drop(Value value) {
+			return new State(stack, store.drop(value));
 		}
 
 		/**
@@ -169,11 +174,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public State drop(Set<Location> locations) {
-			Store nstore = store;
-			for (Location location : locations) {
-				nstore = nstore.drop(location);
-			}
-			return new State(stack, nstore);
+			return new State(stack, store.drop(locations));
 		}
 
 		/**
@@ -344,34 +345,46 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @param location
 		 * @return
 		 */
-		public Store drop(Location... locations) {
-			Store store = this;
-			for (int i = 0; i != locations.length; ++i) {
-				store = store.drop(locations[i]);
+		public Store drop(Set<Location> locations) {
+			Cell[] ncells = Arrays.copyOf(cells, cells.length);
+			for(Location location : locations) {
+				internalDrop(ncells,location);
 			}
-			return store;
+			// Check reference invariant);
+			checkReferenceInvariant(ncells);
+			//
+			return new Store(ncells);
 		}
 
 		/**
-		 * Drop the cell at a given location. This recursively drops all reachable and
-		 * uniquely owned locations.
+		 * Drop locations based on a value being overwritten. Thus, if the value is a
+		 * reference to an owned location then that will be recursively dropped.
 		 *
-		 * @param lifetime
+		 * @param l
+		 *            location being overwritten
+		 * @param w
+		 *            value being written to location
 		 * @return
 		 */
-		public Store drop(Location location) {
-			// Prepare for drop by copying cells
-			Cell[] ncells = Arrays.copyOf(cells, cells.length);
-			// Locate cell being dropped
-			Cell ncell = ncells[location.getAddress()];
-			// Recursively drop owned locations
-			finalise(ncells, ncell);
-			// Physically drop the location
-			ncells[location.getAddress()] = new Cell(ncell.lifetime,null);
-			// Check reference invariant
-			checkReferenceInvariant(ncells);
-			// Done
-			return new Store(ncells);
+		public Store drop(Value v) {
+			// Check whether we need to drop anything.
+			if (v instanceof Location) {
+				// Value overwritten pointed to something. Therefore, it that something was a
+				// heap location, we'll need to drop it.
+				Location location = (Location) v;
+				// Check whether reference location is heap (i.e. owned)
+				if (cells[location.getAddress()].hasGlobalLifetime()) {
+					// Prepare for the drop by copying all cells
+					Cell[] ncells = Arrays.copyOf(cells, cells.length);
+					// Perform the physical drop
+					internalDrop(ncells, location);
+					// Check reference invariant
+					checkReferenceInvariant(ncells);
+					// Done
+					return new Store(ncells);
+				}
+			}
+			return this;
 		}
 
 		/**
@@ -400,6 +413,22 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 
 		public Cell[] toArray() {
 			return cells;
+		}
+
+		/**
+		 * Drop a location without worrying about the reference invariant. This is
+		 * important so that we can drop a whole bunch of locations in one go.
+		 *
+		 * @param l
+		 * @return
+		 */
+		private static void internalDrop(Cell[] ncells, Location location) {
+			// Locate cell being dropped
+			Cell ncell = ncells[location.getAddress()];
+			// Recursively drop owned locations
+			finalise(ncells, ncell);
+			// Physically drop the location
+			ncells[location.getAddress()] = null;
 		}
 
 		/**

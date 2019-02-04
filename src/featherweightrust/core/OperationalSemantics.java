@@ -47,8 +47,8 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		Location lx = S1.locate(x.name());
 		// Extract value being overwritten
 		Value v1 = S1.read(lx);
-		// Drop overwritten value
-		State S2 = S1.drop(lx);
+		// Drop overwritten value (and any owned boxes)
+		State S2 = S1.write(lx,null).drop(v1);
 		// Perform the assignment
 		State S3 = S2.write(lx, v2);
 		// Done
@@ -77,8 +77,10 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		Location lx = S1.locate(x.name());
 		// Extract target location being assigned
 		Location ly = (Location) S1.read(lx);
-		// Drop owned locations
-		State S2 = S1.drop(ly);
+		// Extract value being overwritten
+		Value v1 = S1.read(ly);
+		// Drop any owned locations
+		State S2 = S1.write(ly,null).drop(v1);
 		// Perform the indirect assignment
 		State S3 = S2.write(ly, v);
 		// Done

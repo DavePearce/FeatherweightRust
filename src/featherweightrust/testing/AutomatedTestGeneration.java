@@ -57,30 +57,6 @@ public class AutomatedTestGeneration {
 		}
 	}
 
-//	public static void main(String[] args) throws IOException {
-//		Lifetime globalLifetime = new Lifetime();
-//		//
-//		List<Stmt.Block> worklist = new ArrayList<>();
-//		worklist.add(new Stmt.Block(globalLifetime.freshWithin(), new Stmt[0]));
-//		long total = 0;
-//		for (int i = 0; i != 3; ++i) {
-//			// Make all one place extensions
-//			worklist = extendAll(worklist, 0);
-//			//
-//			System.out.println("=======================================");
-//			System.out.println("ITH: " + i + " SIZE: " + worklist.size());
-//			System.out.println("=======================================");
-//			for (int j = 0; j != worklist.size(); ++j) {
-//				Stmt.Block b = worklist.get(j);
-//				System.out.println("GOT: " + worklist.get(j).toString());
-//				runAndCheck(b, globalLifetime);
-//			}
-//			total += worklist.size();
-//		}
-//		printStats(total);
-//	}
-//
-
 	/**
 	 * The def use statement domain is a specialised domain which records
 	 * information about which variables are declared and uses this to limit the way

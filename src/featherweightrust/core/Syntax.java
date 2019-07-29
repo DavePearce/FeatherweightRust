@@ -24,6 +24,7 @@ import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Mutable;
 import jmodelgen.util.AbstractDomain;
+import jmodelgen.util.Domains;
 
 public class Syntax {
 
@@ -306,7 +307,7 @@ public class Syntax {
 			// Indirect assignments can only use declared variables
 			Domain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toDomain(declaredVariables, expressions);
 			if (depth == 0) {
-				return new Domain.Union<>(lets, assigns, indirects);
+				return Domains.Union(lets, assigns, indirects);
 			} else {
 				// Determine lifetime for blocks at this level
 				lifetime = lifetime.freshWithin();
@@ -315,7 +316,7 @@ public class Syntax {
 				// Using this construct the block generator
 				Domain<Block> blocks = Stmt.Block.toDomain(lifetime, width, subdomain);
 				// Done
-				return new Domain.Union<>(lets, assigns, indirects, blocks);
+				return Domains.Union(lets, assigns, indirects, blocks);
 			}
 		}
 	}
@@ -451,14 +452,14 @@ public class Syntax {
 			Domain<Value.Integer> integers = Value.Integer.toDomain(ints);
 			Domain<Expr.Variable> moves = Expr.Variable.toDomain(names);
 			Domain<Expr.Copy> copys = Expr.Copy.toDomain(moves);
-			Domain<Expr.Borrow> borrows = Expr.Borrow.toDomain(moves, new Domain.Bool());
+			Domain<Expr.Borrow> borrows = Expr.Borrow.toDomain(moves, Domains.Bool());
 			Domain<Expr.Dereference> derefs = Expr.Dereference.toDomain(moves);
 			if (depth == 0) {
-				return new Domain.Union<>(integers, moves, copys, borrows, derefs);
+				return Domains.Union(integers, moves, copys, borrows, derefs);
 			} else {
 				Domain<Expr> subdomain = toDomain(depth - 1, ints, names);
 				Domain<Expr.Box> boxes = Expr.Box.toDomain(subdomain);
-				return new Domain.Union<>(integers, moves, copys, borrows, derefs, boxes);
+				return Domains.Union(integers, moves, copys, borrows, derefs, boxes);
 			}
 		}
 

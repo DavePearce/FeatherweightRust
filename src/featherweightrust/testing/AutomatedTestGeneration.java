@@ -28,6 +28,7 @@ import jmodelgen.core.Mutable;
 import jmodelgen.core.Mutable.Transfer;
 import jmodelgen.core.Transformer;
 import jmodelgen.util.AbstractDomain;
+import jmodelgen.util.Domains;
 import jmodelgen.util.IterativeGenerator;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
@@ -205,9 +206,9 @@ public class AutomatedTestGeneration {
 	public static void main(String[] args) throws IOException {
 		Lifetime root = new Lifetime();
 		// The domain of all integers
-		Domain<Integer> ints = new Domain.Int(0,0);
+		Domain<Integer> ints = Domains.Int(0,0);
 		// The domain of all variable names
-		Domain<String> names = new Domain.Finite<>("x","y","z");
+		Domain<String> names = Domains.Finite("x","y","z");
 		// The specialised domain for creating statements
 		DefUseDomain statements = new DefUseDomain(root, ints, names, 2);
 		// Construct a suitable mutator (restricting to width 3)
@@ -221,7 +222,7 @@ public class AutomatedTestGeneration {
 		for(Stmt s : generator) {
 			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 //			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
-				System.out.println((Stmt.Block) s);
+				System.out.println(s);
 			}
 			runAndCheck((Stmt.Block) s, root);
 			++i;

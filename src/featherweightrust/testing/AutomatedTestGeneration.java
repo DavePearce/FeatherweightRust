@@ -2,6 +2,7 @@ package featherweightrust.testing;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,11 +24,14 @@ import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
 import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.SyntaxError;
+import jmodelgen.core.BigDomain;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Mutable;
 import jmodelgen.core.Mutable.Transfer;
 import jmodelgen.core.Transformer;
+import jmodelgen.util.AbstractBigDomain;
 import jmodelgen.util.AbstractDomain;
+import jmodelgen.util.BigDomains;
 import jmodelgen.util.Domains;
 import jmodelgen.util.IterativeGenerator;
 import featherweightrust.core.Syntax.Value;
@@ -68,7 +72,7 @@ public class AutomatedTestGeneration {
 	 * @author David J. Pearce
 	 *
 	 */
-	public static class DefUseDomain extends AbstractDomain<Stmt> implements Domain<Stmt> {
+	public static class DefUseDomain extends AbstractBigDomain<Stmt> implements BigDomain<Stmt> {
 		private final DefUseDomain parent;
 		/**
 		 * The root lifetime to use
@@ -77,11 +81,11 @@ public class AutomatedTestGeneration {
 		/**
 		 * The domain of integers to use
 		 */
-		private final Domain<Integer> ints;
+		private final BigDomain<Integer> ints;
 		/**
 		 * The domain of all names
 		 */
-		private final Domain<String> names;
+		private final BigDomain<String> names;
 		/**
 		 * Maximum number of blocks to allow
 		 */
@@ -97,13 +101,13 @@ public class AutomatedTestGeneration {
 		/**
 		 * The constructed subdomain reflecting the above
 		 */
-		private Domain<Stmt> subdomain;
+		private BigDomain<Stmt> subdomain;
 
-		public DefUseDomain(Lifetime root, Domain<Integer> ints, Domain<String> names, int maxBlocks) {
+		public DefUseDomain(Lifetime root, BigDomain<Integer> ints, BigDomain<String> names, int maxBlocks) {
 			this(root, ints, names, maxBlocks, null, 0, 0);
 		}
 
-		public DefUseDomain(Lifetime root, Domain<Integer> ints, Domain<String> names, int maxBlocks, DefUseDomain parent, int declared, int depth) {
+		public DefUseDomain(Lifetime root, BigDomain<Integer> ints, BigDomain<String> names, int maxBlocks, DefUseDomain parent, int declared, int depth) {
 			this.parent = parent;
 			this.root = root;
 			this.ints = ints;
@@ -115,12 +119,12 @@ public class AutomatedTestGeneration {
 		}
 
 		@Override
-		public long size() {
-			return subdomain.size();
+		public BigInteger bigSize() {
+			return subdomain.bigSize();
 		}
 
 		@Override
-		public Stmt get(long index) {
+		public Stmt get(BigInteger index) {
 			return subdomain.get(index);
 		}
 
@@ -130,7 +134,7 @@ public class AutomatedTestGeneration {
 		 * @return
 		 */
 		public DefUseDomain declare() {
-			if(declared == names.size()) {
+			if(names.bigSize().compareTo(BigInteger.valueOf(declared)) == 0) {
 				throw new IllegalArgumentException("cannot declare any more variables!");
 			}
 			return new DefUseDomain(root, ints, names, maxBlocks, parent, declared + 1, blocks);
@@ -155,18 +159,19 @@ public class AutomatedTestGeneration {
 		 *            Hence, these variables are available to be used, but not declared.
 		 * @return
 		 */
-		private Domain<Stmt> construct(Domain<String> names, int n) {
+		private BigDomain<Stmt> construct(BigDomain<String> names, int _n) {
+			BigInteger n = BigInteger.valueOf(_n);
 			// Create the domain of declared variables from domain of all variables.
-			Domain<String> declared = names.slice(0,n);
+			BigDomain<String> declared = names.slice(BigInteger.ZERO,n);
 			// Create the domain of undeclared variables from a single variable. This
 			// ensures that we will attempt to declare at most one additional variable.
-			Domain<String> undeclared = names.slice(n, Math.min(names.size(), n + 1));
+			BigDomain<String> undeclared = names.slice(n, names.bigSize().min(n.add(BigInteger.ONE)));
 			// Construct domain of expressions over *declared* variables
-			Domain<Expr> expressions = Expr.toDomain(1, ints, declared);
+			BigDomain<Expr> expressions = Expr.toBigDomain(1, ints, declared);
 			// Calculate depth argument
 			int d = blocks < maxBlocks ? 1 : 0;
 			// Construct domain of statements over declared and undeclared variables
-			return Stmt.toDomain(d, 0, root, expressions, declared, undeclared);
+			return Stmt.toBigDomain(d, 0, root, expressions, declared, undeclared);
 		}
 	}
 
@@ -206,9 +211,9 @@ public class AutomatedTestGeneration {
 	public static void main(String[] args) throws IOException {
 		Lifetime root = new Lifetime();
 		// The domain of all integers
-		Domain<Integer> ints = Domains.Int(0,0);
+		BigDomain<Integer> ints = BigDomains.Int(0,0);
 		// The domain of all variable names
-		Domain<String> names = Domains.Finite("x","y","z");
+		BigDomain<String> names = BigDomains.Finite("x","y","z");
 		// The specialised domain for creating statements
 		DefUseDomain statements = new DefUseDomain(root, ints, names, 2);
 		// Construct a suitable mutator (restricting to width 3)

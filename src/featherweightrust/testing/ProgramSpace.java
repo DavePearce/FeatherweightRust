@@ -5,7 +5,9 @@ import java.util.Arrays;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
+import jmodelgen.core.BigDomain;
 import jmodelgen.core.Domain;
+import jmodelgen.util.BigDomains;
 import jmodelgen.util.Domains;
 
 
@@ -32,12 +34,12 @@ public class ProgramSpace {
 	/**
 	 * The domain of all integer literals which can be present in a generated program.
 	 */
-	private final Domain<Integer> ints;
+	private final BigDomain<Integer> ints;
 
 	/**
 	 * The domain of all variable names which can used in a generated program.
 	 */
-	private final Domain<String> variables;
+	private final BigDomain<String> variables;
 
 	/**
 	 * The maximum number of blocks which can be present in a generated program.
@@ -61,29 +63,29 @@ public class ProgramSpace {
 	 */
 	public ProgramSpace(int i, int v, int d, int w) {
 		// Generate appropriately sized set of integer values
-		this.ints = Domains.Int(0,i-1);
+		this.ints = BigDomains.Int(0,i-1);
 		// Slice out given number of variable names
-		this.variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, v));
+		this.variables = BigDomains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, v));
 		//
 		this.maxBlockDepth = d;
 		this.maxBlockWidth = w;
 	}
 
-	public Domain<Stmt.Block> domain() {
+	public BigDomain<Stmt.Block> domain() {
 		Lifetime lifetime = root.freshWithin();
 		// The specialised domain for creating statements
 		// Construct domain of expressions over *declared* variables
-		Domain<Expr> expressions = Expr.toDomain(1, ints, variables);
+		BigDomain<Expr> expressions = Expr.toBigDomain(1, ints, variables);
 		// Construct domain of statements
-		Domain<Stmt> stmts = Stmt.toDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables, variables);
+		BigDomain<Stmt> stmts = Stmt.toBigDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables, variables);
 		// Construct outer block
-		return Stmt.Block.toDomain(lifetime, 1, maxBlockWidth, stmts);
+		return Stmt.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
 	}
 
 	@Override
 	public String toString() {
 		// Return the name of this particular space
-		return "P{" + ints.size() + "," + variables.size() + "," + maxBlockDepth + "," + maxBlockWidth + "}";
+		return "P{" + ints.bigSize() + "," + variables.bigSize() + "," + maxBlockDepth + "," + maxBlockWidth + "}";
 	}
 
 	public static void main(String[] args) {
@@ -101,7 +103,7 @@ public class ProgramSpace {
 		};
 		//
 		for(ProgramSpace p : spaces) {
-			Domain<Stmt.Block> domain = p.domain();
+			BigDomain<Stmt.Block> domain = p.domain();
 			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
 //			for(int i=0;i!=domain.size();++i) {
 //				System.out.println(i + " : " + domain.get(i));

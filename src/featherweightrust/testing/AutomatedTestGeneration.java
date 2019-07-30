@@ -220,8 +220,8 @@ public class AutomatedTestGeneration {
 		//
 		int i = 0;
 		for(Stmt s : generator) {
-			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
-//			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
+//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
+			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
 				System.out.println(s);
 			}
 			runAndCheck((Stmt.Block) s, root);

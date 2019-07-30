@@ -1,0 +1,111 @@
+package featherweightrust.testing;
+
+import java.util.Arrays;
+
+import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Stmt;
+import jmodelgen.core.Domain;
+import jmodelgen.util.Domains;
+
+
+/**
+ * Provides machinery for representing and working with the space of all
+ * programs.
+ *
+ * @author David J. Pearce
+ *
+ */
+public class ProgramSpace {
+	/**
+	 * The set of all possible variable names.
+	 */
+	private static final String[] VARIABLE_NAMES = {
+			"x","y","z","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w"
+	};
+
+	/**
+	 * The global lifetime from which all other lifetimes are created.
+	 */
+	private static Lifetime root = new Lifetime();
+
+	/**
+	 * The domain of all integer literals which can be present in a generated program.
+	 */
+	private final Domain<Integer> ints;
+
+	/**
+	 * The domain of all variable names which can used in a generated program.
+	 */
+	private final Domain<String> variables;
+
+	/**
+	 * The maximum number of blocks which can be present in a generated program.
+	 */
+	private final int maxBlockDepth;
+
+	/**
+	 * The maximum width of a block (i.e. number of statements it contains) within a
+	 * generated program.
+	 */
+	private final int maxBlockWidth;
+
+	/**
+	 * The parameter names here coincide with those in the definition of a program
+	 * space.
+	 *
+	 * @param i The number of distinct integer literals.
+	 * @param v The number of distinct variable names.
+	 * @param d The maximum nesting of statement blocks.
+	 * @param w The maximum width of a statement block.
+	 */
+	public ProgramSpace(int i, int v, int d, int w) {
+		// Generate appropriately sized set of integer values
+		this.ints = Domains.Int(0,i-1);
+		// Slice out given number of variable names
+		this.variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, v));
+		//
+		this.maxBlockDepth = d;
+		this.maxBlockWidth = w;
+	}
+
+	public Domain<Stmt.Block> domain() {
+		Lifetime lifetime = root.freshWithin();
+		// The specialised domain for creating statements
+		// Construct domain of expressions over *declared* variables
+		Domain<Expr> expressions = Expr.toDomain(1, ints, variables);
+		// Construct domain of statements
+		Domain<Stmt> stmts = Stmt.toDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables, variables);
+		// Construct outer block
+		return Stmt.Block.toDomain(lifetime, 1, maxBlockWidth, stmts);
+	}
+
+	@Override
+	public String toString() {
+		// Return the name of this particular space
+		return "P{" + ints.size() + "," + variables.size() + "," + maxBlockDepth + "," + maxBlockWidth + "}";
+	}
+
+	public static void main(String[] args) {
+		ProgramSpace[] spaces = {
+				new ProgramSpace(1,1,1,1),
+				new ProgramSpace(1,1,1,2),
+				new ProgramSpace(1,1,2,2),
+				new ProgramSpace(1,2,2,2),
+				new ProgramSpace(2,2,2,2),
+				new ProgramSpace(1,2,2,3),
+				new ProgramSpace(1,2,3,3),
+				new ProgramSpace(1,3,2,3),
+				new ProgramSpace(1,3,3,2),
+				new ProgramSpace(1,3,3,3),
+		};
+		//
+		for(ProgramSpace p : spaces) {
+			Domain<Stmt.Block> domain = p.domain();
+			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
+//			for(int i=0;i!=domain.size();++i) {
+//				System.out.println(i + " : " + domain.get(i));
+//			}
+		}
+	}
+}

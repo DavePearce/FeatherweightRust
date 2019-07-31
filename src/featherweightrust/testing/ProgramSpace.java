@@ -1,5 +1,6 @@
 package featherweightrust.testing;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 
 import featherweightrust.core.Syntax.Expr;
@@ -7,8 +8,10 @@ import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import jmodelgen.core.BigDomain;
 import jmodelgen.core.Domain;
+import jmodelgen.core.Walker;
 import jmodelgen.util.BigDomains;
 import jmodelgen.util.Domains;
+import jmodelgen.util.Walkers;
 
 
 /**
@@ -82,6 +85,20 @@ public class ProgramSpace {
 		return Stmt.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
 	}
 
+	public Walker<Stmt.Block> walker() {
+		Lifetime lifetime = root.freshWithin();
+		// The specialised domain for creating statements
+		// Construct domain of expressions over *declared* variables
+		BigDomain<Expr> expressions = Expr.toBigDomain(1, ints, variables);
+		//
+		Walker<Stmt>[] walkers = new Walker[maxBlockWidth];
+		for(int i=0;i!=walkers.length;++i) {
+			walkers[i] = Stmt.toWalker(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables);
+		}
+		// Construct outer block
+		return Stmt.Block.toWalker(lifetime, 1, walkers);
+	}
+
 	@Override
 	public String toString() {
 		// Return the name of this particular space
@@ -94,20 +111,39 @@ public class ProgramSpace {
 				new ProgramSpace(1,1,1,2),
 				new ProgramSpace(1,1,2,2),
 				new ProgramSpace(1,2,2,2),
-				new ProgramSpace(2,2,2,2),
-				new ProgramSpace(1,2,2,3),
-				new ProgramSpace(1,2,3,3),
-				new ProgramSpace(1,3,2,3),
-				new ProgramSpace(1,3,3,2),
-				new ProgramSpace(1,3,3,3),
+//				new ProgramSpace(2,2,2,2),
+//				new ProgramSpace(1,2,2,3),
+//				new ProgramSpace(1,2,3,3),
+//				new ProgramSpace(1,3,2,3),
+//				new ProgramSpace(1,3,3,2),
+//				new ProgramSpace(1,3,3,3),
 		};
 		//
 		for(ProgramSpace p : spaces) {
 			BigDomain<Stmt.Block> domain = p.domain();
 			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
-//			for(int i=0;i!=domain.size();++i) {
-//				System.out.println(i + " : " + domain.get(i));
+//			for(int i=0;i!=domain.bigSize().intValue();++i) {
+//				System.out.println(i + " : " + domain.get(BigInteger.valueOf(i)));
 //			}
 		}
+		//
+		for(ProgramSpace p : spaces) {
+			Walker<Stmt.Block> programs = p.walker();
+			int count = 0;
+			for(Stmt.Block b : programs) {
+				count = count + 1;
+			//	System.out.println("GOT: " + p);
+			}
+			System.out.println("|" + p + "| = " + count);
+		}
+//
+//		BigDomain<Integer> ints = BigDomains.Int(0,0);
+//		// Slice out given number of variable names
+//		BigDomain<String> variables = BigDomains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, 2));
+//		BigDomain<Expr> exprs = Expr.toBigDomain(1, ints, variables);
+//		//
+//		System.out.println("INTS: " + ints);
+//		System.out.println("VARS: " + variables);
+//		System.out.println("EXPRS: " + exprs);
 	}
 }

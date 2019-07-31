@@ -94,10 +94,6 @@ public class Syntax {
 			public static BigDomain<Let> toBigDomain(BigDomain<String> first, BigDomain<Expr> second) {
 				return BigDomains.Product(first, second, Let::construct);
 			}
-
-			public static Walker<Let> toWalker(Domain<String> first, Walker<Expr> second) {
-				return Walkers.Product(first, second, Let::construct);
-			}
 		}
 
 		/**
@@ -139,10 +135,6 @@ public class Syntax {
 
 			public static BigDomain<Assignment> toBigDomain(BigDomain<String> first, BigDomain<Expr> second) {
 				return BigDomains.Product(first, second, Assignment::construct);
-			}
-
-			public static Walker<Assignment> toWalker(Domain<String> first, Walker<Expr> second) {
-				return Walkers.Product(first, second, Assignment::construct);
 			}
 		}
 
@@ -186,10 +178,6 @@ public class Syntax {
 			public static BigDomain<IndirectAssignment> toBigDomain(BigDomain<String> first, BigDomain<Expr> second) {
 				return BigDomains.Product(first, second, IndirectAssignment::construct);
 			}
-
-			public static Walker<IndirectAssignment> toWalker(Domain<String> first, Walker<Expr> second) {
-				return Walkers.Product(first, second, IndirectAssignment::construct);
-			}
 		}
 
 		/**
@@ -215,6 +203,14 @@ public class Syntax {
 
 			public Lifetime lifetime() {
 				return lifetime;
+			}
+
+			public int size() {
+				return stmts.length;
+			}
+
+			public Stmt get(int i) {
+				return stmts[i];
 			}
 
 			public Stmt[] toArray() {
@@ -284,16 +280,19 @@ public class Syntax {
 		}
 
 		@SuppressWarnings("unchecked")
-		public static Walker<Stmt> toWalker(int depth, int width, Lifetime lifetime, Supplier<Walker<Expr>> expressions,
-				Domain<String> variables) {
+		public static Walker<Stmt> toWalker(int depth, int width, Lifetime lifetime, BigDomain<Expr> expressions,
+				BigDomain<String> variables) {
 			// Let statements can only be constructed from undeclared variables
-			Walker<Let> lets = Stmt.Let.toWalker(variables, expressions.get());
+			BigDomain<Let> lets = Stmt.Let.toBigDomain(variables, expressions);
 			// Assignments can only use declared variables
-			Walker<Assignment> assigns = Stmt.Assignment.toWalker(variables, expressions.get());
+			BigDomain<Assignment> assigns = Stmt.Assignment.toBigDomain(variables, expressions);
 			// Indirect assignments can only use declared variables
-			Walker<IndirectAssignment> indirects = Stmt.IndirectAssignment.toWalker(variables, expressions.get());
+			BigDomain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(variables, expressions);
+			// Create walker for unit statements
+			Walker<Stmt> units = Walkers.Adaptor(BigDomains.Union(lets, assigns, indirects));
+			//
 			if (depth == 0) {
-				return Walkers.Union(lets, assigns, indirects);
+				return units;
 			} else {
 				// Determine lifetime for blocks at this level
 				lifetime = lifetime.freshWithin();
@@ -305,7 +304,7 @@ public class Syntax {
 				// Using this construct the block generator
 				Walker<Block> blocks = Stmt.Block.toWalker(lifetime, 1, walkers);
 				// Done
-				return Walkers.Union(lets, assigns, indirects, blocks);
+				return Walkers.Union(units, blocks);
 			}
 		}
 	}
@@ -341,16 +340,7 @@ public class Syntax {
 			}
 
 			public static BigDomain<Variable> toBigDomain(BigDomain<String> subdomain) {
-				return new AbstractBigDomain.Unary<Variable, String>(subdomain) {
-					@Override
-					public Variable get(String name) {
-						return new Variable(name);
-					}
-				};
-			}
-
-			public static Walker<Variable> toWalker(BigDomain<String> subdomain) {
-				return Walkers.Adaptor(subdomain,Variable::construct);
+				return BigDomains.Adaptor(subdomain,Variable::construct);
 			}
 		}
 
@@ -375,17 +365,8 @@ public class Syntax {
 				return new Expr.Dereference(new Expr.Variable(name));
 			}
 
-			public static BigDomain<Dereference> toBigDomain(BigDomain<Expr.Variable> subdomain) {
-				return new AbstractBigDomain.Unary<Dereference, Expr.Variable>(subdomain) {
-					@Override
-					public Dereference get(Expr.Variable e) {
-						return new Dereference(e);
-					}
-				};
-			}
-
-			public static Walker<Dereference> toWalker(BigDomain<String> subdomain) {
-				return Walkers.Adaptor(subdomain,Dereference::construct);
+			public static BigDomain<Dereference> toBigDomain(BigDomain<String> subdomain) {
+				return BigDomains.Adaptor(subdomain, Dereference::construct);
 			}
 		}
 
@@ -420,17 +401,8 @@ public class Syntax {
 				return new Expr.Borrow(new Expr.Variable(name), mutable);
 			}
 
-			public static BigDomain<Borrow> toBigDomain(BigDomain<Variable> first, BigDomain<Boolean> second) {
-				return new AbstractBigDomain.Binary<Borrow, Variable, Boolean>(first, second) {
-					@Override
-					public Borrow get(Variable operand, Boolean mutable) {
-						return new Borrow(operand, mutable);
-					}
-				};
-			}
-
-			public static Walker<Borrow> toWalker(BigDomain<String> subdomain) {
-				return Walkers.Product(subdomain, BigDomains.Bool(), Borrow::construct);
+			public static BigDomain<Borrow> toBigDomain(BigDomain<String> subdomain) {
+				return BigDomains.Product(subdomain, BigDomains.Bool(), Borrow::construct);
 			}
 		}
 
@@ -456,16 +428,7 @@ public class Syntax {
 			}
 
 			public static BigDomain<Box> toBigDomain(BigDomain<Expr> subdomain) {
-				return new AbstractBigDomain.Unary<Box, Expr>(subdomain) {
-					@Override
-					public Box get(Expr e) {
-						return new Box(e);
-					}
-				};
-			}
-
-			public static Walker<Box> toWalker(Walker<Expr> subdomain) {
-				return Walkers.Adaptor(subdomain,Box::construct);
+				return BigDomains.Adaptor(subdomain, Box::construct);
 			}
 		}
 
@@ -473,8 +436,8 @@ public class Syntax {
 			BigDomain<Value.Integer> integers = Value.Integer.toBigDomain(ints);
 			BigDomain<Expr.Variable> moves = Expr.Variable.toBigDomain(names);
 			BigDomain<Expr.Copy> copys = Expr.Copy.toBigDomain(moves);
-			BigDomain<Expr.Borrow> borrows = Expr.Borrow.toBigDomain(moves, BigDomains.Bool());
-			BigDomain<Expr.Dereference> derefs = Expr.Dereference.toBigDomain(moves);
+			BigDomain<Expr.Borrow> borrows = Expr.Borrow.toBigDomain(names);
+			BigDomain<Expr.Dereference> derefs = Expr.Dereference.toBigDomain(names);
 			if (depth == 0) {
 				return BigDomains.Union(integers, moves, copys, borrows, derefs);
 			} else {
@@ -541,15 +504,12 @@ public class Syntax {
 				return java.lang.Integer.toString(value);
 			}
 
+			public static Integer construct(java.lang.Integer i) {
+				return new Integer(i);
+			}
+
 			public static BigDomain<Integer> toBigDomain(BigDomain<java.lang.Integer> subdomain) {
-				return new AbstractBigDomain.Unary<Integer, java.lang.Integer>(subdomain) {
-
-					@Override
-					public Integer get(java.lang.Integer i) {
-						return new Integer(i);
-					}
-
-				};
+				return BigDomains.Adaptor(subdomain, Integer::construct);
 			}
 		}
 
@@ -715,5 +675,9 @@ public class Syntax {
 		public String toString() {
 			return "l" + System.identityHashCode(this);
 		}
+	}
+
+	public static void main(String[] args) {
+
 	}
 }

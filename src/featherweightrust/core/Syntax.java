@@ -19,6 +19,8 @@ package featherweightrust.core;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import featherweightrust.core.Syntax.Expr.Variable;
@@ -234,8 +236,8 @@ public class Syntax {
 				return BigDomains.Product(min, max, stmts, (items) -> construct(lifetime, items));
 			}
 
-			public static Walker<Block> toWalker(Lifetime lifetime, int min, Walker<Stmt>... stmts) {
-				return Walkers.Product(min, (items) -> construct(lifetime, items), stmts);
+			public static Walker<Block> toWalker(Lifetime lifetime, int min, int max, Walker.State<Stmt> seed) {
+				return Walkers.Product(min, max, seed, (items) -> construct(lifetime, items));
 			}
 		}
 
@@ -276,35 +278,6 @@ public class Syntax {
 				BigDomain<Block> blocks = Stmt.Block.toBigDomain(lifetime, 1, width, subdomain);
 				// Done
 				return BigDomains.Union(lets, assigns, indirects, blocks);
-			}
-		}
-
-		@SuppressWarnings("unchecked")
-		public static Walker<Stmt> toWalker(int depth, int width, Lifetime lifetime, BigDomain<Expr> expressions,
-				BigDomain<String> variables) {
-			// Let statements can only be constructed from undeclared variables
-			BigDomain<Let> lets = Stmt.Let.toBigDomain(variables, expressions);
-			// Assignments can only use declared variables
-			BigDomain<Assignment> assigns = Stmt.Assignment.toBigDomain(variables, expressions);
-			// Indirect assignments can only use declared variables
-			BigDomain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(variables, expressions);
-			// Create walker for unit statements
-			Walker<Stmt> units = Walkers.Adaptor(BigDomains.Union(lets, assigns, indirects));
-			//
-			if (depth == 0) {
-				return units;
-			} else {
-				// Determine lifetime for blocks at this level
-				lifetime = lifetime.freshWithin();
-				// Recursively construct subdomain generator
-				Walker<Stmt>[] walkers = new Walker[width];
-				for (int i = 0; i != width; ++i) {
-					walkers[i] = toWalker(depth - 1, width, lifetime, expressions, variables);
-				}
-				// Using this construct the block generator
-				Walker<Block> blocks = Stmt.Block.toWalker(lifetime, 1, walkers);
-				// Done
-				return Walkers.Union(units, blocks);
 			}
 		}
 	}

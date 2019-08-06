@@ -1,5 +1,6 @@
 package featherweightrust.core;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 
 import featherweightrust.core.Syntax.Lifetime;
@@ -70,14 +71,14 @@ public class ProgramSpace {
 		this.maxBlockWidth = w;
 	}
 
-	public Domain.Static<Stmt.Block> domain() {
+	public Domain.Big<Stmt.Block> domain() {
 		Lifetime lifetime = root.freshWithin();
 		// The specialised domain for creating statements
 		Domain.Small<String> variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, maxVariables));
 		// Construct domain of expressions over *declared* variables
-		Domain.Static<Expr> expressions = Expr.toBigDomain(1, ints, variables);
+		Domain.Big<Expr> expressions = Expr.toBigDomain(1, ints, variables);
 		// Construct domain of statements
-		Domain.Static<Stmt> stmts = Stmt.toBigDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables,
+		Domain.Big<Stmt> stmts = Stmt.toBigDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables,
 				variables);
 		// Construct outer block
 		return Stmt.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
@@ -117,8 +118,8 @@ public class ProgramSpace {
 
 		@Override
 		public Walker<Stmt> construct() {
-			Domain.Static<Expr> expressions = Expr.toBigDomain(depth, ints, declared);
-			Domain.Static<Let> lets;
+			Domain.Big<Expr> expressions = Expr.toBigDomain(depth, ints, declared);
+			Domain.Big<Let> lets;
 			int size = declared.bigSize().intValue();
 			if(size < vars) {
 				Domain.Small<String> canDeclare = Domains.Finite(VARIABLE_NAMES[size]);
@@ -128,9 +129,9 @@ public class ProgramSpace {
 				lets = Domains.EMPTY;
 			}
 			// Assignments can only use declared variables
-			Domain.Static<Assignment> assigns = Stmt.Assignment.toBigDomain(declared, expressions);
+			Domain.Big<Assignment> assigns = Stmt.Assignment.toBigDomain(declared, expressions);
 			// Indirect assignments can only use declared variables
-			Domain.Static<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(declared, expressions);
+			Domain.Big<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(declared, expressions);
 			// Create walker for unit statements
 			Walker<Stmt> units = Walkers.Adaptor(Domains.Union(lets, assigns, indirects));
 			//
@@ -169,13 +170,13 @@ public class ProgramSpace {
 				new ProgramSpace(2,2,2,2),
 				new ProgramSpace(1,2,2,3),
 				new ProgramSpace(1,2,3,3),
-//				new ProgramSpace(1,3,2,3),
-//				new ProgramSpace(1,3,3,2),
-//				new ProgramSpace(1,3,3,3),
+				new ProgramSpace(1,3,2,3),
+				new ProgramSpace(1,3,3,2),
+				new ProgramSpace(1,3,3,3),
 		};
 		//
 		for(ProgramSpace p : spaces) {
-			Domain.Static<Stmt.Block> domain = p.domain();
+			Domain.Big<Stmt.Block> domain = p.domain();
 			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
 //			for(int i=0;i!=domain.bigSize().intValue();++i) {
 //				System.out.println(i + " : " + domain.get(BigInteger.valueOf(i)));

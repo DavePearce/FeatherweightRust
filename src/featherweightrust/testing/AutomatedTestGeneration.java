@@ -66,7 +66,7 @@ public class AutomatedTestGeneration {
 	 * @author David J. Pearce
 	 *
 	 */
-	public static class DefUseDomain extends AbstractBigDomain<Stmt> implements Domain.Static<Stmt> {
+	public static class DefUseDomain extends AbstractBigDomain<Stmt> implements Domain.Big<Stmt> {
 		private final DefUseDomain parent;
 		/**
 		 * The root lifetime to use
@@ -95,7 +95,7 @@ public class AutomatedTestGeneration {
 		/**
 		 * The constructed subdomain reflecting the above
 		 */
-		private Domain.Static<Stmt> subdomain;
+		private Domain.Big<Stmt> subdomain;
 
 		public DefUseDomain(Lifetime root, Domain.Small<Integer> ints, Domain.Small<String> names, int maxBlocks) {
 			this(root, ints, names, maxBlocks, null, 0, 0);
@@ -153,7 +153,7 @@ public class AutomatedTestGeneration {
 		 *            Hence, these variables are available to be used, but not declared.
 		 * @return
 		 */
-		private Domain.Static<Stmt> construct(Domain.Static<String> names, int _n) {
+		private Domain.Big<Stmt> construct(Domain.Big<String> names, int _n) {
 			BigInteger n = BigInteger.valueOf(_n);
 			// Create the domain of declared variables from domain of all variables.
 			Domain.Small<String> declared = names.slice(BigInteger.ZERO,n);
@@ -161,7 +161,7 @@ public class AutomatedTestGeneration {
 			// ensures that we will attempt to declare at most one additional variable.
 			Domain.Small<String> undeclared = names.slice(n, names.bigSize().min(n.add(BigInteger.ONE)));
 			// Construct domain of expressions over *declared* variables
-			Domain.Static<Expr> expressions = Expr.toBigDomain(1, ints, declared);
+			Domain.Big<Expr> expressions = Expr.toBigDomain(1, ints, declared);
 			// Calculate depth argument
 			int d = blocks < maxBlocks ? 1 : 0;
 			// Construct domain of statements over declared and undeclared variables
@@ -205,9 +205,9 @@ public class AutomatedTestGeneration {
 	public static void main(String[] args) throws IOException {
 		Lifetime root = new Lifetime();
 		// The domain of all integers
-		Domain.Static<Integer> ints = BigDomains.Int(0,0);
+		Domain.Big<Integer> ints = BigDomains.Int(0,0);
 		// The domain of all variable names
-		Domain.Static<String> names = BigDomains.Finite("x","y","z");
+		Domain.Big<String> names = BigDomains.Finite("x","y","z");
 		// The specialised domain for creating statements
 		DefUseDomain statements = new DefUseDomain(root, ints, names, 2);
 		// Construct a suitable mutator (restricting to width 3)

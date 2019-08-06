@@ -25,15 +25,12 @@ import java.util.function.Supplier;
 
 import featherweightrust.core.Syntax.Expr.Variable;
 import featherweightrust.util.SyntacticElement;
-import jmodelgen.core.BigDomain;
 import jmodelgen.core.Domain;
-import jmodelgen.core.Mutable;
 import jmodelgen.core.Walker;
 import jmodelgen.util.AbstractBigDomain;
 import jmodelgen.util.AbstractDomain;
 import jmodelgen.util.AbstractWalker;
-import jmodelgen.util.BigDomains;
-import jmodelgen.util.Domains;
+import jmodelgen.core.Domains;
 import jmodelgen.util.Walkers;
 
 public class Syntax {
@@ -93,8 +90,8 @@ public class Syntax {
 				return new Let(new Expr.Variable(variable), initialiser);
 			}
 
-			public static BigDomain<Let> toBigDomain(BigDomain<String> first, BigDomain<Expr> second) {
-				return BigDomains.Product(first, second, Let::construct);
+			public static Domain.Static<Let> toBigDomain(Domain.Small<String> first, Domain.Static<Expr> second) {
+				return Domains.Product(first, second, Let::construct);
 			}
 		}
 
@@ -135,8 +132,8 @@ public class Syntax {
 				return new Assignment(new Expr.Variable(variable), initialiser);
 			}
 
-			public static BigDomain<Assignment> toBigDomain(BigDomain<String> first, BigDomain<Expr> second) {
-				return BigDomains.Product(first, second, Assignment::construct);
+			public static Domain.Static<Assignment> toBigDomain(Domain.Small<String> first, Domain.Static<Expr> second) {
+				return Domains.Product(first, second, Assignment::construct);
 			}
 		}
 
@@ -177,8 +174,8 @@ public class Syntax {
 				return new IndirectAssignment(new Expr.Variable(variable), initialiser);
 			}
 
-			public static BigDomain<IndirectAssignment> toBigDomain(BigDomain<String> first, BigDomain<Expr> second) {
-				return BigDomains.Product(first, second, IndirectAssignment::construct);
+			public static Domain.Static<IndirectAssignment> toBigDomain(Domain.Small<String> first, Domain.Static<Expr> second) {
+				return Domains.Product(first, second, IndirectAssignment::construct);
 			}
 		}
 
@@ -232,8 +229,9 @@ public class Syntax {
 				return new Block(lifetime, items.toArray(new Stmt[items.size()]));
 			}
 
-			public static BigDomain<Block> toBigDomain(Lifetime lifetime, int min, int max, BigDomain<Stmt> stmts) {
-				return BigDomains.Product(min, max, stmts, (items) -> construct(lifetime, items));
+			public static Domain.Static<Block> toBigDomain(Lifetime lifetime, int min, int max,
+					Domain.Static<Stmt> stmts) {
+				return Domains.Adaptor(Domains.Array(min, max, stmts), (ss) -> new Block(lifetime, ss));
 			}
 
 			public static Walker<Block> toWalker(Lifetime lifetime, int min, int max, Walker.State<Stmt> seed) {
@@ -259,25 +257,25 @@ public class Syntax {
 		 *        already been declared.
 		 * @return
 		 */
-		public static BigDomain<Stmt> toBigDomain(int depth, int width, Lifetime lifetime, BigDomain<Expr> expressions,
-				BigDomain<String> declared, BigDomain<String> undeclared) {
+		public static Domain.Static<Stmt> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Static<Expr> expressions,
+				Domain.Small<String> declared, Domain.Small<String> undeclared) {
 			// Let statements can only be constructed from undeclared variables
-			BigDomain<Let> lets = Stmt.Let.toBigDomain(undeclared, expressions);
+			Domain.Static<Let> lets = Stmt.Let.toBigDomain(undeclared, expressions);
 			// Assignments can only use declared variables
-			BigDomain<Assignment> assigns = Stmt.Assignment.toBigDomain(declared, expressions);
+			Domain.Static<Assignment> assigns = Stmt.Assignment.toBigDomain(declared, expressions);
 			// Indirect assignments can only use declared variables
-			BigDomain<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(declared, expressions);
+			Domain.Static<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(declared, expressions);
 			if (depth == 0) {
-				return BigDomains.Union(lets, assigns, indirects);
+				return Domains.Union(lets, assigns, indirects);
 			} else {
 				// Determine lifetime for blocks at this level
 				lifetime = lifetime.freshWithin();
 				// Recursively construct subdomain generator
-				BigDomain<Stmt> subdomain = toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
+				Domain.Static<Stmt> subdomain = toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
 				// Using this construct the block generator
-				BigDomain<Block> blocks = Stmt.Block.toBigDomain(lifetime, 1, width, subdomain);
+				Domain.Static<Block> blocks = Stmt.Block.toBigDomain(lifetime, 1, width, subdomain);
 				// Done
-				return BigDomains.Union(lets, assigns, indirects, blocks);
+				return Domains.Union(lets, assigns, indirects, blocks);
 			}
 		}
 	}
@@ -312,8 +310,8 @@ public class Syntax {
 				return new Expr.Variable(name);
 			}
 
-			public static BigDomain<Variable> toBigDomain(BigDomain<String> subdomain) {
-				return BigDomains.Adaptor(subdomain,Variable::construct);
+			public static Domain.Static<Variable> toBigDomain(Domain.Small<String> subdomain) {
+				return Domains.Adaptor(subdomain,Variable::construct);
 			}
 		}
 
@@ -338,8 +336,8 @@ public class Syntax {
 				return new Expr.Dereference(new Expr.Variable(name));
 			}
 
-			public static BigDomain<Dereference> toBigDomain(BigDomain<String> subdomain) {
-				return BigDomains.Adaptor(subdomain, Dereference::construct);
+			public static Domain.Static<Dereference> toBigDomain(Domain.Small<String> subdomain) {
+				return Domains.Adaptor(subdomain, Dereference::construct);
 			}
 		}
 
@@ -374,8 +372,8 @@ public class Syntax {
 				return new Expr.Borrow(new Expr.Variable(name), mutable);
 			}
 
-			public static BigDomain<Borrow> toBigDomain(BigDomain<String> subdomain) {
-				return BigDomains.Product(subdomain, BigDomains.Bool(), Borrow::construct);
+			public static Domain.Static<Borrow> toBigDomain(Domain.Small<String> subdomain) {
+				return Domains.Product(subdomain, Domains.BOOL, Borrow::construct);
 			}
 		}
 
@@ -400,23 +398,23 @@ public class Syntax {
 				return new Expr.Box(operand);
 			}
 
-			public static BigDomain<Box> toBigDomain(BigDomain<Expr> subdomain) {
-				return BigDomains.Adaptor(subdomain, Box::construct);
+			public static Domain.Static<Box> toBigDomain(Domain.Static<Expr> subdomain) {
+				return Domains.Adaptor(subdomain, Box::construct);
 			}
 		}
 
-		public static BigDomain<Expr> toBigDomain(int depth, BigDomain<Integer> ints, BigDomain<String> names) {
-			BigDomain<Value.Integer> integers = Value.Integer.toBigDomain(ints);
-			BigDomain<Expr.Variable> moves = Expr.Variable.toBigDomain(names);
-			BigDomain<Expr.Copy> copys = Expr.Copy.toBigDomain(moves);
-			BigDomain<Expr.Borrow> borrows = Expr.Borrow.toBigDomain(names);
-			BigDomain<Expr.Dereference> derefs = Expr.Dereference.toBigDomain(names);
+		public static Domain.Static<Expr> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> names) {
+			Domain.Static<Value.Integer> integers = Value.Integer.toBigDomain(ints);
+			Domain.Static<Expr.Variable> moves = Expr.Variable.toBigDomain(names);
+			Domain.Static<Expr.Copy> copys = Expr.Copy.toBigDomain(moves);
+			Domain.Static<Expr.Borrow> borrows = Expr.Borrow.toBigDomain(names);
+			Domain.Static<Expr.Dereference> derefs = Expr.Dereference.toBigDomain(names);
 			if (depth == 0) {
-				return BigDomains.Union(integers, moves, copys, borrows, derefs);
+				return Domains.Union(integers, moves, copys, borrows, derefs);
 			} else {
-				BigDomain<Expr> subdomain = toBigDomain(depth - 1, ints, names);
-				BigDomain<Expr.Box> boxes = Expr.Box.toBigDomain(subdomain);
-				return BigDomains.Union(integers, moves, copys, borrows, derefs, boxes);
+				Domain.Static<Expr> subdomain = toBigDomain(depth - 1, ints, names);
+				Domain.Static<Expr.Box> boxes = Expr.Box.toBigDomain(subdomain);
+				return Domains.Union(integers, moves, copys, borrows, derefs, boxes);
 			}
 		}
 
@@ -437,13 +435,8 @@ public class Syntax {
 				return "!" + operand.toString();
 			}
 
-			public static BigDomain<Copy> toBigDomain(BigDomain<Expr.Variable> subdomain) {
-				return new AbstractBigDomain.Unary<Copy, Expr.Variable>(subdomain) {
-					@Override
-					public Copy get(Expr.Variable e) {
-						return new Copy(e);
-					}
-				};
+			public static Domain.Static<Copy> toBigDomain(Domain.Static<Expr.Variable> subdomain) {
+				return Domains.Adaptor(subdomain, (e) -> new Copy(e));
 			}
 		}
 	}
@@ -481,8 +474,8 @@ public class Syntax {
 				return new Integer(i);
 			}
 
-			public static BigDomain<Integer> toBigDomain(BigDomain<java.lang.Integer> subdomain) {
-				return BigDomains.Adaptor(subdomain, Integer::construct);
+			public static Domain.Static<Integer> toBigDomain(Domain.Static<java.lang.Integer> subdomain) {
+				return Domains.Adaptor(subdomain, Integer::construct);
 			}
 		}
 

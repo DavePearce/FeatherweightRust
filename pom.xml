@@ -1,0 +1,90 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- ============================================== -->
+  <!-- Configuration -->
+  <!-- ============================================== -->
+  
+  <groupId>org.whiley</groupId>
+  <artifactId>featherweightrust</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <!-- ============================================== -->
+  <!-- Description -->
+  <!-- ============================================== -->
+  
+  <name>FR</name>  
+  <description>Provides a reference implementation of
+  FeatherweightRust in Java.</description>
+
+  <url>https://github.com/DavePearce/FeatherweightRust</url>
+  
+  <scm>
+    <url>https://github.com/DavePearce/FeatherweightRust</url>    
+  </scm>
+
+  <developers>
+    <developer>
+      <id>redjamjar</id>
+      <name>David J. Pearce</name>
+      <email>david.pearce@ecs.vuw.ac.nz</email>
+      <url>http://www.ecs.vuw.ac.nz/~djp</url>
+    </developer>
+  </developers>
+  
+  <!-- ============================================== -->
+  <!-- Dependencies -->
+  <!-- ============================================== -->
+
+  <dependencies>
+    <dependency>
+      <groupId>org.whiley</groupId>
+      <artifactId>jmodelgen</artifactId>
+      <version>0.3.7</version>
+    </dependency>
+  </dependencies>
+  
+  <!-- ============================================== -->
+  <!-- Deployment -->
+  <!-- ============================================== -->
+
+  <distributionManagement>
+    <snapshotRepository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+    </snapshotRepository>
+    <repository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+    </repository>
+  </distributionManagement>
+
+  <!-- ============================================== -->
+  <!-- Build Config -->
+  <!-- ============================================== -->
+
+  <build>
+    
+    <plugins>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.7.0</version>
+        <configuration>
+          <source>1.8</source>
+          <target>1.8</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+  
+
+</project>

@@ -233,7 +233,7 @@ public class ModelCheckExperiment {
 		// Construct empty block as seed (which cannot have the root lifetime)
 		Stmt seed = new Stmt.Block(root.freshWithin(), new Stmt[0]);
 		// Construct Iterative Generator from seed
-		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 4, extender);
+		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 6, extender);
 		//
 		ArrayList<String> items = new ArrayList<>();
 		for(Stmt s : generator) {
@@ -329,7 +329,7 @@ public class ModelCheckExperiment {
 				{1, 1, 2, 2, 2},
 				{1, 2, 2, 2, 2},
 				{1, 2, 2, 3, 2},
-//				{1, 3, 2, 3, 2},
+				{1, 3, 2, 3, 2},
 			};
 		//
 		for(int[] space : spaces) {

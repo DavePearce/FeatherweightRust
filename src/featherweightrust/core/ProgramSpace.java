@@ -31,7 +31,7 @@ public class ProgramSpace {
 	/**
 	 * The global lifetime from which all other lifetimes are created.
 	 */
-	private static Lifetime root = new Lifetime();
+	public static Lifetime ROOT = new Lifetime();
 
 	/**
 	 * The domain of all integer literals which can be present in a generated program.
@@ -72,7 +72,7 @@ public class ProgramSpace {
 	}
 
 	public Domain.Big<Stmt.Block> domain() {
-		Lifetime lifetime = root.freshWithin();
+		Lifetime lifetime = ROOT.freshWithin();
 		// The specialised domain for creating statements
 		Domain.Small<String> variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, maxVariables));
 		// Construct domain of expressions over *declared* variables
@@ -84,11 +84,19 @@ public class ProgramSpace {
 		return Stmt.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
 	}
 
-	public Walker<Stmt.Block> walker() {
-		Lifetime lifetime = root.freshWithin();
+	/**
+	 * Return a cursor over a constrained version of this program space.
+	 * Specifically, where there are at most a given number of blocks, and every
+	 * variable is declared before being used.
+	 *
+	 * @param maxBlocks
+	 * @return
+	 */
+	public Walker<Stmt.Block> constrainedWalker(int maxBlocks) {
+		Lifetime lifetime = ROOT.freshWithin();
 		// Construct domain of expressions over *declared* variables
-		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlockWidth, maxVariables, lifetime, ints,
-				Domains.EMPTY);
+		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables, lifetime,
+				ints, Domains.EMPTY);
 		// Construct outer block
 		return Stmt.Block.toWalker(lifetime, 1, maxBlockWidth, seed);
 	}
@@ -101,14 +109,16 @@ public class ProgramSpace {
 
 	private static class UseDefState implements Walker.State<Stmt> {
 		private final int depth;
+		private final int blocks;
 		private final int width;
 		private final int vars;
 		private final Lifetime lifetime;
 		private final Domain.Small<Integer> ints;
 		private final Domain.Small<String> declared;
 
-		public UseDefState(int depth, int width, int vars, Lifetime lifetime, Domain.Small<Integer> ints, Domain.Small<String> declared) {
+		public UseDefState(int depth, int blocks, int width, int vars, Lifetime lifetime, Domain.Small<Integer> ints, Domain.Small<String> declared) {
 			this.depth = depth;
+			this.blocks = blocks;
 			this.width = width;
 			this.vars = vars;
 			this.lifetime = lifetime;
@@ -135,16 +145,16 @@ public class ProgramSpace {
 			// Create walker for unit statements
 			Walker<Stmt> units = Walkers.Adaptor(Domains.Union(lets, assigns, indirects));
 			//
-			if (depth == 0) {
+			if (depth == 0 || blocks <= 0) {
 				return units;
 			} else {
 				// Determine lifetime for blocks at this level
 				final Lifetime l = lifetime.freshWithin();
 				// Using this construct the block generator
-				Walker<Block> blocks = Block.toWalker(l, 1, width,
-						new UseDefState(depth - 1, width, vars, l, ints, declared));
+				Walker<Block> blks = Block.toWalker(l, 1, width,
+						new UseDefState(depth - 1, blocks - 1, width, vars, l, ints, declared));
 				// Done
-				return Walkers.Union(units, blocks);
+				return Walkers.Union(units, blks);
 			}
 		}
 
@@ -153,12 +163,28 @@ public class ProgramSpace {
 			if (item instanceof Stmt.Let) {
 				int size = declared.bigSize().intValue() + 1;
 				Domain.Small<String> d = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, size));
-				return new UseDefState(depth, width, vars, lifetime, ints, d);
+				return new UseDefState(depth, blocks, width, vars, lifetime, ints, d);
+			} else if(item instanceof Stmt.Block) {
+				int nblocks = blocks - count(item);
+				System.out.println("BLOCKS: " + blocks + " => " + nblocks);
+				return new UseDefState(depth, nblocks, width, vars, lifetime, ints, declared);
 			} else {
 				return this;
 			}
 		}
 
+		private static int count(Stmt stmt) {
+			if (stmt instanceof Stmt.Block) {
+				int count = 1;
+				Stmt.Block block = (Stmt.Block) stmt;
+				for (int i = 0; i != block.size(); ++i) {
+					count += count(block.get(i));
+				}
+				return count;
+			} else {
+				return 0;
+			}
+		}
 	}
 
 	public static void main(String[] args) {
@@ -169,10 +195,10 @@ public class ProgramSpace {
 				new ProgramSpace(1,2,2,2),
 				new ProgramSpace(2,2,2,2),
 				new ProgramSpace(1,2,2,3),
-				new ProgramSpace(1,2,3,3),
-				new ProgramSpace(1,3,2,3),
-				new ProgramSpace(1,3,3,2),
-				new ProgramSpace(1,3,3,3),
+//				new ProgramSpace(1,2,3,3),
+//				new ProgramSpace(1,3,2,3),
+//				new ProgramSpace(1,3,3,2),
+//				new ProgramSpace(1,3,3,3),
 		};
 		//
 		for(ProgramSpace p : spaces) {
@@ -183,15 +209,15 @@ public class ProgramSpace {
 //			}
 		}
 		//
-//		for(ProgramSpace p : spaces) {
-//			Walker<Stmt.Block> programs = p.walker();
-//			int count = 0;
-//			for(Stmt.Block b : programs) {
-//				count = count + 1;
-////				System.out.println("GOT: " + b);
-//			}
-//			System.out.println("|" + p + "| = " + count);
-//		}
+		for(ProgramSpace p : spaces) {
+			Walker<Stmt.Block> programs = p.constrainedWalker(1);
+			int count = 0;
+			for(Stmt.Block b : programs) {
+				count = count + 1;
+//				System.out.println("GOT: " + b);
+			}
+			System.out.println("|" + p + "| = " + count);
+		}
 //
 //		BigDomain<Integer> ints = BigDomains.Int(0,0);
 //		// Slice out given number of variable names

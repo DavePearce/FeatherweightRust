@@ -215,7 +215,6 @@ public class Syntax {
 			public Stmt[] toArray() {
 				return stmts;
 			}
-
 			@Override
 			public String toString() {
 				String contents = "";

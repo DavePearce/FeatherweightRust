@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
 
-import org.junit.jupiter.api.extension.ExtensionContext.Store;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
@@ -166,7 +165,7 @@ public class AutomatedTestGeneration {
 			// Calculate depth argument
 			int d = blocks < maxBlocks ? 1 : 0;
 			// Construct domain of statements over declared and undeclared variables
-			return Stmt.toDomain(d, 0, root, expressions, declared, undeclared);
+			return Stmt.toDomain(d, 1, root, expressions, declared, undeclared);
 		}
 	}
 
@@ -216,7 +215,7 @@ public class AutomatedTestGeneration {
 		// Construct empty block as seed (which cannot have the root lifetime)
 		Stmt seed = new Stmt.Block(root.freshWithin(), new Stmt[0]);
 		// Construct Iterative Generator from seed
-		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 5, extender);
+		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 4, extender);
 		//
 		int i = 0;
 		for(Stmt s : generator) {

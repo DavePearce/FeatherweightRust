@@ -267,8 +267,8 @@ public class Syntax {
 				return "{ " + contents + "}";
 			}
 
-			public static Domain<Block> toDomain(Lifetime lifetime, int maxWidth, Domain<Stmt> first) {
-				return new AbstractDomain.Nary<Block, Stmt>(maxWidth, first) {
+			public static Domain<Block> toDomain(Lifetime lifetime, int minWidth, int maxWidth, Domain<Stmt> first) {
+				return new AbstractDomain.Nary<Block, Stmt>(minWidth, maxWidth, first) {
 					@Override
 					public Block generate(List<Stmt> items) {
 						return new Block(lifetime, items.toArray(new Stmt[items.size()]));
@@ -314,7 +314,7 @@ public class Syntax {
 				// Recursively construct subdomain generator
 				Domain<Stmt> subdomain = toDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
 				// Using this construct the block generator
-				Domain<Block> blocks = Stmt.Block.toDomain(lifetime, width, subdomain);
+				Domain<Block> blocks = Stmt.Block.toDomain(lifetime, 1, width, subdomain);
 				// Done
 				return Domains.Union(lets, assigns, indirects, blocks);
 			}

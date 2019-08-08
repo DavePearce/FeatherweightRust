@@ -23,7 +23,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
 
-import org.junit.*;
+import org.junit.jupiter.api.Test;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;

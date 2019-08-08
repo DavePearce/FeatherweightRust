@@ -2,6 +2,9 @@ package featherweightrust.testing;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 import featherweightrust.core.OperationalSemantics;
@@ -40,7 +43,7 @@ public class AutomatedTestGeneration {
 	}
 
 	public static void main(String[] args) throws IOException {
-		ProgramSpace space = new ProgramSpace(1,2,2,2);
+		ProgramSpace space = new ProgramSpace(1,2,2,3);
 		//
 		int i = 0;
 		for(Stmt s : space.constrainedWalker(2)) {

@@ -128,7 +128,7 @@ public class ProgramSpace {
 
 		@Override
 		public Walker<Stmt> construct() {
-			Domain.Big<Expr> expressions = Expr.toBigDomain(depth, ints, declared);
+			Domain.Big<Expr> expressions = Expr.toBigDomain(1, ints, declared);
 			Domain.Big<Let> lets;
 			int size = declared.bigSize().intValue();
 			if(size < vars) {
@@ -166,7 +166,6 @@ public class ProgramSpace {
 				return new UseDefState(depth, blocks, width, vars, lifetime, ints, d);
 			} else if(item instanceof Stmt.Block) {
 				int nblocks = blocks - count(item);
-				System.out.println("BLOCKS: " + blocks + " => " + nblocks);
 				return new UseDefState(depth, nblocks, width, vars, lifetime, ints, declared);
 			} else {
 				return this;

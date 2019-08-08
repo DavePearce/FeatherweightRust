@@ -1,10 +1,11 @@
-package featherweightrust.testing;
+package featherweightrust.testing.experiments;
 
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.function.BiFunction;
 
@@ -32,7 +33,7 @@ import jmodelgen.util.IterativeGenerator;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 
-public class AutomatedTestGeneration {
+public class ModelCheckExperiment {
 
 	/**
 	 * Rebuild the given input in such a way that it contains line information. This
@@ -202,43 +203,58 @@ public class AutomatedTestGeneration {
 
 	}
 
-	public static void main(String[] args) throws IOException {
+	private static final String[] VARIABLE_NAMES = { "x", "y", "z", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+			"k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w" };
+
+	/**
+	 * Run an experiment checking every program in a particular program space.
+	 * Programs are limited to those where every varable is defined before being
+	 * used and, also, that isomorphic programs (with respect to variable names) are
+	 * ignored.
+	 *
+	 * @param i The number of integers to consider.
+	 * @param v The number of variables to consier.
+	 * @param d The maximum nesting of blocks to permit.
+	 * @param w The maximum width of blocks to permit.
+	 * @param b The maximum number of blocks to permit.
+	 */
+	public static Stats run(int i, int v, int d, int w, int b) {
+		Stats stats = new Stats(i,v,d,w,b);
+		//
 		Lifetime root = new Lifetime();
 		// The domain of all integers
-		Domain<Integer> ints = Domains.Int(0,0);
+		Domain<Integer> ints = Domains.Int(0,i-1);
 		// The domain of all variable names
-		Domain<String> names = Domains.Finite("x","y","z");
+		Domain<String> names = Domains.Finite(Arrays.copyOf(VARIABLE_NAMES, v));
 		// The specialised domain for creating statements
-		DefUseDomain statements = new DefUseDomain(root, ints, names, 2);
+		DefUseDomain statements = new DefUseDomain(root, ints, names, b);
 		// Construct a suitable mutator (restricting to width 3)
-		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransfer(), 3);
+		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransfer(), w);
 		// Construct empty block as seed (which cannot have the root lifetime)
 		Stmt seed = new Stmt.Block(root.freshWithin(), new Stmt[0]);
 		// Construct Iterative Generator from seed
 		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 4, extender);
 		//
-		int i = 0;
+		ArrayList<String> items = new ArrayList<>();
 		for(Stmt s : generator) {
 			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 //			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
 				System.out.println(s);
 			}
-			runAndCheck((Stmt.Block) s, root);
-			++i;
+			items.add(s.toString());
+			runAndCheck((Stmt.Block) s, root, stats);
+			stats.total++;
 		}
 		//
-		printStats(i);
+		stats.unique = new HashSet<>(items).size();
+		//
+		return stats;
 	}
 
-	public static final 	OperationalSemantics semantics = new OperationalSemantics.BigStep();
+	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
 	public static final BorrowChecker checker = new BorrowChecker("");
-	public static long malformed = 0;
-	public static long valid = 0;
-	public static long invalid = 0;
-	public static long falsepos = 0;
-	public static long falseneg = 0;
 
-	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime) {
+	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime, Stats stats) {
 		boolean ran = false;
 		boolean checked = false;
 		Exception error = null;
@@ -258,25 +274,68 @@ public class AutomatedTestGeneration {
 		}
 		// Update statistics
 		if (checked && ran) {
-			valid++;
+			stats.valid++;
 		} else if (checked) {
 			error.printStackTrace(System.out);
 			System.out.println("*** ERROR(" + error.getMessage() + "): " + stmt.toString());
-			falseneg++;
+			stats.falseneg++;
 		} else if (ran) {
-			falsepos++;
+			stats.falsepos++;
 		} else {
-			invalid++;
+			stats.invalid++;
 		}
 	}
 
-	public static void printStats(long size) {
-		System.out.println("================================");
-		System.out.println("TOTAL: " + size);
-		System.out.println("MALFORMED: " + malformed);
-		System.out.println("VALID: " + valid);
-		System.out.println("INVALID: " + invalid);
-		System.out.println("FALSEPOS: " + falsepos);
-		System.out.println("FALSENEG: " + falseneg);
+
+	public static class Stats {
+		private final int i;
+		private final int v;
+		private final int d;
+		private final int w;
+		private final int b;
+		public long total = 0;
+		public long unique = 0;
+		public long malformed = 0;
+		public long valid = 0;
+		public long invalid = 0;
+		public long falsepos = 0;
+		public long falseneg = 0;
+
+		public Stats(int i, int v, int d, int w, int b) {
+			this.i = i;
+			this.v = v;
+			this.d = d;
+			this.w = w;
+			this.b = b;
+		}
+
+		public void print() {
+			System.out.println("================================");
+			System.out.println("SPACE: " + i + "," + v + "," + d + "," + w + "," + b);
+			System.out.println("TOTAL: " + total);
+			System.out.println("UNIQUE: " + unique);
+			System.out.println("MALFORMED: " + malformed);
+			System.out.println("VALID: " + valid);
+			System.out.println("INVALID: " + invalid);
+			System.out.println("FALSEPOS: " + falsepos);
+			System.out.println("FALSENEG: " + falseneg);
+		}
 	}
+
+	public static void main(String[] args) throws IOException {
+		int[][] spaces = {
+				{1, 1, 1, 1, 2},
+				{1, 1, 1, 2, 2},
+				{1, 1, 2, 2, 2},
+				{1, 2, 2, 2, 2},
+				{1, 2, 2, 3, 2},
+//				{1, 3, 2, 3, 2},
+			};
+		//
+		for(int[] space : spaces) {
+			Stats stats = run(space[0],space[1],space[2],space[3],space[4]);
+			stats.print();
+		}
+	}
+
 }

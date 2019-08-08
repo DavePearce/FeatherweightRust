@@ -55,6 +55,12 @@ public class ProgramSpace {
 	private final int maxBlockWidth;
 
 	/**
+	 * The maximum number of blocks permitted in total. This overrides other
+	 * parameters, such as max block width and depth.
+	 */
+	private final int maxBlocks;
+
+	/**
 	 * The parameter names here coincide with those in the definition of a program
 	 * space.
 	 *
@@ -63,12 +69,13 @@ public class ProgramSpace {
 	 * @param d The maximum nesting of statement blocks.
 	 * @param w The maximum width of a statement block.
 	 */
-	public ProgramSpace(int i, int v, int d, int w) {
+	public ProgramSpace(int i, int v, int d, int w, int b) {
 		// Generate appropriately sized set of integer values
 		this.ints = Domains.Int(0,i-1);
 		this.maxVariables = v;
 		this.maxBlockDepth = d;
 		this.maxBlockWidth = w;
+		this.maxBlocks = b;
 	}
 
 	public Domain.Big<Stmt.Block> domain() {
@@ -92,7 +99,7 @@ public class ProgramSpace {
 	 * @param maxBlocks
 	 * @return
 	 */
-	public Walker<Stmt.Block> constrainedWalker(int maxBlocks) {
+	public Walker<Stmt.Block> constrainedWalker() {
 		Lifetime lifetime = ROOT.freshWithin();
 		// Construct domain of expressions over *declared* variables
 		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables, lifetime,
@@ -104,7 +111,8 @@ public class ProgramSpace {
 	@Override
 	public String toString() {
 		// Return the name of this particular space
-		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "}";
+		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "," + maxBlocks
+				+ "}";
 	}
 
 	private static class UseDefState implements Walker.State<Stmt> {
@@ -188,12 +196,12 @@ public class ProgramSpace {
 
 	public static void main(String[] args) {
 		ProgramSpace[] spaces = {
-				new ProgramSpace(1,1,1,1),
-				new ProgramSpace(1,1,1,2),
-				new ProgramSpace(1,1,2,2),
-				new ProgramSpace(1,2,2,2),
-				new ProgramSpace(2,2,2,2),
-				new ProgramSpace(1,2,2,3),
+				new ProgramSpace(1,1,1,1,2),
+				new ProgramSpace(1,1,1,2,2),
+				new ProgramSpace(1,1,2,2,2),
+				new ProgramSpace(1,2,2,2,2),
+				new ProgramSpace(2,2,2,2,2),
+				new ProgramSpace(1,2,2,3,2),
 //				new ProgramSpace(1,2,3,3),
 //				new ProgramSpace(1,3,2,3),
 //				new ProgramSpace(1,3,3,2),
@@ -209,8 +217,8 @@ public class ProgramSpace {
 		}
 		//
 		for(ProgramSpace p : spaces) {
-			Walker<Stmt.Block> programs = p.constrainedWalker(1);
-			int count = 0;
+			Walker<Stmt.Block> programs = p.constrainedWalker();
+			long count = 0;
 			for(Stmt.Block b : programs) {
 				count = count + 1;
 //				System.out.println("GOT: " + b);

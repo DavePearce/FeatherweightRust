@@ -1,4 +1,4 @@
-package featherweightrust.testing;
+package featherweightrust.testing.experiments;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -17,7 +17,7 @@ import featherweightrust.io.Parser;
 import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.SyntaxError;
 
-public class AutomatedTestGeneration {
+public class ModelCheckingExperiment {
 
 	/**
 	 * Rebuild the given input in such a way that it contains line information. This
@@ -44,18 +44,19 @@ public class AutomatedTestGeneration {
 
 	public static void main(String[] args) throws IOException {
 		ProgramSpace[] spaces = {
-				new ProgramSpace(1, 1, 1, 1),
-				new ProgramSpace(1, 1, 1, 2),
-				new ProgramSpace(1, 1, 2, 2),
-				new ProgramSpace(1, 2, 2, 2),
-				new ProgramSpace(1, 2, 2, 3),
-				new ProgramSpace(1, 3, 2, 3),
+				new ProgramSpace(1, 1, 1, 1, 2),
+				new ProgramSpace(1, 1, 1, 2, 2),
+				new ProgramSpace(1, 1, 2, 2, 2),
+				new ProgramSpace(1, 2, 2, 2, 2),
+				new ProgramSpace(1, 2, 2, 3, 2),
+				new ProgramSpace(1, 3, 2, 3, 2),
+				new ProgramSpace(1, 3, 3, 2, 2),
 			};
 		//
 		for(ProgramSpace space : spaces) {
 			Stats stats = new Stats();
 			int size = 0;
-			for(Stmt s : space.constrainedWalker(2)) {
+			for(Stmt s : space.constrainedWalker()) {
 				//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 				if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
 					System.out.println(s);

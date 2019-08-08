@@ -43,30 +43,35 @@ public class AutomatedTestGeneration {
 	}
 
 	public static void main(String[] args) throws IOException {
-		ProgramSpace space = new ProgramSpace(1,2,2,3);
+		ProgramSpace[] spaces = {
+				new ProgramSpace(1, 1, 1, 1),
+				new ProgramSpace(1, 1, 1, 2),
+				new ProgramSpace(1, 1, 2, 2),
+				new ProgramSpace(1, 2, 2, 2),
+				new ProgramSpace(1, 2, 2, 3),
+				new ProgramSpace(1, 3, 2, 3),
+			};
 		//
-		int i = 0;
-		for(Stmt s : space.constrainedWalker(2)) {
-//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
-			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
-				System.out.println(s);
+		for(ProgramSpace space : spaces) {
+			Stats stats = new Stats();
+			int size = 0;
+			for(Stmt s : space.constrainedWalker(2)) {
+				//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
+				if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
+					System.out.println(s);
+				}
+				runAndCheck((Stmt.Block) s, ProgramSpace.ROOT, stats);
+				++size;
 			}
-			runAndCheck((Stmt.Block) s, ProgramSpace.ROOT);
-			++i;
+			//
+			stats.print(space,size);
 		}
-		//
-		printStats(i);
 	}
 
 	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
 	public static final BorrowChecker checker = new BorrowChecker("");
-	public static long malformed = 0;
-	public static long valid = 0;
-	public static long invalid = 0;
-	public static long falsepos = 0;
-	public static long falseneg = 0;
 
-	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime) {
+	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime, Stats stats) {
 		boolean ran = false;
 		boolean checked = false;
 		Exception error = null;
@@ -86,25 +91,34 @@ public class AutomatedTestGeneration {
 		}
 		// Update statistics
 		if (checked && ran) {
-			valid++;
+			stats.valid++;
 		} else if (checked) {
 			error.printStackTrace(System.out);
 			System.out.println("*** ERROR(" + error.getMessage() + "): " + stmt.toString());
-			falseneg++;
+			stats.falseneg++;
 		} else if (ran) {
-			falsepos++;
+			stats.falsepos++;
 		} else {
-			invalid++;
+			stats.invalid++;
 		}
 	}
 
-	public static void printStats(long size) {
-		System.out.println("================================");
-		System.out.println("TOTAL: " + size);
-		System.out.println("MALFORMED: " + malformed);
-		System.out.println("VALID: " + valid);
-		System.out.println("INVALID: " + invalid);
-		System.out.println("FALSEPOS: " + falsepos);
-		System.out.println("FALSENEG: " + falseneg);
+	public static class Stats {
+		public long malformed = 0;
+		public long valid = 0;
+		public long invalid = 0;
+		public long falsepos = 0;
+		public long falseneg = 0;
+
+		public void print(ProgramSpace space, int size) {
+			System.out.println("================================");
+			System.out.println("SPACE: " + space);
+			System.out.println("TOTAL: " + size);
+			System.out.println("MALFORMED: " + malformed);
+			System.out.println("VALID: " + valid);
+			System.out.println("INVALID: " + invalid);
+			System.out.println("FALSEPOS: " + falsepos);
+			System.out.println("FALSENEG: " + falseneg);
+		}
 	}
 }

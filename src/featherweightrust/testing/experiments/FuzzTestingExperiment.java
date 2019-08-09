@@ -58,11 +58,11 @@ public class FuzzTestingExperiment {
 		};
 		long count = 0;
 		for(ProgramSpace space : spaces) {
-			//Stats stats1 = runSampleAllExperiment(space);
-			Stats stats2 = runSampleDefinedExperiment(space);
+			Stats stats1 = runSampleAllExperiment(space);
+			//Stats stats2 = runSampleDefinedExperiment(space);
 			//
-			//stats1.print(space);
-			stats2.print(space);
+			stats1.print(space);
+			//stats2.print(space);
 			// Make some indication of progress
 			if((count % 100) == 0) {
 				System.out.print(".");
@@ -217,7 +217,7 @@ public class FuzzTestingExperiment {
 	 * @return
 	 */
 	private static String toRustProgram(Stmt.Block b) {
-		return "fn main() " + b.toString().replace("box", "Box::new").replace("!", "");
+		return "fn main() " + b.toRustString();
 	}
 
 	/**

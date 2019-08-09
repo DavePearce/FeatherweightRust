@@ -222,6 +222,7 @@ public class ModelCheckExperiment {
 		Stats stats = new Stats(i,v,d,w,b);
 		//
 		Lifetime root = new Lifetime();
+		Lifetime inner = root.freshWithin();
 		// The domain of all integers
 		Domain<Integer> ints = Domains.Int(0,i-1);
 		// The domain of all variable names
@@ -231,22 +232,22 @@ public class ModelCheckExperiment {
 		// Construct a suitable mutator (restricting to width 3)
 		Mutable.LeftMutator<Stmt, DefUseDomain> extender = new Mutable.LeftMutator<>(statements, new DefUseTransfer(), w);
 		// Construct empty block as seed (which cannot have the root lifetime)
-		Stmt seed = new Stmt.Block(root.freshWithin(), new Stmt[0]);
+		Stmt seed = new Stmt.Block(inner, new Stmt[0]);
 		// Construct Iterative Generator from seed
 		IterativeGenerator<Stmt> generator = new IterativeGenerator<>(seed, 6, extender);
 		//
-		ArrayList<String> items = new ArrayList<>();
+		//ArrayList<String> items = new ArrayList<>();
 		for(Stmt s : generator) {
 			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 //			if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
 				System.out.println(s);
 			}
-			items.add(s.toString());
+			//items.add(s.toString());
 			runAndCheck((Stmt.Block) s, root, stats);
 			stats.total++;
 		}
 		//
-		stats.unique = new HashSet<>(items).size();
+		//stats.unique = new HashSet<>(items).size();
 		//
 		return stats;
 	}
@@ -288,6 +289,7 @@ public class ModelCheckExperiment {
 
 
 	public static class Stats {
+		private final long start = System.currentTimeMillis();
 		private final int i;
 		private final int v;
 		private final int d;
@@ -310,7 +312,9 @@ public class ModelCheckExperiment {
 		}
 
 		public void print() {
+			long time = System.currentTimeMillis() - start;
 			System.out.println("================================");
+			System.out.println("TIME: " + time + "ms");
 			System.out.println("SPACE: " + i + "," + v + "," + d + "," + w + "," + b);
 			System.out.println("TOTAL: " + total);
 			System.out.println("UNIQUE: " + unique);

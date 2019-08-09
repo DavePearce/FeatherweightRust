@@ -625,19 +625,13 @@ public class Syntax {
 	 */
 	public static class Lifetime {
 		private final Lifetime parent;
-		private Lifetime[] children;
-		private int size;
 
 		public Lifetime() {
 			this.parent = null;
-			this.children = new Lifetime[32];
-			this.size = 0;
 		}
 
 		public Lifetime(Lifetime parent) {
 			this.parent = parent;
-			this.children = new Lifetime[32];
-			this.size = 0;
 		}
 
 		/**
@@ -679,15 +673,7 @@ public class Syntax {
 		 */
 		public Lifetime freshWithin() {
 			// Create the new lifetime
-			Lifetime l = new Lifetime(this);
-			// Configure it as a child
-			if(size == children.length) {
-				// Need to create more space!
-				children = Arrays.copyOf(children, children.length * 2);
-			}
-			children[size++] = l;
-			//
-			return l;
+			return new Lifetime(this);
 		}
 
 		@Override

@@ -1,20 +1,14 @@
 package featherweightrust.testing.experiments;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
-import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.util.SyntaxError;
 
@@ -54,10 +48,10 @@ public class FuzzTestingExperiment {
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
-//				new ProgramSpace(1, 1, 1, 1),
-//				new ProgramSpace(1, 1, 1, 2),
-//				new ProgramSpace(1, 1, 2, 2),
-				new ProgramSpace(1, 2, 2, 2),
+				new ProgramSpace(1, 1, 1, 1),
+				new ProgramSpace(1, 1, 1, 2),
+				new ProgramSpace(1, 1, 2, 2),
+//				new ProgramSpace(1, 2, 2, 2),
 //				new ProgramSpace(1, 2, 2, 3),
 //				new ProgramSpace(1, 3, 2, 3),
 //				new ProgramSpace(1, 3, 3, 2),
@@ -104,28 +98,32 @@ public class FuzzTestingExperiment {
 	}
 
 	public static void checkProgram(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		// Check using calculus
-		boolean checked = calculusCheckProgram(b);
-		// Construct rust program
-		String program = toRustProgram(b);
-		// Execute rust compiler
-		String rustc = rustCheckProgram(program);
-		boolean rustc_f = rustc == null;
-		//
-		if(checked != rustc_f) {
-			System.out.println("********* FAILURE");
-			System.out.println("BLOCK: " + b.toString());
-			System.out.println("PROGRAM: " + program);
-			System.out.println("HASH: " + getHash(program));
-			System.out.println("RUSTC: " + rustc_f);
-			if(rustc != null) {
-				System.out.println(rustc);
+		if (isCanonical(b)) {
+			// Check using calculus
+			boolean checked = calculusCheckProgram(b);
+			// Construct rust program
+			String program = toRustProgram(b);
+			// Execute rust compiler
+			String rustc = rustCheckProgram(program);
+			boolean rustc_f = rustc == null;
+			//
+			if (checked != rustc_f) {
+				System.out.println("********* FAILURE");
+				System.out.println("BLOCK: " + b.toString());
+				System.out.println("PROGRAM: " + program);
+				System.out.println("HASH: " + getHash(program));
+				System.out.println("RUSTC: " + rustc_f);
+				if (rustc != null) {
+					System.out.println(rustc);
+				}
+				stats.inconsistent++;
+			} else if (checked) {
+				stats.valid++;
+			} else {
+				stats.invalid++;
 			}
-			stats.inconsistent++;
-		} else if(checked) {
-			stats.valid++;
 		} else {
-			stats.invalid++;
+			stats.ignored++;
 		}
 	}
 
@@ -174,6 +172,44 @@ public class FuzzTestingExperiment {
 	}
 
 	/**
+	 * Determine whether a given program is canonical or not. Canonical programs
+	 * have their variables declared in a specific order. The purpose of this is
+	 * just to eliminate isomorphs with respect to variable renaming.
+	 *
+	 * @param stmt
+	 * @param numDeclared
+	 * @return
+	 */
+	public static boolean isCanonical(Stmt stmt) {
+		try {
+			isCanonical(stmt,0);
+			return true;
+		} catch(IllegalArgumentException e) {
+			return false;
+		}
+	}
+
+	private static int isCanonical(Stmt stmt, int declared) {
+		if(stmt instanceof Stmt.Block) {
+			Stmt.Block s = (Stmt.Block) stmt;
+			int declaredWithin = declared;
+			for(int i=0;i!=s.size();++i) {
+				declaredWithin = isCanonical(s.get(i), declaredWithin);
+			}
+			return declared;
+		} else if(stmt instanceof Stmt.Let) {
+			Stmt.Let s = (Stmt.Let) stmt;
+			String var = s.variable().name();
+			if(!ProgramSpace.VARIABLE_NAMES[declared].equals(var)) {
+				// Program is not canonical
+				throw new IllegalArgumentException();
+			}
+			declared = declared+1;
+		}
+		return declared;
+	}
+
+	/**
 	 * Given a statement block in the calculus, generate a syntactically correct
 	 * Rust program.
 	 *
@@ -210,6 +246,7 @@ public class FuzzTestingExperiment {
 		public long valid = 0;
 		public long invalid = 0;
 		public long inconsistent = 0;
+		public long ignored = 0;
 
 		public void print(ProgramSpace space) {
 			long time = System.currentTimeMillis() - start;
@@ -219,6 +256,7 @@ public class FuzzTestingExperiment {
 			System.out.println("\tTOTAL: " + (valid + invalid));
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
+			System.out.println("\tIGNORED: " + ignored);
 			System.out.println("\tINCONSISTENT: " + inconsistent);
 			System.out.println("}");
 		}

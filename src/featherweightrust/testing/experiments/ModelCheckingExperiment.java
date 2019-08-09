@@ -66,6 +66,7 @@ public class ModelCheckingExperiment {
 			}
 			//
 			stats.print(space,size);
+
 		}
 	}
 
@@ -105,6 +106,8 @@ public class ModelCheckingExperiment {
 	}
 
 	public static class Stats {
+		private final long start = System.currentTimeMillis();
+
 		public long malformed = 0;
 		public long valid = 0;
 		public long invalid = 0;
@@ -112,7 +115,9 @@ public class ModelCheckingExperiment {
 		public long falseneg = 0;
 
 		public void print(ProgramSpace space, int size) {
+			long time = System.currentTimeMillis() - start;
 			System.out.println("================================");
+			System.out.println("TIME: " + time + "ms");
 			System.out.println("SPACE: " + space);
 			System.out.println("TOTAL: " + size);
 			System.out.println("MALFORMED: " + malformed);

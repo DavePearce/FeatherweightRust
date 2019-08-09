@@ -25,13 +25,13 @@ public class ModelCheckingExperiment {
 	public static void main(String[] args) throws IOException {
 		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
-				new ProgramSpace(1, 1, 1, 1, 2),
-				new ProgramSpace(1, 1, 1, 2, 2),
-				new ProgramSpace(1, 1, 2, 2, 2),
-				new ProgramSpace(1, 2, 2, 2, 2),
-				new ProgramSpace(1, 2, 2, 3, 2),
-				new ProgramSpace(1, 3, 2, 3, 2),
-				new ProgramSpace(1, 3, 3, 2, 2),
+				new ProgramSpace(1, 1, 1, 1),
+				new ProgramSpace(1, 1, 1, 2),
+				new ProgramSpace(1, 1, 2, 2),
+				new ProgramSpace(1, 2, 2, 2),
+				new ProgramSpace(1, 2, 2, 3),
+				new ProgramSpace(1, 3, 2, 3),
+				new ProgramSpace(1, 3, 3, 2),
 			};
 		// Iterate even program in each space using the constrained walker which
 		// restricts to those programs where every variable is defined before being
@@ -39,7 +39,7 @@ public class ModelCheckingExperiment {
 		for(ProgramSpace space : spaces) {
 			Stats stats = new Stats();
 			int size = 0;
-			for(Stmt s : space.definedVariableWalker()) {
+			for(Stmt s : space.definedVariableWalker(2)) {
 				//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 				if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
 					System.out.println(s);

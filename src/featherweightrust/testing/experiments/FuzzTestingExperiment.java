@@ -37,6 +37,11 @@ public class FuzzTestingExperiment {
 	private static final long TIMEOUT = 5000;
 
 	/**
+	 * Maximum number of blocks to permit in constraint program spaces.
+	 */
+	private static final int MAX_BLOCKS = 2;
+
+	/**
 	 * The command to use for executing the rust compiler.
 	 */
 	private static final String RUST_CMD = "rustc";
@@ -49,13 +54,13 @@ public class FuzzTestingExperiment {
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
-//				new ProgramSpace(1, 1, 1, 1, 2),
-//				new ProgramSpace(1, 1, 1, 2, 2),
-//				new ProgramSpace(1, 1, 2, 2, 2),
-				new ProgramSpace(1, 2, 2, 2, 2),
-//				new ProgramSpace(1, 2, 2, 3, 2),
-//				new ProgramSpace(1, 3, 2, 3, 2),
-//				new ProgramSpace(1, 3, 3, 2, 2),
+//				new ProgramSpace(1, 1, 1, 1),
+//				new ProgramSpace(1, 1, 1, 2),
+//				new ProgramSpace(1, 1, 2, 2),
+				new ProgramSpace(1, 2, 2, 2),
+//				new ProgramSpace(1, 2, 2, 3),
+//				new ProgramSpace(1, 3, 2, 3),
+//				new ProgramSpace(1, 3, 3, 2),
 		};
 		long count = 0;
 		for(ProgramSpace space : spaces) {
@@ -91,7 +96,7 @@ public class FuzzTestingExperiment {
 	public static Stats runSampleDefinedExperiment(ProgramSpace space) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		Stats stats = new Stats();
 		//
-		for(Stmt.Block b : space.definedVariableWalker()) {
+		for(Stmt.Block b : space.definedVariableWalker(MAX_BLOCKS)) {
 			checkProgram(b, stats);
 		}
 		//

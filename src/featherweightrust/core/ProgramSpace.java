@@ -55,12 +55,6 @@ public class ProgramSpace {
 	private final int maxBlockWidth;
 
 	/**
-	 * The maximum number of blocks permitted in total. This overrides other
-	 * parameters, such as max block width and depth.
-	 */
-	private final int maxBlocks;
-
-	/**
 	 * The parameter names here coincide with those in the definition of a program
 	 * space.
 	 *
@@ -69,13 +63,12 @@ public class ProgramSpace {
 	 * @param d The maximum nesting of statement blocks.
 	 * @param w The maximum width of a statement block.
 	 */
-	public ProgramSpace(int i, int v, int d, int w, int b) {
+	public ProgramSpace(int i, int v, int d, int w) {
 		// Generate appropriately sized set of integer values
 		this.ints = Domains.Int(0,i-1);
 		this.maxVariables = v;
 		this.maxBlockDepth = d;
 		this.maxBlockWidth = w;
-		this.maxBlocks = b;
 	}
 
 	public Domain.Big<Stmt.Block> domain() {
@@ -96,10 +89,10 @@ public class ProgramSpace {
 	 * Specifically, where there are at most a given number of blocks, and every
 	 * variable is declared before being used.
 	 *
-	 * @param maxBlocks
+	 * @param maxBlocks Maximum number of blocks to permit
 	 * @return
 	 */
-	public Walker<Stmt.Block> definedVariableWalker() {
+	public Walker<Stmt.Block> definedVariableWalker(int maxBlocks) {
 		Lifetime lifetime = ROOT.freshWithin();
 		// Construct domain of expressions over *declared* variables
 		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables, lifetime,
@@ -111,8 +104,7 @@ public class ProgramSpace {
 	@Override
 	public String toString() {
 		// Return the name of this particular space
-		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "," + maxBlocks
-				+ "}";
+		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "}";
 	}
 
 	private static class UseDefState implements Walker.State<Stmt> {
@@ -195,44 +187,32 @@ public class ProgramSpace {
 	}
 
 	public static void main(String[] args) {
+		// Print some statistics about various domains
 		ProgramSpace[] spaces = {
-				new ProgramSpace(1,1,1,1,2),
-				new ProgramSpace(1,1,1,2,2),
-				new ProgramSpace(1,1,2,2,2),
-				new ProgramSpace(1,2,2,2,2),
-				new ProgramSpace(2,2,2,2,2),
-				new ProgramSpace(1,2,2,3,2),
-//				new ProgramSpace(1,2,3,3),
-//				new ProgramSpace(1,3,2,3),
-//				new ProgramSpace(1,3,3,2),
-//				new ProgramSpace(1,3,3,3),
+				new ProgramSpace(1,1,1,1),
+				new ProgramSpace(1,1,1,2),
+				new ProgramSpace(1,1,2,2),
+				new ProgramSpace(1,2,2,2),
+				new ProgramSpace(2,2,2,2),
+				new ProgramSpace(1,2,2,3),
+				new ProgramSpace(1,2,3,3),
+				new ProgramSpace(1,3,2,3),
+				new ProgramSpace(1,3,3,2),
+				new ProgramSpace(1,3,3,3),
 		};
 		//
 		for(ProgramSpace p : spaces) {
 			Domain.Big<Stmt.Block> domain = p.domain();
 			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
-//			for(int i=0;i!=domain.bigSize().intValue();++i) {
-//				System.out.println(i + " : " + domain.get(BigInteger.valueOf(i)));
-//			}
 		}
 		//
 		for(ProgramSpace p : spaces) {
-			Walker<Stmt.Block> programs = p.definedVariableWalker();
+			Walker<Stmt.Block> programs = p.definedVariableWalker(2);
 			long count = 0;
 			for(Stmt.Block b : programs) {
 				count = count + 1;
-//				System.out.println("GOT: " + b);
 			}
 			System.out.println("|" + p + "| = " + count);
 		}
-//
-//		BigDomain<Integer> ints = BigDomains.Int(0,0);
-//		// Slice out given number of variable names
-//		BigDomain<String> variables = BigDomains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, 2));
-//		BigDomain<Expr> exprs = Expr.toBigDomain(1, ints, variables);
-//		//
-//		System.out.println("INTS: " + ints);
-//		System.out.println("VARS: " + variables);
-//		System.out.println("EXPRS: " + exprs);
 	}
 }

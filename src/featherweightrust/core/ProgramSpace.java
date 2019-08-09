@@ -99,7 +99,7 @@ public class ProgramSpace {
 	 * @param maxBlocks
 	 * @return
 	 */
-	public Walker<Stmt.Block> constrainedWalker() {
+	public Walker<Stmt.Block> definedVariableWalker() {
 		Lifetime lifetime = ROOT.freshWithin();
 		// Construct domain of expressions over *declared* variables
 		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables, lifetime,
@@ -217,7 +217,7 @@ public class ProgramSpace {
 		}
 		//
 		for(ProgramSpace p : spaces) {
-			Walker<Stmt.Block> programs = p.constrainedWalker();
+			Walker<Stmt.Block> programs = p.definedVariableWalker();
 			long count = 0;
 			for(Stmt.Block b : programs) {
 				count = count + 1;

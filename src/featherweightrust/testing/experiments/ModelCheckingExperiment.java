@@ -1,48 +1,29 @@
 package featherweightrust.testing.experiments;
 
 import java.io.IOException;
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
+
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.io.Lexer;
-import featherweightrust.io.Parser;
 import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.SyntaxError;
 
+/**
+ * The purpose of this experiment is to check soundness of the calculus with
+ * respect to borrow and type checking. Specifically, by exhaustively checking
+ * large spaces of programs to see whether any violate the fundamental
+ * guarantees (e.g. create dangling references).
+ *
+ * @author David J. Pearce
+ *
+ */
 public class ModelCheckingExperiment {
 
-	/**
-	 * Rebuild the given input in such a way that it contains line information. This
-	 * is useful for reporting proper errors at the source level (i.e. for
-	 * debugging).
-	 *
-	 * @param input
-	 * @return
-	 * @throws IOException
-	 */
-	public static Stmt.Block rebuildWithInfo(Stmt.Block block) throws IOException {
-		// Turn input into string
-		String input = block.toString();
-		//
-		try {
-			// Scan input
-			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-			// Parse block
-			return new Parser(input, tokens).parseStatementBlock(Parser.ROOT_CONTEXT, block.lifetime());
-		} catch (SyntaxError e) {
-			return null;
-		}
-	}
-
 	public static void main(String[] args) throws IOException {
+		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
 				new ProgramSpace(1, 1, 1, 1, 2),
 				new ProgramSpace(1, 1, 1, 2, 2),
@@ -52,11 +33,13 @@ public class ModelCheckingExperiment {
 				new ProgramSpace(1, 3, 2, 3, 2),
 				new ProgramSpace(1, 3, 3, 2, 2),
 			};
-		//
+		// Iterate even program in each space using the constrained walker which
+		// restricts to those programs where every variable is defined before being
+		// used.
 		for(ProgramSpace space : spaces) {
 			Stats stats = new Stats();
 			int size = 0;
-			for(Stmt s : space.constrainedWalker()) {
+			for(Stmt s : space.definedVariableWalker()) {
 				//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
 				if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
 					System.out.println(s);

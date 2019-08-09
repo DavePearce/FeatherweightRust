@@ -390,7 +390,7 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return "box " + operand;
+				return "box(" + operand + ")";
 			}
 
 			public static Expr.Box construct(Expr operand) {

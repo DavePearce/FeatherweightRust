@@ -480,7 +480,7 @@ public class Syntax {
 
 			@Override
 			public String toRustString() {
-				return operand.toRustString() + ".clone()";
+				return operand.toRustString();
 			}
 
 			public static Domain.Big<Copy> toBigDomain(Domain.Big<Expr.Variable> subdomain) {

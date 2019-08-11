@@ -36,6 +36,10 @@ public class RustCompiler {
 		// ===================================================
 		ArrayList<String> command = new ArrayList<>();
 		command.add(rust_cmd);
+		command.add("-A");
+		command.add("unused-variables");
+		command.add("-A");
+		command.add("unused-mut");
 		command.add("--out-dir");
 		command.add(outdir);
 		command.add(filename);

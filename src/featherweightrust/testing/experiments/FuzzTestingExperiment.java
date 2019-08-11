@@ -48,8 +48,8 @@ public class FuzzTestingExperiment {
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
-				new ProgramSpace(1, 1, 1, 1),
-				new ProgramSpace(1, 1, 1, 2),
+//				new ProgramSpace(1, 1, 1, 1),
+//				new ProgramSpace(1, 1, 1, 2),
 				new ProgramSpace(1, 1, 2, 2),
 //				new ProgramSpace(1, 2, 2, 2),
 //				new ProgramSpace(1, 2, 2, 3),
@@ -208,6 +208,10 @@ public class FuzzTestingExperiment {
 		}
 		return declared;
 	}
+
+	/**
+	 *
+	 */
 
 	/**
 	 * Given a statement block in the calculus, generate a syntactically correct

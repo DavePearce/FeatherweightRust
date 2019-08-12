@@ -35,23 +35,27 @@ public class ModelCheckingExperiment {
 				new ProgramSpace(1, 3, 2, 3),
 //				new ProgramSpace(1, 3, 3, 2),
 			};
+		int[] maxBlocks = { 2, 3 };
+
 		// Iterate even program in each space using the constrained walker which
 		// restricts to those programs where every variable is defined before being
 		// used.
-		for(ProgramSpace space : spaces) {
-			Stats stats = new Stats();
-			int size = 0;
-			for(Stmt s : space.definedVariableWalker(2)) {
-				//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
-				if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
-					System.out.println(s);
+		for(int max : maxBlocks) {
+			for(ProgramSpace space : spaces) {
+				Stats stats = new Stats();
+				int size = 0;
+				for(Stmt s : space.definedVariableWalker(max)) {
+					//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
+					if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
+						System.out.println(s);
+					}
+					runAndCheck((Stmt.Block) s, ProgramSpace.ROOT, stats);
+					++size;
 				}
-				runAndCheck((Stmt.Block) s, ProgramSpace.ROOT, stats);
-				++size;
-			}
-			//
-			stats.print(space,size);
+				//
+				stats.print(space,size);
 
+			}
 		}
 	}
 

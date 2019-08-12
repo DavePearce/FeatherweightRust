@@ -37,15 +37,15 @@ import featherweightrust.util.SyntacticElement.Attribute;
 public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment, Type, Type> {
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
-	private final static String UNDECLARED_VARIABLE = "variable undeclared";
-	private final static String VARIABLE_ALREADY_DECLARED = "variable already declared";
-	private final static String BORROWED_VARIABLE_ASSIGNMENT = "cannot assign because borrowed";
-	private final static String NOTWITHIN_VARIABLE_ASSIGNMENT = "cannot assign because lifetime not within";
-	private final static String INCOMPATIBLE_TYPE = "incompatible type";
-	private final static String VARIABLE_NOT_COPY = "variable's type cannot be copied";
-	private final static String EXPECTED_REFERENCE = "expected reference type";
-	private final static String VARIABLE_BORROWED = "variable already borrowed";
-	private final static String VARIABLE_MUTABLY_BORROWED = "variable already mutably borrowed";
+	public final static String UNDECLARED_VARIABLE = "variable undeclared";
+	public final static String VARIABLE_ALREADY_DECLARED = "variable already declared";
+	public final static String BORROWED_VARIABLE_ASSIGNMENT = "cannot assign because borrowed";
+	public final static String NOTWITHIN_VARIABLE_ASSIGNMENT = "cannot assign because lifetime not within";
+	public final static String INCOMPATIBLE_TYPE = "incompatible type";
+	public final static String VARIABLE_NOT_COPY = "variable's type cannot be copied";
+	public final static String EXPECTED_REFERENCE = "expected reference type";
+	public final static String VARIABLE_BORROWED = "variable already borrowed";
+	public final static String VARIABLE_MUTABLY_BORROWED = "variable already mutably borrowed";
 
 
 	private final String sourcefile;
@@ -106,9 +106,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// (1) Type operand
 		Pair<Environment, Type> p = apply(R1, l, s.rightOperand());
 		Environment R2 = p.first();
-		Type T2 = p.second();
+		Type T1 = p.second();
 		// (2) Extract x's type info
-		// NOTE: differs from paper because of bug!!
 		Cell C0 = R2.get(x);
 		check(C0 != null, UNDECLARED_VARIABLE, s.leftOperand());
 		Type T0 = C0.type();
@@ -118,29 +117,28 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			Type.Borrow b = (Type.Borrow) T0;
 			String y = b.name();
 			// (2) Extract y's type
-			// NOTE: differs from paper because of bug!!
 			Cell C1 = R2.get(y);
 			check(C1 != null, UNDECLARED_VARIABLE, b);
-			Type T1 = C1.type();
+			Type T2 = C1.type();
 			Lifetime m = C1.lifetime();
 			// (4) Check lifetimes
-			check(within(R2,T2,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
+			check(within(R2,T1,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
 			// (5) Check compatibility
-			check(compatible(T1, T2), INCOMPATIBLE_TYPE, s.rightOperand());
+			check(compatible(T2, T1), INCOMPATIBLE_TYPE, s.rightOperand());
 			// Update environment
-			Environment R3 = R2.put(y, T2, m);
+			Environment R3 = R2.put(y, T1, m);
 			//
 			return new Pair<>(R3, null);
 		} else if(T0 instanceof Type.Box) {
 			Lifetime m = C0.lifetime();
 			// T-BoxAssign
-			Type T1 = ((Type.Box) T0).element();
+			Type T2 = ((Type.Box) T0).element();
 			// (3) Check lifetimes
-			check(within(R2,T2,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
+			check(within(R2,T1,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
 			// (4) Check compatibility
-			check(compatible(T1, T2), INCOMPATIBLE_TYPE, s.rightOperand());
+			check(compatible(T2, T1), INCOMPATIBLE_TYPE, s.rightOperand());
 			// Update environment
-			Environment R3 = R2.put(x, new Type.Box(T2), m);
+			Environment R3 = R2.put(x, new Type.Box(T1), m);
 			//
 			return new Pair<>(R3, null);
 		} else {
@@ -496,7 +494,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	private static class Cell extends Pair<Type, Lifetime> {
+	public static class Cell extends Pair<Type, Lifetime> {
 
 		public Cell(Type f, Lifetime s) {
 			super(f, s);
@@ -511,13 +509,13 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	private void check(boolean result, String msg, SyntacticElement e) {
+	public void check(boolean result, String msg, SyntacticElement e) {
 		if(!result) {
 			syntaxError(msg,e);
 		}
 	}
 
-	private void syntaxError(String msg, SyntacticElement e) {
+	public void syntaxError(String msg, SyntacticElement e) {
 		Attribute.Source loc = e.attribute(Attribute.Source.class);
 		if(loc != null) {
 			throw new SyntaxError(msg, sourcefile, loc.start, loc.end);

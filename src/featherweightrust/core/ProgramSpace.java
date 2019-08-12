@@ -206,7 +206,7 @@ public class ProgramSpace {
 			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
 		}
 		//
-		final int MAX_BLOCKS = 2;
+		int MAX_BLOCKS = 2;
 		//
 		for(ProgramSpace p : spaces) {
 			Walker<Stmt.Block> programs = p.definedVariableWalker(MAX_BLOCKS);

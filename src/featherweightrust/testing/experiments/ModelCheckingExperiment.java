@@ -25,13 +25,15 @@ public class ModelCheckingExperiment {
 	public static void main(String[] args) throws IOException {
 		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
-				new ProgramSpace(1, 1, 1, 1),
-				new ProgramSpace(1, 1, 1, 2),
-				new ProgramSpace(1, 1, 2, 2),
-				new ProgramSpace(1, 2, 2, 2),
-				new ProgramSpace(1, 2, 2, 3),
+//				new ProgramSpace(1, 1, 1, 1),
+//				new ProgramSpace(1, 1, 1, 1),
+//				new ProgramSpace(1, 1, 1, 2),
+//				new ProgramSpace(1, 1, 2, 2),
+//				new ProgramSpace(1, 2, 2, 2),
+//				new ProgramSpace(2, 2, 2, 2),
+//				new ProgramSpace(1, 2, 2, 3),
 				new ProgramSpace(1, 3, 2, 3),
-				new ProgramSpace(1, 3, 3, 2),
+//				new ProgramSpace(1, 3, 3, 2),
 			};
 		// Iterate even program in each space using the constrained walker which
 		// restricts to those programs where every variable is defined before being
@@ -105,7 +107,7 @@ public class ModelCheckingExperiment {
 			System.out.println("TOTAL: " + size);
 			System.out.println("MALFORMED: " + malformed);
 			System.out.println("VALID: " + valid);
-			System.out.println("INVALID: " + invalid);
+			System.out.println("INVALID: " + (invalid+falsepos) + "(" + invalid + ")");
 			System.out.println("FALSEPOS: " + falsepos);
 			System.out.println("FALSENEG: " + falseneg);
 		}

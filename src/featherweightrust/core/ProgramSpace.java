@@ -206,13 +206,15 @@ public class ProgramSpace {
 			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
 		}
 		//
+		final int MAX_BLOCKS = 2;
+		//
 		for(ProgramSpace p : spaces) {
-			Walker<Stmt.Block> programs = p.definedVariableWalker(2);
+			Walker<Stmt.Block> programs = p.definedVariableWalker(MAX_BLOCKS);
 			long count = 0;
 			for(Stmt.Block b : programs) {
 				count = count + 1;
 			}
-			System.out.println("|" + p + "| = " + count);
+			System.out.println("|" + p + "_def(" + MAX_BLOCKS + ")| = " + count);
 		}
 	}
 }

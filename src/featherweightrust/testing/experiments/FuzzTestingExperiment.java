@@ -6,9 +6,13 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
+import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.util.SyntaxError;
 
@@ -77,6 +81,9 @@ public class FuzzTestingExperiment {
 		//
 		for(Stmt.Block b : space.domain()) {
 			checkProgram(b, stats);
+			if((stats.total() % 1000) == 0) {
+				System.out.print("[" + stats + "]");
+			}
 		}
 		//
 		return stats;
@@ -98,13 +105,20 @@ public class FuzzTestingExperiment {
 	}
 
 	public static void checkProgram(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		if (isCanonical(b)) {
+		if (isCanonical(b) && !hasDeadCopy(b)) {
 			// Check using calculus
 			boolean checked = calculusCheckProgram(b);
 			// Construct rust program
 			String program = toRustProgram(b);
-			// Execute rust compiler
-			String rustc = rustCheckProgram(program);
+			// Determine hash of program for naming
+			String hash = getHash(program);
+			// Determine filename based on hash
+			String srcFilename = tempDir + File.separator + hash + ".rs";
+			String binFilename = tempDir + File.separator + hash;
+			// Create temporary file
+			createTemporaryFile(srcFilename, program);
+			// Run the rust compile
+			String rustc =  new RustCompiler(RUST_CMD,TIMEOUT).compile(srcFilename, tempDir);
 			boolean rustc_f = rustc == null;
 			//
 			if (checked != rustc_f) {
@@ -118,11 +132,18 @@ public class FuzzTestingExperiment {
 				}
 				stats.inconsistent++;
 			} else if (checked) {
+				new File(srcFilename).delete();
 				stats.valid++;
 			} else {
+				new File(srcFilename).delete();
 				stats.invalid++;
 			}
+			// Always delete binary
+			new File(binFilename).delete();
 		} else {
+//			if(isCanonical(b)) {
+//				System.out.println("*** DEAD COPY: " + b);
+//			}
 			stats.ignored++;
 		}
 	}
@@ -146,29 +167,13 @@ public class FuzzTestingExperiment {
 		}
 	}
 
-	/**
-	 * Check this program using the rust borrow checker
-	 *
-	 * @param b
-	 * @param l
-	 * @return
-	 * @throws NoSuchAlgorithmException
-	 * @throws IOException
-	 * @throws InterruptedException
-	 */
-	public static String rustCheckProgram(String contents) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		// Determine hash of program for naming
-		String hash = getHash(contents);
-		// Construct complete filename for file
-		String filename = tempDir + File.separator + hash +".rs";
+	public static void createTemporaryFile(String filename, String contents) throws IOException, InterruptedException {
 		// Create new file
 		RandomAccessFile writer = new RandomAccessFile(filename, "rw");
 		// Write contents to file
 		writer.write(contents.getBytes(StandardCharsets.UTF_8));
 		// Done creating file
 		writer.close();
-		// Attempt to compile it.
-		return new RustCompiler(RUST_CMD,TIMEOUT).compile(filename, tempDir);
 	}
 
 	/**
@@ -207,6 +212,95 @@ public class FuzzTestingExperiment {
 			declared = declared+1;
 		}
 		return declared;
+	}
+
+	/**
+	 * Check whether the given program attempts to copy a variable that is no longer
+	 * live. Such programs are ignored because such expressions will be treated
+	 * differently by the rust compiler (i.e. treated as moves).
+	 *
+	 * @param stmt
+	 * @return
+	 */
+	public static boolean hasDeadCopy(Stmt stmt) {
+		try{
+			hasDeadCopy(stmt,new HashSet<>());
+			return false;
+		} catch(IllegalArgumentException e) {
+			return true;
+		}
+	}
+
+	private static  Set<String> hasDeadCopy(Stmt stmt, Set<String> live) {
+		if(stmt instanceof Stmt.Block) {
+			Stmt.Block b = (Stmt.Block) stmt;
+			// Go backwards through the block for obvious reasons.
+			for (int i = b.size() - 1; i >= 0; --i) {
+				live = hasDeadCopy(b.get(i), live);
+			}
+			return live;
+		} else if(stmt instanceof Stmt.Let) {
+			Stmt.Let s = (Stmt.Let) stmt;
+			live.remove(s.variable().name());
+			hasDeadCopy(s.initialiser(),live);
+			live.addAll(uses(s.initialiser()));
+		} else if(stmt instanceof Stmt.Assignment) {
+			Stmt.Assignment s = (Stmt.Assignment) stmt;
+			live.remove(s.lhs.name());
+			hasDeadCopy(s.rightOperand(),live);
+			live.addAll(uses(s.rightOperand()));
+		} else {
+			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+			hasDeadCopy(s.leftOperand(),live);
+			hasDeadCopy(s.rightOperand(),live);
+			live.addAll(uses(s.leftOperand()));
+			live.addAll(uses(s.rightOperand()));
+		}
+		return live;
+	}
+
+	private static void hasDeadCopy(Expr expr, Set<String> live) {
+		if(expr instanceof Expr.Copy) {
+			Expr.Copy e = (Expr.Copy) expr;
+			if(!live.contains(e.operand().name())) {
+				// dead copy detected
+				throw new IllegalArgumentException("dead copy detected");
+			}
+			hasDeadCopy(e.operand(),live);
+		} else if(expr instanceof Expr.Borrow) {
+			Expr.Borrow e = (Expr.Borrow) expr;
+			hasDeadCopy(e.operand(),live);
+		} else if(expr instanceof Expr.Box) {
+			Expr.Box e = (Expr.Box) expr;
+			hasDeadCopy(e.operand(),live);
+		} else if(expr instanceof Expr.Dereference) {
+			Expr.Dereference e = (Expr.Dereference) expr;
+			hasDeadCopy(e.operand(),live);
+		}
+	}
+
+	private static Set<String> uses(Expr expr) {
+		if(expr instanceof Expr.Variable) {
+			Expr.Variable e = (Expr.Variable) expr;
+			HashSet<String> result = new HashSet<>();
+			result.add(e.name());
+			return result;
+		} else if(expr instanceof Expr.Copy) {
+			Expr.Copy e = (Expr.Copy) expr;
+			return uses(e.operand());
+		} else if(expr instanceof Expr.Borrow) {
+			Expr.Borrow e = (Expr.Borrow) expr;
+			return uses(e.operand());
+		} else if(expr instanceof Expr.Box) {
+			Expr.Box e = (Expr.Box) expr;
+			return uses(e.operand());
+		} else if(expr instanceof Expr.Dereference) {
+			Expr.Dereference e = (Expr.Dereference) expr;
+			return uses(e.operand());
+		} else {
+			// instanceof Value
+			return Collections.EMPTY_SET;
+		}
 	}
 
 	/**
@@ -252,6 +346,10 @@ public class FuzzTestingExperiment {
 		public long inconsistent = 0;
 		public long ignored = 0;
 
+		public long total() {
+			return valid + invalid + inconsistent + ignored;
+		}
+
 		public void print(ProgramSpace space) {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("{");
@@ -263,6 +361,11 @@ public class FuzzTestingExperiment {
 			System.out.println("\tIGNORED: " + ignored);
 			System.out.println("\tINCONSISTENT: " + inconsistent);
 			System.out.println("}");
+		}
+
+		@Override
+		public String toString() {
+			return "[" + valid + "," + invalid + "," + inconsistent + "," + ignored + "]";
 		}
 	}
 }

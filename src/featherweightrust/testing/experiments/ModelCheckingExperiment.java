@@ -25,17 +25,16 @@ public class ModelCheckingExperiment {
 	public static void main(String[] args) throws IOException {
 		// The set of program spaces to be considered.
 		ProgramSpace[] spaces = {
-//				new ProgramSpace(1, 1, 1, 1),
-//				new ProgramSpace(1, 1, 1, 1),
-//				new ProgramSpace(1, 1, 1, 2),
-//				new ProgramSpace(1, 1, 2, 2),
-//				new ProgramSpace(1, 2, 2, 2),
-//				new ProgramSpace(2, 2, 2, 2),
-//				new ProgramSpace(1, 2, 2, 3),
+				new ProgramSpace(1, 1, 1, 1),
+				new ProgramSpace(1, 1, 1, 2),
+				new ProgramSpace(1, 1, 2, 2),
+				new ProgramSpace(1, 2, 2, 2),
+				new ProgramSpace(2, 2, 2, 2),
+				new ProgramSpace(1, 2, 2, 3),
 				new ProgramSpace(1, 3, 2, 3),
 //				new ProgramSpace(1, 3, 3, 2),
 			};
-		int[] maxBlocks = { 2, 3 };
+		int[] maxBlocks = { 2 };
 
 		// Iterate even program in each space using the constrained walker which
 		// restricts to those programs where every variable is defined before being
@@ -43,16 +42,16 @@ public class ModelCheckingExperiment {
 		for(int max : maxBlocks) {
 			for(ProgramSpace space : spaces) {
 				Stats stats = new Stats();
-				int size = 0;
+				long size = 0;
 				for(Stmt s : space.definedVariableWalker(max)) {
-					//			if(s.toString().equals("{ let mut x = 0; let mut y = &x; { let mut z = 0; y = &z; } }")) {
-					if(s.toString().equals("{ let mut x = 0; let mut y = &mut x; { let mut z = &mut y; *z = z; } }")) {
-						System.out.println(s);
-					}
 					runAndCheck((Stmt.Block) s, ProgramSpace.ROOT, stats);
-					++size;
+					// Report for every 10 million test cases examined.
+					if((++size % 10_000_000) == 0) {
+						System.out.print("[" + size + "]");
+					}
 				}
 				//
+				System.out.println();
 				stats.print(space,size);
 
 			}
@@ -103,7 +102,7 @@ public class ModelCheckingExperiment {
 		public long falsepos = 0;
 		public long falseneg = 0;
 
-		public void print(ProgramSpace space, int size) {
+		public void print(ProgramSpace space, long size) {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("================================");
 			System.out.println("TIME: " + time + "ms");
@@ -111,7 +110,7 @@ public class ModelCheckingExperiment {
 			System.out.println("TOTAL: " + size);
 			System.out.println("MALFORMED: " + malformed);
 			System.out.println("VALID: " + valid);
-			System.out.println("INVALID: " + (invalid+falsepos) + "(" + invalid + ")");
+			System.out.println("INVALID: " + (invalid+falsepos));
 			System.out.println("FALSEPOS: " + falsepos);
 			System.out.println("FALSENEG: " + falseneg);
 		}

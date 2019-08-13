@@ -63,7 +63,7 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		State S2 = pl.first();
 		Location lx = pl.second();
 		// Bind variable to location
-		State S3 = S2.bind(x.name(), lx);  // FIXME: what is this?
+		State S3 = S2.bind(x.name(), lx);
 		// Done
 		return new Pair<>(S3, null);
 	}
@@ -111,8 +111,6 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		if (lx == null) {
 			throw new RuntimeException("invalid variable \"" + name + "\"");
 		}
-		// Strip ownership flag since is a borrow
-		lx = new Location(lx.getAddress()); // TODO: don't need this?
 		// Done
 		return new Pair<>(S, lx);
 	}

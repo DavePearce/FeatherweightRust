@@ -17,7 +17,6 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
-import java.util.Arrays;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Expr;

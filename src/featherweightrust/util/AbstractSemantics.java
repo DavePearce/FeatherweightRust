@@ -17,9 +17,7 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.util;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;

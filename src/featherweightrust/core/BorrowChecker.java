@@ -34,6 +34,13 @@ import featherweightrust.util.SyntacticElement;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.SyntacticElement.Attribute;
 
+/**
+ * Responsible for type checking and borrowing checking a program in
+ * Featherweight Rust.
+ *
+ * @author David J. Pearce
+ *
+ */
 public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment, Type, Type> {
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages

@@ -15,11 +15,7 @@
 // <http://www.gnu.org/licenses/>
 //
 // Copyright 2018, David James Pearce.
-
 package featherweightrust.util;
-
-import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * A Syntactic Element represents any part of the file for which is relevant to

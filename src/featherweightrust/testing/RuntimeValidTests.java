@@ -162,6 +162,11 @@ public class RuntimeValidTests {
 	}
 
 	public static void check(String input, Integer output) throws IOException {
+		check(input,output,BIG_STEP);
+		check(input,output,SMALL_STEP);
+	}
+
+	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
 		Lifetime globalLifetime = new Lifetime();
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
@@ -170,12 +175,15 @@ public class RuntimeValidTests {
 			// Borrow Check block
 			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
-			Pair<OperationalSemantics.State, Stmt> r = new OperationalSemantics.BigStep()
-					.apply(new OperationalSemantics.State(), globalLifetime, stmt);
+			Pair<OperationalSemantics.State, Stmt> state = new Pair<>(new OperationalSemantics.State(),stmt);
+			// Execute continually until all reductions complete
+			Stmt result;
+			do {
+				state = semantics.apply(state.first(), globalLifetime, state.second());
+				result = state.second();
+			} while (result != null && !(result instanceof Value));
 			//
-			check(output, r.second());
-			//
-			System.out.println(r.first() + " :> " + r.second());
+			check(output, state.second());
 		} catch (SyntaxError e) {
 			e.outputSourceError(System.err);
 			e.printStackTrace();
@@ -199,4 +207,7 @@ public class RuntimeValidTests {
 		// Failed
 		fail("expected: " + expected + ", got: " + actual);
 	}
+
+	public static final OperationalSemantics BIG_STEP = new OperationalSemantics.BigStep();
+	public static final OperationalSemantics SMALL_STEP = new OperationalSemantics.SmallStep();
 }

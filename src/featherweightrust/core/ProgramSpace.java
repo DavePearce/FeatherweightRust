@@ -203,6 +203,20 @@ public class ProgramSpace {
 		}
 	}
 
+	public static void count(ProgramSpace p) {
+		Domain.Big<Stmt.Block> domain = p.domain();
+		System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
+	}
+
+	public static void count(ProgramSpace p, int max) {
+		Walker<Stmt.Block> programs = p.definedVariableWalker(max);
+		long count = 0;
+		for(Stmt.Block b : programs) {
+			count = count + 1;
+		}
+		System.out.println("|" + p + "_def(" + max + ")| = " + count);
+	}
+
 	public static void main(String[] args) {
 		// Print some statistics about various domains
 		ProgramSpace[] spaces = {
@@ -217,21 +231,36 @@ public class ProgramSpace {
 				new ProgramSpace(1,3,3,2),
 				new ProgramSpace(1,3,3,3),
 		};
-		//
-		for(ProgramSpace p : spaces) {
-			Domain.Big<Stmt.Block> domain = p.domain();
-			System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
-		}
-		//
-		int MAX_BLOCKS = 2;
-		//
-		for(ProgramSpace p : spaces) {
-			Walker<Stmt.Block> programs = p.definedVariableWalker(MAX_BLOCKS);
-			long count = 0;
-			for(Stmt.Block b : programs) {
-				count = count + 1;
-			}
-			System.out.println("|" + p + "_def(" + MAX_BLOCKS + ")| = " + count);
-		}
+		// Determine exhaustive sizes
+		count(new ProgramSpace(1,1,1,1));
+		count(new ProgramSpace(1,1,1,2));
+		count(new ProgramSpace(1,1,2,2));
+		count(new ProgramSpace(1,2,2,2));
+		count(new ProgramSpace(2,2,2,2));
+		count(new ProgramSpace(1,2,2,3));
+		count(new ProgramSpace(1,2,3,3));
+		count(new ProgramSpace(1,3,2,3));
+		count(new ProgramSpace(1,3,3,2));
+		count(new ProgramSpace(1,3,3,3));
+		// Determine constrained sizes
+		count(new ProgramSpace(1,1,1,1),2);
+		count(new ProgramSpace(1,1,1,2),2);
+		count(new ProgramSpace(1,1,2,2),2);
+		count(new ProgramSpace(1,2,2,2),2);
+		count(new ProgramSpace(2,2,2,2),2);
+		count(new ProgramSpace(1,2,2,3),2);
+		count(new ProgramSpace(1,2,3,3),2);
+		count(new ProgramSpace(1,3,2,3),2);
+		count(new ProgramSpace(1,3,3,3),2);
+		// Determine constrained sizes
+		count(new ProgramSpace(1,1,1,1),3);
+		count(new ProgramSpace(1,1,1,2),3);
+		count(new ProgramSpace(1,1,2,2),3);
+		count(new ProgramSpace(1,2,2,2),3);
+		count(new ProgramSpace(2,2,2,2),3);
+		count(new ProgramSpace(1,2,2,3),3); // <----
+		count(new ProgramSpace(1,2,3,3),3);
+		count(new ProgramSpace(1,3,2,3),3);
+		count(new ProgramSpace(1,3,3,3),3);
 	}
 }

@@ -18,15 +18,19 @@
 package featherweightrust.testing.experiments;
 
 import java.io.IOException;
-
+import java.math.BigInteger;
+import java.util.Iterator;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractSemantics;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
+import jmodelgen.core.Domain;
 
 /**
  * The purpose of this experiment is to check soundness of the calculus with
@@ -41,40 +45,55 @@ public class ModelCheckingExperiment {
 
 	public static void main(String[] args) throws IOException {
 		// The set of program spaces to be considered.
-		ProgramSpace[] spaces = {
-				new ProgramSpace(1, 1, 1, 1),
-				new ProgramSpace(1, 1, 1, 2),
-				new ProgramSpace(1, 1, 2, 2),
-				new ProgramSpace(1, 2, 2, 2),
-				new ProgramSpace(2, 2, 2, 2),
-				new ProgramSpace(1, 2, 2, 3),
-				new ProgramSpace(1, 3, 2, 3),
-//				new ProgramSpace(1, 3, 3, 2),
-			};
-		int[] maxBlocks = { 2 };
+		check(new ProgramSpace(1, 1, 1, 1));
+		check(new ProgramSpace(1, 1, 1, 2));
+		check(new ProgramSpace(1, 1, 2, 2));
+		check(new ProgramSpace(1, 2, 2, 2));
+		check(new ProgramSpace(2, 2, 2, 2));
+//		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+//		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
+//		check(new ProgramSpace(1, 3, 3, 2), 2, -1);
+		// Really hard ones
+//		check(new ProgramSpace(2, 2, 2, 2), 3, -1);
+//		check(new ProgramSpace(1, 2, 2, 3), 3, -1);
+	}
 
-		// Iterate even program in each space using the constrained walker which
-		// restricts to those programs where every variable is defined before being
-		// used.
-		for(int max : maxBlocks) {
-			for(ProgramSpace space : spaces) {
-				Stats stats = new Stats();
-				long size = 0;
-				for(Stmt s : space.definedVariableWalker(max)) {
-					runAndCheck((Stmt.Block) s, ProgramSpace.ROOT, stats);
-					// Report for every 10 million test cases examined.
-					if((++size % 10_000_000) == 0) {
-						System.out.print("[" + size + "]");
-					}
-				}
-				//
-				System.out.println();
-				stats.print(space,size);
+	public static void check(ProgramSpace space) {
+		Domain.Big<Stmt.Block> domain = space.domain();
+		check(domain,domain.bigSize().longValueExact(),space.toString());
+	}
 
+	public static void check(ProgramSpace space, int maxBlocks, long expected) {
+		check(space.definedVariableWalker(maxBlocks), expected, space.toString() + "{def," + maxBlocks + "}");
+	}
+
+	public static void check(Iterable<Stmt.Block> space, long expected, String label) {
+		Stats stats = new Stats(label);
+		long count = 0;
+		for(Stmt.Block s : space) {
+			runAndCheck(s, ProgramSpace.ROOT, stats);
+			// Report
+			reportProgress(++count,expected);
+		}
+		//
+		stats.print();
+	}
+
+	public static void reportProgress(long count, long expected) {
+		if(expected < 0) {
+			if((count % 10_000_000) == 0) {
+				System.out.print("\r(" + count + ")");
+			}
+		} else {
+			long delta = expected / 100;
+			if(delta == 0 || count % delta == 0) {
+				long percent = (long) (100D * (count) / expected);
+				System.out.print("\r(" + percent + "%)");
 			}
 		}
 	}
 
+	// NOTE: must use BigStep semantics because its more efficient!
 	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
 	public static final BorrowChecker checker = new BorrowChecker("");
 
@@ -91,7 +110,8 @@ public class ModelCheckingExperiment {
 		}
 		// See whether or not it executes
 		try {
-			semantics.apply(AbstractSemantics.EMPTY_STATE, lifetime, stmt).first();
+			// Execute block in outermost lifetime "*")
+			semantics.apply(AbstractSemantics.EMPTY_STATE, lifetime, stmt);
 			ran = true;
 		} catch (Exception e) {
 			error = e;
@@ -113,22 +133,29 @@ public class ModelCheckingExperiment {
 	public static class Stats {
 		private final long start = System.currentTimeMillis();
 
-		public long malformed = 0;
+		private String label;
+
 		public long valid = 0;
 		public long invalid = 0;
 		public long falsepos = 0;
 		public long falseneg = 0;
 
-		public void print(ProgramSpace space, long size) {
+		public Stats(String label) {
+			this.label = label;
+		}
+
+		public long total() { return valid + invalid + falsepos; }
+
+		public void print() {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("================================");
 			System.out.println("TIME: " + time + "ms");
-			System.out.println("SPACE: " + space);
-			System.out.println("TOTAL: " + size);
-			System.out.println("MALFORMED: " + malformed);
+			System.out.println("SPACE: " + label);
+			System.out.println("TOTAL: " + total());
 			System.out.println("VALID: " + valid);
 			System.out.println("INVALID: " + (invalid+falsepos));
-			System.out.println("FALSEPOS: " + falsepos);
+			double percent = (100D*(falsepos) / (invalid+falsepos));
+			System.out.println("FALSEPOS: " + falsepos + " (" + String.format("%.2f",percent) + "%)");
 			System.out.println("FALSENEG: " + falseneg);
 		}
 	}

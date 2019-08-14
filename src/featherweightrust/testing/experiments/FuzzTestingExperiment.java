@@ -31,7 +31,9 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.testing.experiments.ModelCheckingExperiment.Stats;
 import featherweightrust.util.SyntaxError;
+import jmodelgen.core.Domain;
 
 /**
  * The purpose of this experiment is to fuzz test the Rust compiler using a
@@ -52,11 +54,6 @@ public class FuzzTestingExperiment {
 	private static final long TIMEOUT = 5000;
 
 	/**
-	 * Maximum number of blocks to permit in constraint program spaces.
-	 */
-	private static final int MAX_BLOCKS = 2;
-
-	/**
 	 * The command to use for executing the rust compiler.
 	 */
 	private static final String RUST_CMD = "rustc";
@@ -67,61 +64,57 @@ public class FuzzTestingExperiment {
 	}
 	//
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		// The set of program spaces to be considered.
-		ProgramSpace[] spaces = {
-//				new ProgramSpace(1, 1, 1, 1),
-//				new ProgramSpace(1, 1, 1, 2),
-				new ProgramSpace(1, 1, 2, 2),
-//				new ProgramSpace(1, 2, 2, 2),
-//				new ProgramSpace(1, 2, 2, 3),
-//				new ProgramSpace(1, 3, 2, 3),
-//				new ProgramSpace(1, 3, 3, 2),
-		};
-		long count = 0;
-		for(ProgramSpace space : spaces) {
-			Stats stats1 = runSampleAllExperiment(space);
-			//Stats stats2 = runSampleDefinedExperiment(space);
-			//
-			stats1.print(space);
-			//stats2.print(space);
-			// Make some indication of progress
-			if((count % 100) == 0) {
-				System.out.print(".");
-				System.out.flush();
+		// Complete domains
+		check(new ProgramSpace(1, 1, 1, 1));
+		check(new ProgramSpace(1, 1, 1, 2));
+		check(new ProgramSpace(1, 1, 2, 2));
+		// Constrained domains
+		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
+		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
+		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+	}
+
+	public static void check(ProgramSpace space) throws NoSuchAlgorithmException, IOException, InterruptedException {
+		Domain.Big<Stmt.Block> domain = space.domain();
+		check(domain,domain.bigSize().longValueExact(),space.toString());
+	}
+
+	public static void check(ProgramSpace space, int maxBlocks, long expected) throws NoSuchAlgorithmException, IOException, InterruptedException {
+		check(space.definedVariableWalker(maxBlocks), expected, space.toString() + "{def," + maxBlocks + "}");
+	}
+
+	public static void check(Iterable<Stmt.Block> space, long expected, String label) throws NoSuchAlgorithmException, IOException, InterruptedException {
+		Stats stats = new Stats(label);
+		//
+		for(Stmt.Block s : space) {
+			check(s, stats);
+			// Report
+			reportProgress(stats,expected);
+		}
+		//
+		stats.print();
+	}
+
+	public static void reportProgress(Stats stats, long expected) {
+		long count = stats.total();
+		long time = System.currentTimeMillis() - stats.start;
+		//
+		if(expected < 0) {
+			if((count % 10_000_000) == 0) {
+				System.out.print("\r(" + count + ")");
 			}
-			count=count+1;
-		}
-	}
-
-	public static Stats runSampleAllExperiment(ProgramSpace space) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		Stats stats = new Stats();
-		//
-		for(Stmt.Block b : space.domain()) {
-			checkProgram(b, stats);
-			if((stats.total() % 1000) == 0) {
-				System.out.print("[" + stats + "]");
+		} else {
+			long delta = expected / 100;
+			double rate = ((double) count) / time;
+			double remaining = ((expected - count) * rate)/1000;
+			if(delta == 0 || count % delta == 0) {
+				long percent = (long) (100D * (count) / expected);
+				System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
 			}
 		}
-		//
-		return stats;
 	}
 
-	/**
-	 * Sample from the space of programs where variables are always defined before
-	 * being used. This dramatically increases the chance of exploring an
-	 * interesting program
-	 */
-	public static Stats runSampleDefinedExperiment(ProgramSpace space) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		Stats stats = new Stats();
-		//
-		for(Stmt.Block b : space.definedVariableWalker(MAX_BLOCKS)) {
-			checkProgram(b, stats);
-		}
-		//
-		return stats;
-	}
-
-	public static void checkProgram(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static void check(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		if (isCanonical(b) && !hasDeadCopy(b)) {
 			// Check using calculus
 			boolean checked = calculusCheckProgram(b);
@@ -357,22 +350,26 @@ public class FuzzTestingExperiment {
 
 	public static class Stats {
 		private final long start = System.currentTimeMillis();
-
+		private final String label;
 		public long valid = 0;
 		public long invalid = 0;
 		public long inconsistent = 0;
 		public long ignored = 0;
 
+		public Stats(String label) {
+			this.label=label;
+		}
+
 		public long total() {
 			return valid + invalid + inconsistent + ignored;
 		}
 
-		public void print(ProgramSpace space) {
+		public void print() {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("{");
-			System.out.println("\tSPACE: " + space);
+			System.out.println("\tSPACE: " + label);
 			System.out.println("\tTIME: " + time + "ms");
-			System.out.println("\tTOTAL: " + (valid + invalid));
+			System.out.println("\tTOTAL: " + (valid + invalid + ignored + inconsistent));
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
 			System.out.println("\tIGNORED: " + ignored);

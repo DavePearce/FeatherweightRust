@@ -17,6 +17,7 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.util.Arrays;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Expr;
@@ -178,10 +179,6 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		 */
 		@Override
 		public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Block b) {
-
-			// FIXME: need to figure out how to split this out into R-Seq and R-Block.
-			// Currently, cannot do small step because need to chain bindings properly
-
 			// Save current bindings so they can be restored
 			StackFrame outerFrame = S1.frame();
 			Stmt returnValue = null;
@@ -191,8 +188,8 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 				Stmt s = p.second();
 				S1 = p.first();
 				//
-				if(s != null || s instanceof Value) {
-					// Either we're stuck, or we produced a return value.
+				if(s instanceof Value) {
+					// We produced a return value.
 					returnValue = s;
 					break;
 				}
@@ -281,8 +278,38 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	public static class SmallStep extends OperationalSemantics {
 
 		@Override
-		public Pair<State, Stmt> apply(State state, Lifetime lifetime, Block stmt) {
-			throw new IllegalArgumentException("Implement me!");
+		public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Block b) {
+			// Save current bindings so they can be restored
+			StackFrame outerFrame = S1.frame();
+			Stmt returnValue = null;
+			//
+			if(b.size() == 1 && b.get(0) instanceof Value) {
+				// Return value produced
+				returnValue = b.get(0);
+			} else if(b.size() > 0) {
+				Pair<State, Stmt> p = apply(S1, b.lifetime(), b.get(0));
+				Stmt s = p.second();
+				S1 = p.first();
+				if(s != null) {
+					// Statement hasn't completed
+					Stmt[] stmts = Arrays.copyOf(b.toArray(), b.size());
+					// Replace with partially reduced statement
+					stmts[0] = s;
+					// Go around again
+					return new Pair<>(S1, new Stmt.Block(lifetime, stmts, b.attributes()));
+				} else {
+					// Slice off head
+					return new Pair<>(S1, new Stmt.Block(lifetime, slice(b, 1), b.attributes()));
+				}
+			}
+			// drop all bindings created within block
+			State S2 = new State(outerFrame, S1.store());
+			// Identify locations allocated in this lifetime
+			Set<Location> phi = S2.findAll(b.lifetime());
+			// drop all matching locations
+			State S3 = S2.drop(phi);
+			//
+			return new Pair<>(S3, returnValue);
 		}
 
 		@Override
@@ -374,6 +401,21 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 		@Override
 		public Pair<State, Expr> apply(State S, Value.Location v) {
 			return new Pair<>(S, v);
+		}
+
+		/**
+		 * Return a new block with only a given number of its statements.
+		 *
+		 * @param b
+		 * @param n
+		 * @return
+		 */
+		private static Stmt[] slice(Stmt.Block b, int n) {
+			Stmt[] stmts = new Stmt[b.size() - n];
+			for(int i=n;i!=b.size();++i) {
+				stmts[i-n] = b.get(i);
+			}
+			return stmts;
 		}
 	}
 }

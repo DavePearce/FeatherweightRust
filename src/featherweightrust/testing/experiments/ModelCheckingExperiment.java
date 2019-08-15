@@ -45,17 +45,18 @@ public class ModelCheckingExperiment {
 
 	public static void main(String[] args) throws IOException {
 		// The set of program spaces to be considered.
-		check(new ProgramSpace(1, 1, 1, 1));
-		check(new ProgramSpace(1, 1, 1, 2));
-		check(new ProgramSpace(1, 1, 2, 2));
-		check(new ProgramSpace(1, 2, 2, 2));
-		check(new ProgramSpace(2, 2, 2, 2));
+//		check(new ProgramSpace(1, 1, 1, 1));
+//		check(new ProgramSpace(1, 1, 1, 2));
+//		check(new ProgramSpace(1, 1, 2, 2));
+//		check(new ProgramSpace(1, 2, 2, 2));
+//		check(new ProgramSpace(2, 2, 2, 2));
 //		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
 //		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
 //		check(new ProgramSpace(1, 3, 3, 2), 2, -1);
 		// Really hard ones
-//		check(new ProgramSpace(2, 2, 2, 2), 3, -1);
-//		check(new ProgramSpace(1, 2, 2, 3), 3, -1);
+//		check(new ProgramSpace(1, 2, 2, 2), 3, 9684);
+//		check(new ProgramSpace(2, 2, 2, 2), 3, 40864);
+		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
 	}
 
 	public static void check(ProgramSpace space) {

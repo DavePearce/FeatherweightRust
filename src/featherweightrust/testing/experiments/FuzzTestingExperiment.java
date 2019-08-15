@@ -67,7 +67,7 @@ public class FuzzTestingExperiment {
 //		check(new ProgramSpace(1, 1, 1, 2));
 //		check(new ProgramSpace(1, 1, 2, 2));
 		// Constrained domains
-		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
+//		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
 		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
 //		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
 //		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);

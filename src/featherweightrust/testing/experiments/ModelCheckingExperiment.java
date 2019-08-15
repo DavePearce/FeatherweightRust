@@ -50,7 +50,7 @@ public class ModelCheckingExperiment {
 //		check(new ProgramSpace(1, 1, 1, 2));
 //		check(new ProgramSpace(1, 1, 2, 2));
 //		check(new ProgramSpace(1, 2, 2, 2));
-//		check(new ProgramSpace(2, 2, 2, 2));
+		check(new ProgramSpace(2, 2, 2, 2));
 //		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
 //		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
 //		check(new ProgramSpace(1, 3, 3, 2), 2, -1);

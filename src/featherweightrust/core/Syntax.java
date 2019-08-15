@@ -576,6 +576,9 @@ public class Syntax {
 			public Int(Attribute... attributes) {
 				super(attributes);
 			}
+
+			@Override
+			public String toString() { return "int"; }
 		}
 
 		public class Borrow extends SyntacticElement.Impl implements Type {

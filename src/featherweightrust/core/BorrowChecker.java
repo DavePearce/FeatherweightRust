@@ -92,14 +92,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Pair<Environment, Type> p = apply(R1, l, s.rightOperand());
 		Environment R2 = p.first();
 		Type T2 = p.second();
-		// Check borrow status
-		check(!borrowed(R2,x), BORROWED_VARIABLE_ASSIGNMENT, s.leftOperand());
 		// lifetime check
 		check(within(R2,T2,m),NOTWITHIN_VARIABLE_ASSIGNMENT,s);
 		// Check compatibility
 		check(compatible(T1, T2), INCOMPATIBLE_TYPE, s.rightOperand());
 		// Update environment
 		Environment R3 = R2.put(x, T2, m);
+		// Check borrow status
+		check(!borrowed(R3,x), BORROWED_VARIABLE_ASSIGNMENT, s.leftOperand());
 		//
 		return new Pair<>(R3, null);
 	}
@@ -348,7 +348,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		if (t1 instanceof Type.Int && t2 instanceof Type.Int) {
 			return true;
 		} else if (t1 instanceof Type.Borrow && t2 instanceof Type.Borrow) {
-			return true;
+			Type.Borrow b1 = (Type.Borrow) t1;
+			Type.Borrow b2 = (Type.Borrow) t2;
+			return b1.isMutable() == b2.isMutable();
 		} else if (t1 instanceof Type.Box && t2 instanceof Type.Box) {
 			Type.Box b1 = (Type.Box) t1;
 			Type.Box b2 = (Type.Box) t2;
@@ -499,6 +501,21 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		public Set<String> bindings() {
 			return mapping.keySet();
 		}
+
+		@Override
+		public String toString() {
+			String body = "{";
+			boolean firstTime=true;
+			for(Map.Entry<String, Cell> e : mapping.entrySet()) {
+				if(!firstTime) {
+					body = body + ",";
+				}
+				firstTime=false;
+				body = body + e.getKey() + ":" + e.getValue();
+			}
+			return body + "}";
+		}
+
 	}
 
 	public static class Cell extends Pair<Type, Lifetime> {

@@ -112,6 +112,27 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_29() throws IOException {
+		//  cannot assign to `y` because it is borrowed
+		String input = "{ let mut x = 0; { let mut y = &mut x; y = &mut y; } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_30() throws IOException {
+		// mismatched types (types differ in mutability)
+		String input = "{ let mut x = 0; { let mut y = &mut x; y = &y; } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_31() throws IOException {
+		// cannot assign to `y` because it is borrowed
+		String input = "{ let mut x = 0; { let mut y = &mut x; y = y; } }";
+		checkInvalid(input);
+	}
+
 	// ==============================================================
 	// Mutable Borrowing Examples
 	// ==============================================================

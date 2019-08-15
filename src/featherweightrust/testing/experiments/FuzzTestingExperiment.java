@@ -45,6 +45,9 @@ import jmodelgen.core.Domain;
 public class FuzzTestingExperiment {
 	/**
 	 * Temporary directory into which rust programs are placed.
+	 *
+	 * NOTE: mounting this as tmpfs (i.e. in memory file system) makes a big
+	 * difference.
 	 */
 	private static final String tempDir = "tmp";
 
@@ -64,6 +67,7 @@ public class FuzzTestingExperiment {
 //		check(new ProgramSpace(1, 1, 1, 2));
 //		check(new ProgramSpace(1, 1, 2, 2));
 		// Constrained domains
+		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
 		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
 //		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
 //		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
@@ -100,7 +104,7 @@ public class FuzzTestingExperiment {
 			}
 		} else {
 			long delta = expected / 100;
-			double rate = ((double) count) / time;
+			double rate = ((double) time) / count;
 			double remaining = ((expected - count) * rate)/1000;
 			if(delta == 0 || count % delta == 0) {
 				long percent = (long) (100D * (count) / expected);

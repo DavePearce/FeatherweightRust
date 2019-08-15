@@ -27,6 +27,7 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.testing.experiments.FuzzTestingExperiment.Stats;
 import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
@@ -70,26 +71,30 @@ public class ModelCheckingExperiment {
 
 	public static void check(Iterable<Stmt.Block> space, long expected, String label) {
 		Stats stats = new Stats(label);
-		long count = 0;
 		for(Stmt.Block s : space) {
 			runAndCheck(s, ProgramSpace.ROOT, stats);
 			// Report
-			reportProgress(++count,expected);
+			reportProgress(stats,expected);
 		}
 		//
 		stats.print();
 	}
 
-	public static void reportProgress(long count, long expected) {
+	public static void reportProgress(Stats stats, long expected) {
+		long count = stats.total();
+		long time = System.currentTimeMillis() - stats.start;
+		//
 		if(expected < 0) {
 			if((count % 10_000_000) == 0) {
 				System.out.print("\r(" + count + ")");
 			}
 		} else {
 			long delta = expected / 100;
+			double rate = ((double) time) / count;
+			double remaining = ((expected - count) * rate)/1000;
 			if(delta == 0 || count % delta == 0) {
 				long percent = (long) (100D * (count) / expected);
-				System.out.print("\r(" + percent + "%)");
+				System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
 			}
 		}
 	}

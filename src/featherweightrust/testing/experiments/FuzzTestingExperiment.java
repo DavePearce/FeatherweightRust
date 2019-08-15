@@ -49,14 +49,9 @@ public class FuzzTestingExperiment {
 	private static final String tempDir = "tmp";
 
 	/**
-	 * Timeout in milliseconds for Rust Compiler.
-	 */
-	private static final long TIMEOUT = 5000;
-
-	/**
 	 * The command to use for executing the rust compiler.
 	 */
-	private static final String RUST_CMD = "rustc";
+	private static final RustCompiler RUSTC = new RustCompiler("rustc",5000);
 
 	static {
 		// Force creation of temporary directory
@@ -65,13 +60,13 @@ public class FuzzTestingExperiment {
 	//
 	public static void main(String[] args) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		// Complete domains
-		check(new ProgramSpace(1, 1, 1, 1));
-		check(new ProgramSpace(1, 1, 1, 2));
-		check(new ProgramSpace(1, 1, 2, 2));
+//		check(new ProgramSpace(1, 1, 1, 1));
+//		check(new ProgramSpace(1, 1, 1, 2));
+//		check(new ProgramSpace(1, 1, 2, 2));
 		// Constrained domains
 		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
-		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
-		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+//		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
+//		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
 	}
 
 	public static void check(ProgramSpace space) throws NoSuchAlgorithmException, IOException, InterruptedException {
@@ -115,46 +110,55 @@ public class FuzzTestingExperiment {
 	}
 
 	public static void check(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		if (isCanonical(b) && !hasDeadCopy(b)) {
-			// Check using calculus
-			boolean checked = calculusCheckProgram(b);
-			// Construct rust program
-			String program = toRustProgram(b);
-			// Determine hash of program for naming
-			String hash = getHash(program);
-			// Determine filename based on hash
-			String srcFilename = tempDir + File.separator + hash + ".rs";
-			String binFilename = tempDir + File.separator + hash;
-			// Create temporary file
-			createTemporaryFile(srcFilename, program);
-			// Run the rust compile
-			String rustc =  new RustCompiler(RUST_CMD,TIMEOUT).compile(srcFilename, tempDir);
-			boolean rustc_f = rustc == null;
-			//
-			if (checked != rustc_f) {
-				System.out.println("********* FAILURE");
-				System.out.println("BLOCK: " + b.toString());
-				System.out.println("PROGRAM: " + program);
-				System.out.println("HASH: " + getHash(program));
-				System.out.println("RUSTC: " + rustc_f);
-				if (rustc != null) {
-					System.out.println(rustc);
-				}
-				stats.inconsistent++;
-			} else if (checked) {
-				new File(srcFilename).delete();
-				stats.valid++;
-			} else {
-				new File(srcFilename).delete();
-				stats.invalid++;
-			}
-			// Always delete binary
-			new File(binFilename).delete();
+		if(!isCanonical(b)) {
+			stats.notCanonical++;
+		} else if(hasDeadCopy(b)) {
+			stats.hasDeadCopy++;
 		} else {
-//			if(isCanonical(b)) {
-//				System.out.println("*** DEAD COPY: " + b);
-//			}
-			stats.ignored++;
+			// Construct prefix
+			String prefix = toPrefixString(b);
+			//System.out.println("PREFIX: " + prefix + " FROM: " + b);
+			// Check prefix not already seen
+			if(INVALID_PREFIXES.contains(prefix)) {
+				stats.invalidPrefix++;
+			} else {
+				// Check using calculus
+				boolean checked = calculusCheckProgram(b);
+				// Construct rust program
+				String program = toRustProgram(b);
+				// Determine hash of program for naming
+				long hash = program.hashCode() & 0x00000000ffffffffL;
+				// Determine filename based on hash
+				String binFilename = tempDir + File.separator + hash;
+				String srcFilename = binFilename + ".rs";
+				// Create temporary file
+				createTemporaryFile(srcFilename, program);
+				// Run the rust compile
+				String rustc =  RUSTC.compile(srcFilename, tempDir);
+				boolean rustc_f = rustc == null;
+				//
+				if (checked != rustc_f) {
+					System.out.println("********* FAILURE");
+					System.out.println("BLOCK: " + b.toString());
+					System.out.println("PROGRAM: " + program);
+					System.out.println("HASH: " + program.toString());
+					System.out.println("RUSTC: " + rustc_f);
+					if (rustc != null) {
+						System.out.println(rustc);
+					}
+					stats.inconsistent++;
+				} else if (checked) {
+					new File(srcFilename).delete();
+					stats.valid++;
+				} else {
+					new File(srcFilename).delete();
+					stats.invalid++;
+					// register invalid prefix
+					INVALID_PREFIXES.add(prefix);
+				}
+				// Always delete binary
+				new File(binFilename).delete();
+			}
 		}
 	}
 
@@ -184,6 +188,29 @@ public class FuzzTestingExperiment {
 		writer.write(contents.getBytes(StandardCharsets.UTF_8));
 		// Done creating file
 		writer.close();
+	}
+
+	private static final HashSet<String> INVALID_PREFIXES = new HashSet<>();
+
+	/**
+	 * Compute the "prefix string" for a block. That is, the string of the block
+	 * without trailing curly braces. For example, "{ let mut x = 0; }" becomes "{
+	 * let mut x = 0;".
+	 *
+	 * @param b
+	 * @return
+	 */
+	private static String toPrefixString(Stmt.Block b) {
+		String str = b.toRustString();
+		int end = str.length();
+		while (end > 0) {
+			end = end - 1;
+			char c = str.charAt(end);
+			if (c != ' ' && c != '}') {
+				break;
+			}
+		}
+		return str.substring(0, end + 1);
 	}
 
 	/**
@@ -253,18 +280,18 @@ public class FuzzTestingExperiment {
 			Stmt.Let s = (Stmt.Let) stmt;
 			live.remove(s.variable().name());
 			hasDeadCopy(s.initialiser(),live);
-			live.addAll(uses(s.initialiser()));
+			addVariableUses(s.initialiser(),live);
 		} else if(stmt instanceof Stmt.Assignment) {
 			Stmt.Assignment s = (Stmt.Assignment) stmt;
 			live.remove(s.lhs.name());
 			hasDeadCopy(s.rightOperand(),live);
-			live.addAll(uses(s.rightOperand()));
+			addVariableUses(s.rightOperand(),live);
 		} else {
 			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
 			hasDeadCopy(s.leftOperand(),live);
 			hasDeadCopy(s.rightOperand(),live);
-			live.addAll(uses(s.leftOperand()));
-			live.addAll(uses(s.rightOperand()));
+			addVariableUses(s.leftOperand(),live);
+			addVariableUses(s.rightOperand(),live);
 		}
 		return live;
 	}
@@ -289,27 +316,23 @@ public class FuzzTestingExperiment {
 		}
 	}
 
-	private static Set<String> uses(Expr expr) {
+	private static void addVariableUses(Expr expr, Set<String> uses) {
 		if(expr instanceof Expr.Variable) {
 			Expr.Variable e = (Expr.Variable) expr;
 			HashSet<String> result = new HashSet<>();
-			result.add(e.name());
-			return result;
+			uses.add(e.name());
 		} else if(expr instanceof Expr.Copy) {
 			Expr.Copy e = (Expr.Copy) expr;
-			return uses(e.operand());
+			addVariableUses(e.operand(),uses);
 		} else if(expr instanceof Expr.Borrow) {
 			Expr.Borrow e = (Expr.Borrow) expr;
-			return uses(e.operand());
+			addVariableUses(e.operand(),uses);
 		} else if(expr instanceof Expr.Box) {
 			Expr.Box e = (Expr.Box) expr;
-			return uses(e.operand());
+			addVariableUses(e.operand(),uses);
 		} else if(expr instanceof Expr.Dereference) {
 			Expr.Dereference e = (Expr.Dereference) expr;
-			return uses(e.operand());
-		} else {
-			// instanceof Value
-			return Collections.EMPTY_SET;
+			addVariableUses(e.operand(),uses);
 		}
 	}
 
@@ -347,21 +370,22 @@ public class FuzzTestingExperiment {
 	    return hexString.toString();
 	}
 
-
 	public static class Stats {
 		private final long start = System.currentTimeMillis();
 		private final String label;
 		public long valid = 0;
 		public long invalid = 0;
 		public long inconsistent = 0;
-		public long ignored = 0;
+		public long notCanonical = 0;
+		public long hasDeadCopy = 0;
+		public long invalidPrefix = 0;
 
 		public Stats(String label) {
 			this.label=label;
 		}
 
 		public long total() {
-			return valid + invalid + inconsistent + ignored;
+			return valid + invalid + inconsistent + notCanonical + hasDeadCopy + invalidPrefix;
 		}
 
 		public void print() {
@@ -369,17 +393,14 @@ public class FuzzTestingExperiment {
 			System.out.println("{");
 			System.out.println("\tSPACE: " + label);
 			System.out.println("\tTIME: " + time + "ms");
-			System.out.println("\tTOTAL: " + (valid + invalid + ignored + inconsistent));
+			System.out.println("\tTOTAL: " + total());
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
-			System.out.println("\tIGNORED: " + ignored);
+			System.out.println("\tIGNORED(NOT CANONICAL): " + notCanonical);
+			System.out.println("\tIGNORED(HAS DEAD COPY): " + hasDeadCopy);
+			System.out.println("\tIGNORED(INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT: " + inconsistent);
 			System.out.println("}");
-		}
-
-		@Override
-		public String toString() {
-			return "[" + valid + "," + invalid + "," + inconsistent + "," + ignored + "]";
 		}
 	}
 }

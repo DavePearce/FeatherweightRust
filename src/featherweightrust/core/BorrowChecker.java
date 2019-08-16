@@ -109,6 +109,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.IndirectAssignment s) {
+		Environment R3;
 		String x = s.leftOperand().name();
 		// (1) Type operand
 		Pair<Environment, Type> p = apply(R1, l, s.rightOperand());
@@ -133,9 +134,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// (5) Check compatibility
 			check(compatible(T2, T1), INCOMPATIBLE_TYPE, s.rightOperand());
 			// Update environment
-			Environment R3 = R2.put(y, T1, m);
-			//
-			return new Pair<>(R3, null);
+			R3 = R2.put(y, T1, m);
 		} else if(T0 instanceof Type.Box) {
 			Lifetime m = C0.lifetime();
 			// T-BoxAssign
@@ -145,13 +144,15 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// (4) Check compatibility
 			check(compatible(T2, T1), INCOMPATIBLE_TYPE, s.rightOperand());
 			// Update environment
-			Environment R3 = R2.put(x, new Type.Box(T1), m);
-			//
-			return new Pair<>(R3, null);
+			R3 = R2.put(x, new Type.Box(T1), m);
 		} else {
 			syntaxError("expected mutable reference",s.leftOperand());
 			return null; // deadcode
 		}
+		//
+		check(!borrowed(R3,x), BORROWED_VARIABLE_ASSIGNMENT, s.leftOperand());
+		// Done
+		return new Pair<>(R3, null);
 	}
 
 	/**
@@ -193,6 +194,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(R.get(x.name()) != null, UNDECLARED_VARIABLE, e);
 		// Locate operand type
 		Cell C1 = R.get(x.name());
+		// Check variable x not mutable borrowed
+		check(!mutBorrowed(R, x.name()), VARIABLE_MUTABLY_BORROWED, e.operand());
 		// Check operand has reference type
 		if (C1.type() instanceof Type.Box) {
 			// T-BoxDeref
@@ -371,11 +374,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Look through all types to whether for matching borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (type instanceof Type.Borrow) {
-				Type.Borrow b = (Type.Borrow) type;
-				if (b.name().equals(var)) {
-					return true;
-				}
+			if (borrowed(type, var, false)) {
+				return true;
 			}
 		}
 		return false;
@@ -392,12 +392,22 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Look through all types to whether for matching (mutable) borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (type instanceof Type.Borrow) {
-				Type.Borrow b = (Type.Borrow) type;
-				if (b.isMutable() && b.name().equals(var)) {
-					return true;
-				}
+			if(borrowed(type,var,true)) {
+				return true;
 			}
+		}
+		return false;
+	}
+
+	public boolean borrowed(Type type, String var, boolean mut) {
+		if (type instanceof Type.Borrow) {
+			Type.Borrow b = (Type.Borrow) type;
+			if (b.name().equals(var) && (!mut || b.isMutable())) {
+				return true;
+			}
+		} else if (type instanceof Type.Box) {
+			Type.Box t = (Type.Box) type;
+			return borrowed(t.element, var, mut);
 		}
 		return false;
 	}

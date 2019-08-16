@@ -128,11 +128,31 @@ public class BorrowInvalidTests {
 
 	@Test
 	public void test_31() throws IOException {
-		// cannot assign to `y` because it is borrowed
-		String input = "{ let mut x = 0; { let mut y = &mut x; y = y; } }";
+		// [E0503]: cannot use `*x` because it was mutably borrowed
+		String input = "{ let mut x = box 0; { let mut y = &mut x; *y = box *x; } }";
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_32() throws IOException {
+		// [E0503]: cannot assign to `x` because it was mutably borrowed
+		String input = "{ let mut x = 0; { let mut y = box &mut x; x = x; } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_33() throws IOException {
+		// [E0506]: cannot assign to `*y` because it is borrowed
+		String input = "{ let mut x = 0; { let mut y = box &mut x; *y = &mut y; } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_34() throws IOException {
+		// [E0506]: cannot assign to `*x` because it is borrowed
+		String input = "{ let mut x = box 0; { let mut y = &mut x; *x = 0; } }";
+		checkInvalid(input);
+	}
 	// ==============================================================
 	// Mutable Borrowing Examples
 	// ==============================================================

@@ -59,7 +59,7 @@ public class FuzzTestingExperiment {
 	private static final String tempDir = "tmp";
 
 
-	private static final boolean VERBOSE = false;
+	private static final boolean VERBOSE = true;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
@@ -231,13 +231,13 @@ public class FuzzTestingExperiment {
 
 	public static void reportFailure(Stmt.Block b, String program, String rustc) {
 		if(VERBOSE) {
-			System.out.println("********* FAILURE");
-			System.out.println("BLOCK: " + b.toString());
-			System.out.println("PROGRAM: " + program);
-			System.out.println("HASH: " + program.toString());
-			System.out.println("RUSTC: " + (rustc == null));
+			System.err.println("********* FAILURE");
+			System.err.println("BLOCK: " + b.toString());
+			System.err.println("PROGRAM: " + program);
+			System.err.println("HASH: " + program.toString());
+			System.err.println("RUSTC: " + (rustc == null));
 			if(rustc != null) {
-				System.out.println(rustc);
+				System.err.println(rustc);
 			}
 		}
 	}

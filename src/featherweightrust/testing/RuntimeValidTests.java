@@ -83,6 +83,12 @@ public class RuntimeValidTests {
 		check(input, 123);
 	}
 
+	@Test
+	public void test_08() throws IOException {
+		String input = "{ let mut x = 0; { let mut y = x; x = y; } }";
+		check(input, null);
+	}
+
 	// ==============================================================
 	// Allocation Examples
 	// ==============================================================
@@ -160,6 +166,7 @@ public class RuntimeValidTests {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
 		check(input, 123);
 	}
+
 
 	public static void check(String input, Integer output) throws IOException {
 		check(input,output,BIG_STEP);

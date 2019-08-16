@@ -43,35 +43,39 @@ import jmodelgen.core.Domain;
 public class ModelCheckingExperiment {
 
 	/**
-	 * Configure number of threads to use.
+	 * Configure number of threads to use. You may need to hand tune this a little
+	 * to maximum performance, which makes a real difference on the big domains.
 	 */
-	private static final int NTHREADS = Runtime.getRuntime().availableProcessors();
+	private static final int NTHREADS = (Runtime.getRuntime().availableProcessors());
 
 	/**
-	 * Number of programs each thread to process in one go.
+	 * Number of programs each thread to process in one go. You may need to hand
+	 * tune this a little to maximum performance, which makes a real difference on
+	 * the big domains.
 	 */
-	private static final int BATCHSIZE = 100;
+	private static final int BATCHSIZE = 10000;
 
 	/**
 	 * Construct a thread pool to use for parallel processing.
 	 */
-	private static final ExecutorService executor = Executors
-			.newFixedThreadPool(NTHREADS);
+	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
 	public static void main(String[] args) throws Exception {
+		System.out.println("NUM THREADS: " + NTHREADS);
 		// The set of program spaces to be considered.
 //		check(new ProgramSpace(1, 1, 1, 1));
 //		check(new ProgramSpace(1, 1, 1, 2));
 //		check(new ProgramSpace(1, 1, 2, 2));
 //		check(new ProgramSpace(1, 2, 2, 2));
-		check(new ProgramSpace(2, 2, 2, 2));
+//		check(new ProgramSpace(2, 2, 2, 2));
 		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
-		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
+//		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
 //		check(new ProgramSpace(1, 3, 3, 2), 2, -1);
 		// Really hard ones
 //		check(new ProgramSpace(1, 2, 2, 2), 3, 9684);
 //		check(new ProgramSpace(2, 2, 2, 2), 3, 40864);
-		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
+//		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
+		System.exit(1);
 	}
 
 	public static void check(ProgramSpace space) throws Exception {
@@ -119,10 +123,12 @@ public class ModelCheckingExperiment {
 		if (expected < 0) {
 			System.out.print("\r(" + count + ")");
 		} else {
-			double rate = ((double) time) / count;
-			double remaining = ((expected - count) * rate) / 1000;
+			double programsPerMs = ((double) count) / time;
+			double msPerProgram = ((double) time) / count;
+			double remaining = ((expected - count) * msPerProgram) / 1000;
 			long percent = (long) (100D * (count) / expected);
-			System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
+			System.out.print("\r(" + percent + "%, " + String.format("%.2f", (programsPerMs * 1000)) + "/s, remaining "
+					+ String.format("%.2f", remaining) + "s)");
 		}
 	}
 
@@ -214,7 +220,7 @@ public class ModelCheckingExperiment {
 		public void print() {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("================================");
-			System.out.println("TIME: " + time + "ms");
+			System.out.println("TIME: " + (time/1000) + "s");
 			System.out.println("SPACE: " + label);
 			System.out.println("TOTAL: " + total());
 			System.out.println("VALID: " + valid);

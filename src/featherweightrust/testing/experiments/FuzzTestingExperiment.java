@@ -17,23 +17,23 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.testing.experiments;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
@@ -58,28 +58,35 @@ public class FuzzTestingExperiment {
 	 */
 	private static final String tempDir = "tmp";
 
-	/**
-	 * The command to use for executing the rust compiler.
-	 */
-	private static final RustCompiler RUSTC = new RustCompiler("rustc",5000);
 
 	private static final boolean VERBOSE = false;
 
+	/**
+	 * Indicate whether Rust nightly is being used. This offers better performance
+	 * as we can use the option "-Zno-codegen" to prevent the generation of object
+	 * code.
+	 */
+	private static final boolean NIGHTLY = false;
+
+	/**
+	 * The command to use for executing the rust compiler.
+	 */
+	private static final RustCompiler RUSTC = new RustCompiler("rustc", 5000, NIGHTLY);
 	/**
 	 * Configure number of threads to use.
 	 */
 	private static final int NTHREADS = Runtime.getRuntime().availableProcessors();
 
 	/**
-	 * Number of programs each thread to process in one go.
+	 * Number of programs each thread to process in one go. This can make a real
+	 * difference to the overall performance.
 	 */
-	private static final int BATCHSIZE = 100;
+	private static final int BATCHSIZE = 10;
 
 	/**
 	 * Construct a thread pool to use for parallel processing.
 	 */
-	private static final ExecutorService executor = Executors
-			.newFixedThreadPool(NTHREADS);
+	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
 	static {
 		// Force creation of temporary directory
@@ -97,8 +104,7 @@ public class FuzzTestingExperiment {
 //		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
 		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
 //		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
-		executor.awaitTermination(1000, TimeUnit.MILLISECONDS);
-		System.out.println("DONE");
+		System.exit(1);
 	}
 
 	public static void check(ProgramSpace space) throws Exception  {
@@ -164,7 +170,7 @@ public class FuzzTestingExperiment {
 			double rate = ((double) time) / count;
 			double remaining = ((expected - count) * rate)/1000;
 			long percent = (long) (100D * (count) / expected);
-			System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
+			System.out.print("\r(" + percent +  "%, " + String.format("%.2f",(rate*1000)) +  "/s, remaining " + String.format("%.2f", remaining) + "s)");
 		}
 	}
 
@@ -185,48 +191,41 @@ public class FuzzTestingExperiment {
 		} else if(hasDeadCopy(b)) {
 			stats.hasDeadCopy++;
 		} else {
-			// Construct prefix
-			String prefix = toPrefixString(b);
-			//System.out.println("PREFIX: " + prefix + " FROM: " + b);
-			// Check prefix not already seen
-//			if(INVALID_PREFIXES.containsKey(prefix)) {
-//				stats.invalidPrefix++;
-//			} else {
-				// Check using calculus
-				boolean checked = calculusCheckProgram(b);
-				// Construct rust program
-				String program = toRustProgram(b);
-				// Determine hash of program for naming
-				long hash = program.hashCode() & 0x00000000ffffffffL;
-				// Determine filename based on hash
-				String binFilename = tempDir + File.separator + hash;
-				String srcFilename = binFilename + ".rs";
-				// Create temporary file
-				createTemporaryFile(srcFilename, program);
-				// Run the rust compile
-				String rustc =  RUSTC.compile(srcFilename, tempDir);
-				boolean rustc_f = rustc == null;
-				//
-				if (checked != rustc_f) {
-					reportFailure(b,program,rustc);
-					if (rustc != null) {
-						// Rust says no, FR says yes.
-						stats.inconsistentValid++;
-					} else {
-						stats.inconsistentInvalid++;
-					}
-				} else if (checked) {
-					new File(srcFilename).delete();
-					stats.valid++;
+			// Check using calculus
+			boolean checked = calculusCheckProgram(b);
+			// Construct rust program
+			String program = toRustProgram(b);
+			// Determine hash of program for naming
+			long hash = program.hashCode() & 0x00000000ffffffffL;
+			// Determine filename based on hash
+			String binFilename = tempDir + File.separator + hash;
+			String srcFilename = binFilename + ".rs";
+			// Create temporary file
+			createTemporaryFile(srcFilename, program);
+			// Run the rust compile
+			String rustc =  RUSTC.compile(srcFilename, tempDir);
+			boolean rustc_f = rustc == null;
+			//
+			if (checked != rustc_f) {
+				reportFailure(b,program,rustc);
+				if (rustc != null) {
+					// Rust says no, FR says yes.
+					stats.inconsistentValid++;
+					stats.record(rustc);
 				} else {
-					new File(srcFilename).delete();
-					stats.invalid++;
-					// register invalid prefix
-//					INVALID_PREFIXES.put(prefix, true);
+					stats.inconsistentInvalid++;
 				}
-				// Always delete binary
+			} else if (checked) {
+				new File(srcFilename).delete();
+				stats.valid++;
+			} else {
+				new File(srcFilename).delete();
+				stats.invalid++;
+			}
+			// Always delete binary
+			if(!NIGHTLY) {
 				new File(binFilename).delete();
-			//}
+			}
 		}
 	}
 
@@ -269,29 +268,6 @@ public class FuzzTestingExperiment {
 		writer.write(contents.getBytes(StandardCharsets.UTF_8));
 		// Done creating file
 		writer.close();
-	}
-
-//	private static final ConcurrentHashMap<String,Boolean> INVALID_PREFIXES = new ConcurrentHashMap();
-
-	/**
-	 * Compute the "prefix string" for a block. That is, the string of the block
-	 * without trailing curly braces. For example, "{ let mut x = 0; }" becomes "{
-	 * let mut x = 0;".
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static String toPrefixString(Stmt.Block b) {
-		String str = b.toRustString();
-		int end = str.length();
-		while (end > 0) {
-			end = end - 1;
-			char c = str.charAt(end);
-			if (c != ' ' && c != '}') {
-				break;
-			}
-		}
-		return str.substring(0, end + 1);
 	}
 
 	/**
@@ -474,13 +450,16 @@ public class FuzzTestingExperiment {
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
+		private final HashMap<String,Integer> errors;
 
 		public Stats(String label) {
 			this.label=label;
+			this.errors = new HashMap<>();
 		}
 
 		public long total() {
-			return valid + invalid + inconsistentValid + inconsistentInvalid + notCanonical + hasDeadCopy + invalidPrefix;
+			return valid + invalid + inconsistentValid + inconsistentInvalid + notCanonical + hasDeadCopy
+					+ invalidPrefix;
 		}
 
 		public void join(Stats stats) {
@@ -491,6 +470,40 @@ public class FuzzTestingExperiment {
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
+			// Join error classifications
+			for(Map.Entry<String, Integer> e : stats.errors.entrySet()) {
+				String key = e.getKey();
+				Integer i = errors.get(key);
+				if(i != null) {
+					i = i + e.getValue();
+				} else {
+					i = e.getValue();
+				}
+				errors.put(key, i);
+			}
+		}
+
+		/**
+		 * Given the output from the RustCompiler look through to see what errors are
+		 * present and attempt to classify them.
+		 *
+		 * @param stderr
+		 * @throws IOException
+		 */
+		public void record(String stderr) throws IOException {
+			BufferedReader reader = new BufferedReader(new StringReader(stderr));
+			String line;
+			while ((line = reader.readLine()) != null) {
+				if (line.startsWith("error[E")) {
+					String errcode = line.substring(6, 11);
+					Integer i = errors.get(errcode);
+					if (i == null) {
+						errors.put(errcode, 1);
+					} else {
+						errors.put(errcode, i + 1);
+					}
+				}
+			}
 		}
 
 		public void print() {
@@ -506,6 +519,9 @@ public class FuzzTestingExperiment {
 			System.out.println("\tIGNORED(INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
+			for(Map.Entry<String, Integer> e : errors.entrySet()) {
+				System.out.println("\tINCONSISTENT (" + e.getKey() + ")=" + e.getValue());
+			}
 			System.out.println("}");
 		}
 	}

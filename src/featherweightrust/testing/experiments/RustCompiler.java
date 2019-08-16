@@ -32,10 +32,12 @@ import java.util.concurrent.TimeUnit;
 public final class RustCompiler {
 	private final String rust_cmd;
 	private final long timeout;
+	private final boolean nightly;
 
-	public RustCompiler(String rust_cmd, long timeout) {
+	public RustCompiler(String rust_cmd, long timeout, boolean nightly) {
 		this.rust_cmd = rust_cmd;
 		this.timeout = timeout;
+		this.nightly = nightly;
 	}
 
 	/**
@@ -59,7 +61,9 @@ public final class RustCompiler {
 		command.add("unused-mut");
 		command.add("--out-dir");
 		command.add(outdir);
-		command.add("-Zno-codegen");
+		if(nightly) {
+			command.add("-Zno-codegen");
+		}
 		command.add(filename);
 		// ===================================================
 		// Execute Process

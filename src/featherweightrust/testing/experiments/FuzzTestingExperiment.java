@@ -23,15 +23,22 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.testing.experiments.ModelCheckingExperiment.Stats;
 import featherweightrust.util.SyntaxError;
 import jmodelgen.core.Domain;
 
@@ -56,37 +63,90 @@ public class FuzzTestingExperiment {
 	 */
 	private static final RustCompiler RUSTC = new RustCompiler("rustc",5000);
 
+	private static final boolean VERBOSE = false;
+
+	/**
+	 * Configure number of threads to use.
+	 */
+	private static final int NTHREADS = Runtime.getRuntime().availableProcessors();
+
+	/**
+	 * Number of programs each thread to process in one go.
+	 */
+	private static final int BATCHSIZE = 100;
+
+	/**
+	 * Construct a thread pool to use for parallel processing.
+	 */
+	private static final ExecutorService executor = Executors
+			.newFixedThreadPool(NTHREADS);
+
 	static {
 		// Force creation of temporary directory
 		new File(tempDir).mkdirs();
 	}
 	//
-	public static void main(String[] args) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static void main(String[] args) throws Exception {
+		System.out.println("NUM THREADS: " + NTHREADS);
 		// Complete domains
 //		check(new ProgramSpace(1, 1, 1, 1));
 //		check(new ProgramSpace(1, 1, 1, 2));
 //		check(new ProgramSpace(1, 1, 2, 2));
 		// Constrained domains
 //		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
-		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
-//		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
+//		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
+		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
 //		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+		executor.awaitTermination(1000, TimeUnit.MILLISECONDS);
+		System.out.println("DONE");
 	}
 
-	public static void check(ProgramSpace space) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static void check(ProgramSpace space) throws Exception  {
 		Domain.Big<Stmt.Block> domain = space.domain();
 		check(domain,domain.bigSize().longValueExact(),space.toString());
 	}
 
-	public static void check(ProgramSpace space, int maxBlocks, long expected) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static void check(ProgramSpace space, int maxBlocks, long expected) throws Exception {
 		check(space.definedVariableWalker(maxBlocks), expected, space.toString() + "{def," + maxBlocks + "}");
 	}
 
-	public static void check(Iterable<Stmt.Block> space, long expected, String label) throws NoSuchAlgorithmException, IOException, InterruptedException {
+
+	/**
+	 * Space a space of statements using n threads with a given batch size.
+	 *
+	 * @param space
+	 * @param nthreads
+	 * @param batch
+	 * @param expected
+	 * @param label
+	 * @throws NoSuchAlgorithmException
+	 * @throws IOException
+	 * @throws InterruptedException
+	 * @throws ExecutionException
+	 */
+	public static void check(Iterable<Stmt.Block> space, long expected, String label)
+			throws NoSuchAlgorithmException, IOException, InterruptedException, ExecutionException {
+		// Construct temporary memory areas
+		Stmt.Block[][] arrays = new Stmt.Block[NTHREADS][BATCHSIZE];
+		Future<Stats>[] threads = new Future[NTHREADS];
+		//
+		Iterator<Stmt.Block> iterator = space.iterator();
 		Stats stats = new Stats(label);
 		//
-		for(Stmt.Block s : space) {
-			check(s, stats);
+		while(iterator.hasNext()) {
+			// Create next batch
+			for (int i = 0; i != NTHREADS; ++i) {
+				copyToArray(arrays[i], iterator);
+			}
+			// Submit next batch for process
+			for (int i = 0; i != NTHREADS; ++i) {
+				final Stmt.Block[] batch = arrays[i];
+				threads[i] = executor.submit(() -> check(batch));
+			}
+			// Join all back together
+			for (int i = 0; i != NTHREADS; ++i) {
+				stats.join(threads[i].get());
+			}
 			// Report
 			reportProgress(stats,expected);
 		}
@@ -99,18 +159,24 @@ public class FuzzTestingExperiment {
 		long time = System.currentTimeMillis() - stats.start;
 		//
 		if(expected < 0) {
-			if((count % 10_000_000) == 0) {
-				System.out.print("\r(" + count + ")");
-			}
+			System.out.print("\r(" + count + ")");
 		} else {
-			long delta = expected / 100;
 			double rate = ((double) time) / count;
 			double remaining = ((expected - count) * rate)/1000;
-			if(delta == 0 || count % delta == 0) {
-				long percent = (long) (100D * (count) / expected);
-				System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
+			long percent = (long) (100D * (count) / expected);
+			System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
+		}
+	}
+
+	public static Stats check(Stmt.Block[] batch) throws NoSuchAlgorithmException, IOException, InterruptedException {
+		Stats stats = new Stats(null);
+		for(int i=0;i!=batch.length;++i) {
+			Stmt.Block block = batch[i];
+			if(block != null) {
+				check(block,stats);
 			}
 		}
+		return stats;
 	}
 
 	public static void check(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
@@ -123,9 +189,9 @@ public class FuzzTestingExperiment {
 			String prefix = toPrefixString(b);
 			//System.out.println("PREFIX: " + prefix + " FROM: " + b);
 			// Check prefix not already seen
-			if(INVALID_PREFIXES.contains(prefix)) {
-				stats.invalidPrefix++;
-			} else {
+//			if(INVALID_PREFIXES.containsKey(prefix)) {
+//				stats.invalidPrefix++;
+//			} else {
 				// Check using calculus
 				boolean checked = calculusCheckProgram(b);
 				// Construct rust program
@@ -142,15 +208,13 @@ public class FuzzTestingExperiment {
 				boolean rustc_f = rustc == null;
 				//
 				if (checked != rustc_f) {
-					System.out.println("********* FAILURE");
-					System.out.println("BLOCK: " + b.toString());
-					System.out.println("PROGRAM: " + program);
-					System.out.println("HASH: " + program.toString());
-					System.out.println("RUSTC: " + rustc_f);
+					reportFailure(b,program,rustc);
 					if (rustc != null) {
-						System.out.println(rustc);
+						// Rust says no, FR says yes.
+						stats.inconsistentValid++;
+					} else {
+						stats.inconsistentInvalid++;
 					}
-					stats.inconsistent++;
 				} else if (checked) {
 					new File(srcFilename).delete();
 					stats.valid++;
@@ -158,10 +222,23 @@ public class FuzzTestingExperiment {
 					new File(srcFilename).delete();
 					stats.invalid++;
 					// register invalid prefix
-					INVALID_PREFIXES.add(prefix);
+//					INVALID_PREFIXES.put(prefix, true);
 				}
 				// Always delete binary
 				new File(binFilename).delete();
+			//}
+		}
+	}
+
+	public static void reportFailure(Stmt.Block b, String program, String rustc) {
+		if(VERBOSE) {
+			System.out.println("********* FAILURE");
+			System.out.println("BLOCK: " + b.toString());
+			System.out.println("PROGRAM: " + program);
+			System.out.println("HASH: " + program.toString());
+			System.out.println("RUSTC: " + (rustc == null));
+			if(rustc != null) {
+				System.out.println(rustc);
 			}
 		}
 	}
@@ -194,7 +271,7 @@ public class FuzzTestingExperiment {
 		writer.close();
 	}
 
-	private static final HashSet<String> INVALID_PREFIXES = new HashSet<>();
+//	private static final ConcurrentHashMap<String,Boolean> INVALID_PREFIXES = new ConcurrentHashMap();
 
 	/**
 	 * Compute the "prefix string" for a block. That is, the string of the block
@@ -323,7 +400,6 @@ public class FuzzTestingExperiment {
 	private static void addVariableUses(Expr expr, Set<String> uses) {
 		if(expr instanceof Expr.Variable) {
 			Expr.Variable e = (Expr.Variable) expr;
-			HashSet<String> result = new HashSet<>();
 			uses.add(e.name());
 		} else if(expr instanceof Expr.Copy) {
 			Expr.Copy e = (Expr.Copy) expr;
@@ -374,36 +450,62 @@ public class FuzzTestingExperiment {
 	    return hexString.toString();
 	}
 
-	public static class Stats {
+	private static <T> int copyToArray(T[] array, Iterator<T> b) {
+		int i = 0;
+		// Read items into array
+		while (b.hasNext() && i < array.length) {
+			array[i++] = b.next();
+		}
+		// Reset any trailing items
+		for (; i < array.length; ++i) {
+			array[i] = null;
+		}
+		// Done
+		return i;
+	}
+
+	private final static class Stats {
 		private final long start = System.currentTimeMillis();
 		private final String label;
 		public long valid = 0;
 		public long invalid = 0;
-		public long inconsistent = 0;
 		public long notCanonical = 0;
 		public long hasDeadCopy = 0;
 		public long invalidPrefix = 0;
+		public long inconsistentValid = 0;
+		public long inconsistentInvalid = 0;
 
 		public Stats(String label) {
 			this.label=label;
 		}
 
 		public long total() {
-			return valid + invalid + inconsistent + notCanonical + hasDeadCopy + invalidPrefix;
+			return valid + invalid + inconsistentValid + inconsistentInvalid + notCanonical + hasDeadCopy + invalidPrefix;
+		}
+
+		public void join(Stats stats) {
+			this.valid += stats.valid;
+			this.invalid += stats.invalid;
+			this.notCanonical += stats.notCanonical;
+			this.hasDeadCopy += stats.hasDeadCopy;
+			this.invalidPrefix += stats.invalidPrefix;
+			this.inconsistentValid += stats.inconsistentValid;
+			this.inconsistentInvalid += stats.inconsistentInvalid;
 		}
 
 		public void print() {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("{");
 			System.out.println("\tSPACE: " + label);
-			System.out.println("\tTIME: " + time + "ms");
+			System.out.println("\tTIME: " + (time/1000) + "s");
 			System.out.println("\tTOTAL: " + total());
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
 			System.out.println("\tIGNORED(NOT CANONICAL): " + notCanonical);
 			System.out.println("\tIGNORED(HAS DEAD COPY): " + hasDeadCopy);
 			System.out.println("\tIGNORED(INVALID PREFIX): " + invalidPrefix);
-			System.out.println("\tINCONSISTENT: " + inconsistent);
+			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
+			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
 			System.out.println("}");
 		}
 	}

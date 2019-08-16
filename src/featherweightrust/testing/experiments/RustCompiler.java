@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  * @author David J. Pearce
  *
  */
-public class RustCompiler {
+public final class RustCompiler {
 	private final String rust_cmd;
 	private final long timeout;
 
@@ -59,6 +59,7 @@ public class RustCompiler {
 		command.add("unused-mut");
 		command.add("--out-dir");
 		command.add(outdir);
+		command.add("-Zno-codegen");
 		command.add(filename);
 		// ===================================================
 		// Execute Process

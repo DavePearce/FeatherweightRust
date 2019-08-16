@@ -17,19 +17,17 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.testing.experiments;
 
-import java.io.IOException;
-import java.math.BigInteger;
 import java.util.Iterator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.core.Syntax.Value;
-import featherweightrust.testing.experiments.FuzzTestingExperiment.Stats;
 import featherweightrust.util.AbstractSemantics;
-import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 import jmodelgen.core.Domain;
 
@@ -44,15 +42,31 @@ import jmodelgen.core.Domain;
  */
 public class ModelCheckingExperiment {
 
-	public static void main(String[] args) throws IOException {
+	/**
+	 * Configure number of threads to use.
+	 */
+	private static final int NTHREADS = Runtime.getRuntime().availableProcessors();
+
+	/**
+	 * Number of programs each thread to process in one go.
+	 */
+	private static final int BATCHSIZE = 100;
+
+	/**
+	 * Construct a thread pool to use for parallel processing.
+	 */
+	private static final ExecutorService executor = Executors
+			.newFixedThreadPool(NTHREADS);
+
+	public static void main(String[] args) throws Exception {
 		// The set of program spaces to be considered.
 //		check(new ProgramSpace(1, 1, 1, 1));
 //		check(new ProgramSpace(1, 1, 1, 2));
 //		check(new ProgramSpace(1, 1, 2, 2));
 //		check(new ProgramSpace(1, 2, 2, 2));
 		check(new ProgramSpace(2, 2, 2, 2));
-//		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
-//		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
+		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
 //		check(new ProgramSpace(1, 3, 3, 2), 2, -1);
 		// Really hard ones
 //		check(new ProgramSpace(1, 2, 2, 2), 3, 9684);
@@ -60,21 +74,39 @@ public class ModelCheckingExperiment {
 		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
 	}
 
-	public static void check(ProgramSpace space) {
+	public static void check(ProgramSpace space) throws Exception {
 		Domain.Big<Stmt.Block> domain = space.domain();
 		check(domain,domain.bigSize().longValueExact(),space.toString());
 	}
 
-	public static void check(ProgramSpace space, int maxBlocks, long expected) {
+	public static void check(ProgramSpace space, int maxBlocks, long expected) throws Exception {
 		check(space.definedVariableWalker(maxBlocks), expected, space.toString() + "{def," + maxBlocks + "}");
 	}
 
-	public static void check(Iterable<Stmt.Block> space, long expected, String label) {
+	public static void check(Iterable<Stmt.Block> space, long expected, String label) throws Exception {
+		// Construct temporary memory areas
+		Stmt.Block[][] arrays = new Stmt.Block[NTHREADS][BATCHSIZE];
+		Future<Stats>[] threads = new Future[NTHREADS];
+		//
+		Iterator<Stmt.Block> iterator = space.iterator();
 		Stats stats = new Stats(label);
-		for(Stmt.Block s : space) {
-			runAndCheck(s, ProgramSpace.ROOT, stats);
+		//
+		while (iterator.hasNext()) {
+			// Create next batch
+			for (int i = 0; i != NTHREADS; ++i) {
+				copyToArray(arrays[i], iterator);
+			}
+			// Submit next batch for process
+			for (int i = 0; i != NTHREADS; ++i) {
+				final Stmt.Block[] batch = arrays[i];
+				threads[i] = executor.submit(() -> check(batch, ProgramSpace.ROOT));
+			}
+			// Join all back together
+			for (int i = 0; i != NTHREADS; ++i) {
+				stats.join(threads[i].get());
+			}
 			// Report
-			reportProgress(stats,expected);
+			reportProgress(stats, expected);
 		}
 		//
 		stats.print();
@@ -84,26 +116,32 @@ public class ModelCheckingExperiment {
 		long count = stats.total();
 		long time = System.currentTimeMillis() - stats.start;
 		//
-		if(expected < 0) {
-			if((count % 10_000_000) == 0) {
-				System.out.print("\r(" + count + ")");
-			}
+		if (expected < 0) {
+			System.out.print("\r(" + count + ")");
 		} else {
-			long delta = expected / 100;
 			double rate = ((double) time) / count;
-			double remaining = ((expected - count) * rate)/1000;
-			if(delta == 0 || count % delta == 0) {
-				long percent = (long) (100D * (count) / expected);
-				System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
+			double remaining = ((expected - count) * rate) / 1000;
+			long percent = (long) (100D * (count) / expected);
+			System.out.print("\r(" + percent + "%, remaining " + String.format("%.2f", remaining) + "s)");
+		}
+	}
+
+	public static Stats check(Stmt.Block[] batch, Lifetime lifetime) throws Exception {
+		Stats stats = new Stats(null);
+		for(int i=0;i!=batch.length;++i) {
+			Stmt.Block block = batch[i];
+			if(block != null) {
+				check(block,lifetime,stats);
 			}
 		}
+		return stats;
 	}
 
 	// NOTE: must use BigStep semantics because its more efficient!
 	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
 	public static final BorrowChecker checker = new BorrowChecker("");
 
-	public static void runAndCheck(Stmt.Block stmt, Lifetime lifetime, Stats stats) {
+	public static void check(Stmt.Block stmt, Lifetime lifetime, Stats stats) {
 		boolean ran = false;
 		boolean checked = false;
 		Exception error = null;
@@ -136,7 +174,21 @@ public class ModelCheckingExperiment {
 		}
 	}
 
-	public static class Stats {
+	private static <T> int copyToArray(T[] array, Iterator<T> b) {
+		int i = 0;
+		// Read items into array
+		while (b.hasNext() && i < array.length) {
+			array[i++] = b.next();
+		}
+		// Reset any trailing items
+		for (; i < array.length; ++i) {
+			array[i] = null;
+		}
+		// Done
+		return i;
+	}
+
+	private final static class Stats {
 		private final long start = System.currentTimeMillis();
 
 		private String label;
@@ -148,6 +200,13 @@ public class ModelCheckingExperiment {
 
 		public Stats(String label) {
 			this.label = label;
+		}
+
+		public void join(Stats stats) {
+			this.valid += stats.valid;
+			this.invalid += stats.invalid;
+			this.falsepos += stats.falsepos;
+			this.falseneg += stats.falseneg;
 		}
 
 		public long total() { return valid + invalid + falsepos; }

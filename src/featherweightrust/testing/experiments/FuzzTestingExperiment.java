@@ -52,21 +52,20 @@ import jmodelgen.core.Domain;
 public class FuzzTestingExperiment {
 	/**
 	 * Temporary directory into which rust programs are placed.
-	 *
-	 * NOTE: mounting this as tmpfs (i.e. in memory file system) makes a big
-	 * difference.
 	 */
 	private static final String tempDir = "tmp";
 
-
-	private static final boolean VERBOSE = true;
+	/**
+	 * Flag whether to report failures to the console or not.
+	 */
+	private static final boolean VERBOSE = false;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
 	 * as we can use the option "-Zno-codegen" to prevent the generation of object
 	 * code.
 	 */
-	private static final boolean NIGHTLY = false;
+	private static final boolean NIGHTLY = true;
 
 	/**
 	 * The command to use for executing the rust compiler.
@@ -102,8 +101,8 @@ public class FuzzTestingExperiment {
 		// Constrained domains
 //		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
 //		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
-		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
-//		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+//		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
+		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
 		System.exit(1);
 	}
 
@@ -168,9 +167,13 @@ public class FuzzTestingExperiment {
 			System.out.print("\r(" + count + ")");
 		} else {
 			double rate = ((double) time) / count;
-			double remaining = ((expected - count) * rate)/1000;
+			double remainingMS = (expected - count) * rate;
+			long remainingS = ((long)remainingMS/1000) % 60;
+			long remainingM = ((long)remainingMS/(60*1000)) % 60;
+			long remainingH = ((long)remainingMS/(60*60*1000));
 			long percent = (long) (100D * (count) / expected);
-			System.out.print("\r(" + percent +  "%, " + String.format("%.2f",(rate*1000)) +  "/s, remaining " + String.format("%.2f", remaining) + "s)");
+			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
+			System.out.print("\r(" + percent +  "%, " + String.format("%.0f",(rate*1000)) +  "/s, remaining " + remaining + ")           ");
 		}
 	}
 
@@ -214,6 +217,10 @@ public class FuzzTestingExperiment {
 					stats.record(rustc);
 				} else {
 					stats.inconsistentInvalid++;
+				}
+				if(!VERBOSE) {
+					// Delete erronous rust source file
+					new File(srcFilename).delete();
 				}
 			} else if (checked) {
 				new File(srcFilename).delete();

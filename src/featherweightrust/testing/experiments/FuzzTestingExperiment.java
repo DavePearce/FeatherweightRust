@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -44,6 +45,7 @@ import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Type;
+import featherweightrust.util.OptArg;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 import jmodelgen.core.Domain;
@@ -59,24 +61,24 @@ public class FuzzTestingExperiment {
 	/**
 	 * Temporary directory into which rust programs are placed.
 	 */
-	private static final String tempDir = "/local/scratch/tmp";
+	private static final String tempDir = "tmp";
 
 	/**
 	 * Flag whether to report failures to the console or not.
 	 */
-	private static final boolean VERBOSE = true;
+	private static boolean VERBOSE = true;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
 	 * as we can use the option "-Zno-codegen" to prevent the generation of object
 	 * code.
 	 */
-	private static final boolean NIGHTLY = true;
+	private static boolean NIGHTLY = false;
 
 	/**
 	 * The command to use for executing the rust compiler.
 	 */
-	private static final RustCompiler RUSTC = new RustCompiler("/local/scratch/cargo/bin/rustc", 5000, NIGHTLY);
+	private static final RustCompiler RUSTC = new RustCompiler("rustc", 5000, NIGHTLY);
 	/**
 	 * Configure number of threads to use.
 	 */
@@ -99,31 +101,76 @@ public class FuzzTestingExperiment {
 		// Force creation of temporary directory
 		new File(tempDir).mkdirs();
 	}
+	/**
+	 * Command-line options
+	 */
+	private static final OptArg[] OPTIONS = {
+			new OptArg("verbose","v",OptArg.BOOL,"set expected domain size",false),
+			new OptArg("nightly","n",OptArg.BOOL,"specify rust nightly available",false),
+			new OptArg("expected","e",OptArg.LONG,"set expected domain size",-1L),
+			new OptArg("ints","i",OptArg.INT,"set maximum number of integers",1),
+			new OptArg("vars","n",OptArg.INT,"set maximum number of variables",1),
+			new OptArg("depth","d",OptArg.INT,"set maximum block nesting",1),
+			new OptArg("width","w",OptArg.INT,"set maximum block width",1),
+			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
+			new OptArg("first","f",OptArg.LONG,"set domain index to start iterating from",-1L),
+			new OptArg("last","l",OptArg.LONG,"set domain index to iterate up to (exclusive)",-1L),
+	};
 	//
-	public static void main(String[] args) throws Exception {
+	public static void main(String[] _args) throws Exception {
 		System.out.println("NUM THREADS: " + NTHREADS);
-		// Complete domains
-//		check(new ProgramSpace(1, 1, 1, 1));
-//		check(new ProgramSpace(1, 1, 1, 2));
-//		check(new ProgramSpace(1, 1, 2, 2));
-		// Constrained domains
-//		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
-		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
-		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
-//		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
-//		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
+		List<String> args = new ArrayList<>(Arrays.asList(_args));
+		if(args.size() == 0) {
+			System.out.println("usage: java Main <options> target");
+			System.out.println();
+			OptArg.usage(System.out, OPTIONS);
+		} else {
+			Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
+			int i = (Integer) options.get("ints");
+			int v = (Integer) options.get("vars");
+			int d = (Integer) options.get("depth");
+			int w = (Integer) options.get("width");
+			int c = (Integer) options.get("constrained");
+			long expected = (Long) options.get("expected");
+			long first = (Long) options.get("first");
+			long last = (Long) options.get("last");
+			//
+			VERBOSE = (Boolean) options.get("verbose");
+			NIGHTLY = (Boolean) options.get("nightly");
+			System.out.println("VERBOSE: " + VERBOSE);
+			//
+			ProgramSpace space = new ProgramSpace(i, v, d, w);
+			Iterator<Stmt.Block> iterator;
+			String label;
+			// Create iterator
+			if(c >= 0) {
+				iterator = space.definedVariableWalker(c).iterator();
+				label = space.toString() + "{def," + c + "}";
+			} else {
+				// Get domain
+				Domain.Big<Stmt.Block> domain = space.domain();
+				// Determine expected size
+				expected = domain.bigSize().longValueExact();
+				// Get iterator
+				iterator = domain.iterator();
+				//
+				label = space.toString();
+			}
+			// Slice iterator (if applicable)
+			if(first >= 0 || last >= 0) {
+				first = Math.max(0, first);
+				last = Math.min(last, expected);
+				// Create sliced iterator
+				iterator = new SliceIterator(iterator,first,last);
+				// Update expected
+				expected = last - first;
+			}
+			// Done
+			check(iterator, expected, label);
+		}
+		// Done
 		System.exit(1);
 	}
-
-	public static void check(ProgramSpace space) throws Exception  {
-		Domain.Big<Stmt.Block> domain = space.domain();
-		check(domain,domain.bigSize().longValueExact(),space.toString());
-	}
-
-	public static void check(ProgramSpace space, int maxBlocks, long expected) throws Exception {
-		check(space.definedVariableWalker(maxBlocks), expected, space.toString() + "{def," + maxBlocks + "}");
-	}
-
 
 	/**
 	 * Space a space of statements using n threads with a given batch size.
@@ -138,13 +185,11 @@ public class FuzzTestingExperiment {
 	 * @throws InterruptedException
 	 * @throws ExecutionException
 	 */
-	public static void check(Iterable<Stmt.Block> space, long expected, String label)
+	public static void check(Iterator<Stmt.Block> iterator, long expected, String label)
 			throws NoSuchAlgorithmException, IOException, InterruptedException, ExecutionException {
 		// Construct temporary memory areas
 		Stmt.Block[][] arrays = new Stmt.Block[NTHREADS][BATCHSIZE];
 		Future<Stats>[] threads = new Future[NTHREADS];
-		//
-		Iterator<Stmt.Block> iterator = space.iterator();
 		Stats stats = new Stats(label);
 		//
 		while(iterator.hasNext()) {
@@ -169,6 +214,8 @@ public class FuzzTestingExperiment {
 	}
 
 	public static void reportProgress(Stats stats, long expected) {
+		stats.print();
+
 		long count = stats.total();
 		long time = System.currentTimeMillis() - stats.start;
 		//
@@ -442,6 +489,33 @@ public class FuzzTestingExperiment {
 		}
 		// Done
 		return i;
+	}
+
+	private final static class SliceIterator<T> implements Iterator<T> {
+		private final Iterator<T> iter;
+		private long count;
+
+		public SliceIterator(Iterator<T> iter, long start, long end) {
+			this.count = (end - start);
+			// Skip forward
+			while (start > 0) {
+				iter.next();
+				start = start - 1;
+			}
+			this.iter = iter;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return count > 0 && iter.hasNext();
+		}
+
+		@Override
+		public T next() {
+			count = count - 1;
+			return iter.next();
+		}
+
 	}
 
 	/**

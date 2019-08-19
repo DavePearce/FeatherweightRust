@@ -59,7 +59,6 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
-
 	// ==============================================================
 	// Immutable Borrowing Examples
 	// ==============================================================
@@ -88,75 +87,83 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
+	// ==============================================================
+	// Mutable Borrowing Examples
+	// ==============================================================
+
+
 	@Test
-	public void test_24() throws IOException {
+	public void test_30() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &x; let mut z = &mut y; { let mut w = 1; *z = &w; } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_25() throws IOException {
+	public void test_31() throws IOException {
 		String input = "{ let mut x = 0; let mut y = &mut x; let mut z = &mut y; *z = z; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_26() throws IOException {
+	public void test_32() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut x = 123; let mut z = &x; *z } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_28() throws IOException {
+	public void test_33() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &x; *z } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_29() throws IOException {
+	public void test_34() throws IOException {
 		//  cannot assign to `y` because it is borrowed
 		String input = "{ let mut x = 0; { let mut y = &mut x; y = &mut y; } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_30() throws IOException {
+	public void test_35() throws IOException {
 		// mismatched types (types differ in mutability)
 		String input = "{ let mut x = 0; { let mut y = &mut x; y = &y; } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_31() throws IOException {
+	public void test_36() throws IOException {
 		// [E0503]: cannot use `*x` because it was mutably borrowed
 		String input = "{ let mut x = box 0; { let mut y = &mut x; *y = box *x; } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_32() throws IOException {
+	public void test_37() throws IOException {
 		// [E0503]: cannot assign to `x` because it was mutably borrowed
 		String input = "{ let mut x = 0; { let mut y = box &mut x; x = x; } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_33() throws IOException {
+	public void test_38() throws IOException {
 		// [E0506]: cannot assign to `*y` because it is borrowed
 		String input = "{ let mut x = 0; { let mut y = box &mut x; *y = &mut y; } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_34() throws IOException {
+	public void test_39() throws IOException {
 		// [E0506]: cannot assign to `*x` because it is borrowed
 		String input = "{ let mut x = box 0; { let mut y = &mut x; *x = 0; } }";
 		checkInvalid(input);
 	}
-	// ==============================================================
-	// Mutable Borrowing Examples
-	// ==============================================================
 
+	@Test
+	public void test_40() throws IOException {
+		// [E0503]: cannot use `x` because it was mutably borrowed
+		String input = "{ let mut x = 0; { let mut y = &mut x; *y = !x; } }";
+		checkInvalid(input);
+	}
 
 	public static void checkInvalid(String input) throws IOException {
 		Lifetime globalLifetime = new Lifetime();

@@ -14,7 +14,7 @@ use rustc_interface::interface;
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
-    rustc_driver::run_compiler(&args, &mut Calls, None, None);
+    rustc_driver::run_compiler(&args, &mut DefaultCallBacks, None, None);
 }
 
 struct Calls;

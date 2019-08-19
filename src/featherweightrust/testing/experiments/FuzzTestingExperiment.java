@@ -17,6 +17,7 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.testing.experiments;
 
+import java.util.List;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -25,11 +26,13 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,7 +41,10 @@ import java.util.concurrent.Future;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Type;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 import jmodelgen.core.Domain;
 
@@ -53,12 +59,12 @@ public class FuzzTestingExperiment {
 	/**
 	 * Temporary directory into which rust programs are placed.
 	 */
-	private static final String tempDir = "tmp";
+	private static final String tempDir = "/local/scratch/tmp";
 
 	/**
 	 * Flag whether to report failures to the console or not.
 	 */
-	private static final boolean VERBOSE = false;
+	private static final boolean VERBOSE = true;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
@@ -70,7 +76,7 @@ public class FuzzTestingExperiment {
 	/**
 	 * The command to use for executing the rust compiler.
 	 */
-	private static final RustCompiler RUSTC = new RustCompiler("rustc", 5000, NIGHTLY);
+	private static final RustCompiler RUSTC = new RustCompiler("/local/scratch/cargo/bin/rustc", 5000, NIGHTLY);
 	/**
 	 * Configure number of threads to use.
 	 */
@@ -87,6 +93,8 @@ public class FuzzTestingExperiment {
 	 */
 	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
+	private static final ConcurrentHashMap<String,Boolean> INVALID_PREFIXES = new ConcurrentHashMap<>();
+
 	static {
 		// Force creation of temporary directory
 		new File(tempDir).mkdirs();
@@ -100,9 +108,10 @@ public class FuzzTestingExperiment {
 //		check(new ProgramSpace(1, 1, 2, 2));
 		// Constrained domains
 //		check(new ProgramSpace(1, 1, 2, 2), 2, 1400);
-//		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
-//		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
-		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+		check(new ProgramSpace(1, 2, 2, 2), 2, 4208);
+		check(new ProgramSpace(2, 2, 2, 2), 2, 11280);
+//		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
+//		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
 		System.exit(1);
 	}
 
@@ -173,7 +182,7 @@ public class FuzzTestingExperiment {
 			long remainingH = ((long)remainingMS/(60*60*1000));
 			long percent = (long) (100D * (count) / expected);
 			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-			System.out.print("\r(" + percent +  "%, " + String.format("%.0f",(rate*1000)) +  "/s, remaining " + remaining + ")           ");
+			System.out.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
 		}
 	}
 
@@ -191,65 +200,76 @@ public class FuzzTestingExperiment {
 	public static void check(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		if(!isCanonical(b)) {
 			stats.notCanonical++;
-		} else if(hasDeadCopy(b)) {
-			stats.hasDeadCopy++;
+		} else if(hasCopy(b)) {
+			stats.hasCopy++;
 		} else {
-			// Check using calculus
-			boolean checked = calculusCheckProgram(b);
-			// Construct rust program
-			String program = toRustProgram(b);
-			// Determine hash of program for naming
-			long hash = program.hashCode() & 0x00000000ffffffffL;
-			// Determine filename based on hash
-			String binFilename = tempDir + File.separator + hash;
-			String srcFilename = binFilename + ".rs";
-			// Create temporary file
-			createTemporaryFile(srcFilename, program);
-			// Run the rust compile
-			String rustc =  RUSTC.compile(srcFilename, tempDir);
-			boolean rustc_f = rustc == null;
+			String prefix = toPrefixString(b);
 			//
-			if (checked != rustc_f) {
-				reportFailure(b,program,rustc);
-				if (rustc != null) {
-					// Rust says no, FR says yes.
-					stats.inconsistentValid++;
-					stats.record(rustc);
-				} else {
-					stats.inconsistentInvalid++;
-				}
-				if(!VERBOSE) {
-					// Delete erronous rust source file
-					new File(srcFilename).delete();
-				}
-			} else if (checked) {
-				new File(srcFilename).delete();
-				stats.valid++;
+			if(INVALID_PREFIXES.containsKey(prefix)) {
+				stats.invalidPrefix++;
 			} else {
-				new File(srcFilename).delete();
-				stats.invalid++;
-			}
-			// Always delete binary
-			if(!NIGHTLY) {
-				new File(binFilename).delete();
+				// Check using calculus
+				boolean checked = calculusCheckProgram(b);
+				// Construct rust program
+				String program = toRustProgram(b);
+				// Determine hash of program for naming
+				long hash = program.hashCode() & 0x00000000ffffffffL;
+				// Determine filename based on hash
+				String binFilename = tempDir + File.separator + hash;
+				String srcFilename = binFilename + ".rs";
+				// Create temporary file
+				createTemporaryFile(srcFilename, program);
+				// Run the rust compile
+				Pair<Boolean,String> p =  RUSTC.compile(srcFilename, tempDir);
+				boolean status = p.first();
+				String stderr = p.second();
+				//
+				if (checked != status) {
+					reportFailure(b,program,status,stderr);
+					stats.record(stderr);
+					if (status) {
+						stats.inconsistentInvalid++;
+					} else {
+						// Rust says no, FR says yes.
+						stats.inconsistentValid++;
+					}
+					if(!VERBOSE) {
+						// Delete erronous rust source file
+						new File(srcFilename).delete();
+					}
+				} else if (checked) {
+					new File(srcFilename).delete();
+					stats.valid++;
+				} else {
+					new File(srcFilename).delete();
+					stats.invalid++;
+					// Record invalid prefix
+					INVALID_PREFIXES.put(prefix, true);
+				}
+				// Always delete binary
+				if(!NIGHTLY) {
+					new File(binFilename).delete();
+				}
 			}
 		}
 	}
 
-	public static void reportFailure(Stmt.Block b, String program, String rustc) {
+	public static void reportFailure(Stmt.Block b, String program, boolean status, String stderr) throws IOException {
 		if(VERBOSE) {
+			// Determine hash of program for naming
+			long hash = program.hashCode() & 0x00000000ffffffffL;
 			System.err.println("********* FAILURE");
 			System.err.println("BLOCK: " + b.toString());
 			System.err.println("PROGRAM: " + program);
-			System.err.println("HASH: " + program.toString());
-			System.err.println("RUSTC: " + (rustc == null));
-			if(rustc != null) {
-				System.err.println(rustc);
+			System.err.println("HASH: " + hash);
+			System.err.println("RUSTC: " + status);
+			if(stderr != null) {
+				System.err.println(stderr);
 			}
 		}
 	}
 
-	public static final BorrowChecker checker = new BorrowChecker("");
+	public static final BorrowChecker checker = new ExtendedBorrowChecker("");
 
 	/**
 	 * Borrow check the program using the borrow checker which is part of this
@@ -323,80 +343,36 @@ public class FuzzTestingExperiment {
 	 * @param stmt
 	 * @return
 	 */
-	public static boolean hasDeadCopy(Stmt stmt) {
-		try{
-			hasDeadCopy(stmt,new HashSet<>());
-			return false;
-		} catch(IllegalArgumentException e) {
-			return true;
-		}
-	}
-
-	private static  Set<String> hasDeadCopy(Stmt stmt, Set<String> live) {
+	private static boolean hasCopy(Stmt stmt) {
 		if(stmt instanceof Stmt.Block) {
 			Stmt.Block b = (Stmt.Block) stmt;
 			// Go backwards through the block for obvious reasons.
-			for (int i = b.size() - 1; i >= 0; --i) {
-				live = hasDeadCopy(b.get(i), live);
+			for (int i = 0; i != b.size(); ++i) {
+				if (hasCopy(b.get(i))) {
+					return true;
+				}
 			}
-			return live;
+			return false;
 		} else if(stmt instanceof Stmt.Let) {
 			Stmt.Let s = (Stmt.Let) stmt;
-			live.remove(s.variable().name());
-			hasDeadCopy(s.initialiser(),live);
-			addVariableUses(s.initialiser(),live);
+			return hasCopy(s.initialiser());
 		} else if(stmt instanceof Stmt.Assignment) {
 			Stmt.Assignment s = (Stmt.Assignment) stmt;
-			live.remove(s.lhs.name());
-			hasDeadCopy(s.rightOperand(),live);
-			addVariableUses(s.rightOperand(),live);
+			return hasCopy(s.rightOperand());
 		} else {
 			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
-			hasDeadCopy(s.leftOperand(),live);
-			hasDeadCopy(s.rightOperand(),live);
-			addVariableUses(s.leftOperand(),live);
-			addVariableUses(s.rightOperand(),live);
+			return hasCopy(s.leftOperand()) || hasCopy(s.rightOperand());
 		}
-		return live;
 	}
 
-	private static void hasDeadCopy(Expr expr, Set<String> live) {
+	private static boolean hasCopy(Expr expr) {
 		if(expr instanceof Expr.Copy) {
-			Expr.Copy e = (Expr.Copy) expr;
-			if(!live.contains(e.operand().name())) {
-				// dead copy detected
-				throw new IllegalArgumentException("dead copy detected");
-			}
-			hasDeadCopy(e.operand(),live);
-		} else if(expr instanceof Expr.Borrow) {
-			Expr.Borrow e = (Expr.Borrow) expr;
-			hasDeadCopy(e.operand(),live);
+			return true;
 		} else if(expr instanceof Expr.Box) {
 			Expr.Box e = (Expr.Box) expr;
-			hasDeadCopy(e.operand(),live);
-		} else if(expr instanceof Expr.Dereference) {
-			Expr.Dereference e = (Expr.Dereference) expr;
-			hasDeadCopy(e.operand(),live);
+			return hasCopy(e.operand());
 		}
-	}
-
-	private static void addVariableUses(Expr expr, Set<String> uses) {
-		if(expr instanceof Expr.Variable) {
-			Expr.Variable e = (Expr.Variable) expr;
-			uses.add(e.name());
-		} else if(expr instanceof Expr.Copy) {
-			Expr.Copy e = (Expr.Copy) expr;
-			addVariableUses(e.operand(),uses);
-		} else if(expr instanceof Expr.Borrow) {
-			Expr.Borrow e = (Expr.Borrow) expr;
-			addVariableUses(e.operand(),uses);
-		} else if(expr instanceof Expr.Box) {
-			Expr.Box e = (Expr.Box) expr;
-			addVariableUses(e.operand(),uses);
-		} else if(expr instanceof Expr.Dereference) {
-			Expr.Dereference e = (Expr.Dereference) expr;
-			addVariableUses(e.operand(),uses);
-		}
+		return false;
 	}
 
 	/**
@@ -433,6 +409,27 @@ public class FuzzTestingExperiment {
 	    return hexString.toString();
 	}
 
+	/**
+	 * Compute the "prefix string" for a block. That is, the string of the block
+	 * without trailing curly braces. For example, "{ let mut x = 0; }" becomes "{
+	 * let mut x = 0;".
+	 *
+	 * @param b
+	 * @return
+	 */
+	private static String toPrefixString(Stmt.Block b) {
+		String str = b.toRustString();
+		int end = str.length();
+		while (end > 0) {
+			end = end - 1;
+			char c = str.charAt(end);
+			if (c != ' ' && c != '}') {
+				break;
+			}
+		}
+		return str.substring(0, end + 1);
+	}
+
 	private static <T> int copyToArray(T[] array, Iterator<T> b) {
 		int i = 0;
 		// Read items into array
@@ -447,25 +444,76 @@ public class FuzzTestingExperiment {
 		return i;
 	}
 
+	/**
+	 * This provides a slightly alternative implementation of the borrow checker
+	 * which infers whether or not a copy or move is being made.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	private final static class ExtendedBorrowChecker extends BorrowChecker {
+
+		public ExtendedBorrowChecker(String sourcefile) {
+			super(sourcefile);
+		}
+		/**
+		 * T-MoveVar
+		 */
+		@Override
+		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Expr.Variable e) {
+			String x = e.name();
+			//
+			check(R1.get(x) != null, UNDECLARED_VARIABLE, e);
+			// Extract type from current environment
+			Type T = R1.get(x).type();
+			//
+			Environment R2;
+			// Implement destructive update (if applicable)
+			if (copyable(T)) {
+				// Check variable not mutably borrowed
+				check(!mutBorrowed(R1,x), VARIABLE_BORROWED, e);
+				//
+				R2 = R1;
+			} else {
+				// Check variable not borrowed to prevent "moving out"
+				check(!borrowed(R1, x), VARIABLE_BORROWED, e);
+				// Implement destructive update (if applicable)
+				R2 = R1.remove(x);
+			}
+			//
+			return new Pair<>(R2,T);
+		}
+
+		/**
+		 * T-CopyVar
+		 */
+		@Override
+		public Pair<Environment, Type> apply(Environment R, Lifetime l, Expr.Copy e) {
+			throw new IllegalArgumentException("copies ignored and, instead, inferred");
+		}
+	}
+
 	private final static class Stats {
 		private final long start = System.currentTimeMillis();
 		private final String label;
 		public long valid = 0;
 		public long invalid = 0;
 		public long notCanonical = 0;
-		public long hasDeadCopy = 0;
+		public long hasCopy = 0;
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
 		private final HashMap<String,Integer> errors;
+		private final HashMap<String,Integer> warnings;
 
 		public Stats(String label) {
 			this.label=label;
 			this.errors = new HashMap<>();
+			this.warnings = new HashMap<>();
 		}
 
 		public long total() {
-			return valid + invalid + inconsistentValid + inconsistentInvalid + notCanonical + hasDeadCopy
+			return valid + invalid + inconsistentValid + inconsistentInvalid + notCanonical + hasCopy
 					+ invalidPrefix;
 		}
 
@@ -473,21 +521,13 @@ public class FuzzTestingExperiment {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
 			this.notCanonical += stats.notCanonical;
-			this.hasDeadCopy += stats.hasDeadCopy;
+			this.hasCopy += stats.hasCopy;
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
 			// Join error classifications
-			for(Map.Entry<String, Integer> e : stats.errors.entrySet()) {
-				String key = e.getKey();
-				Integer i = errors.get(key);
-				if(i != null) {
-					i = i + e.getValue();
-				} else {
-					i = e.getValue();
-				}
-				errors.put(key, i);
-			}
+			join(errors,stats.errors);
+			join(warnings,stats.warnings);
 		}
 
 		/**
@@ -509,6 +549,14 @@ public class FuzzTestingExperiment {
 					} else {
 						errors.put(errcode, i + 1);
 					}
+				} else if (line.startsWith("warning[E")) {
+					String errcode = line.substring(8, 13);
+					Integer i = warnings.get(errcode);
+					if (i == null) {
+						warnings.put(errcode, 1);
+					} else {
+						warnings.put(errcode, i + 1);
+					}
 				}
 			}
 		}
@@ -521,15 +569,31 @@ public class FuzzTestingExperiment {
 			System.out.println("\tTOTAL: " + total());
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
-			System.out.println("\tIGNORED(NOT CANONICAL): " + notCanonical);
-			System.out.println("\tIGNORED(HAS DEAD COPY): " + hasDeadCopy);
-			System.out.println("\tIGNORED(INVALID PREFIX): " + invalidPrefix);
+			System.out.println("\tIGNORED (NOT CANONICAL): " + notCanonical);
+			System.out.println("\tIGNORED (HAS COPY): " + hasCopy);
+			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + ")=" + e.getValue());
 			}
+			for(Map.Entry<String, Integer> e : warnings.entrySet()) {
+				System.out.println("\tWARNING (" + e.getKey() + ")=" + e.getValue());
+			}
 			System.out.println("}");
+		}
+
+		public static void join(Map<String,Integer> left, Map<String,Integer> right) {
+			for(Map.Entry<String, Integer> e : right.entrySet()) {
+				String key = e.getKey();
+				Integer i = left.get(key);
+				if(i != null) {
+					i = i + e.getValue();
+				} else {
+					i = e.getValue();
+				}
+				left.put(key, i);
+			}
 		}
 	}
 }

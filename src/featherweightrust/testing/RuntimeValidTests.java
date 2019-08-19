@@ -48,7 +48,7 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_02() throws IOException {
-		String input = "{ let mut x = 123; let mut y = x; y}";
+		String input = "{ let mut x = 123; let mut y = !x; y}";
 		check(input, 123);
 	}
 
@@ -66,13 +66,13 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_05() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 123; x = 2; y}";
+		String input = "{ let mut x = 1; let mut y = 123; x = 2; !y}";
 		check(input, 123);
 	}
 
 	@Test
 	public void test_06() throws IOException {
-		String input = "{ let mut x = 1; { let mut y = 123; y } }";
+		String input = "{ let mut x = 1; { let mut y = 123; !y } }";
 		check(input, 123);
 	}
 
@@ -85,10 +85,18 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_08() throws IOException {
-		String input = "{ let mut x = 0; { let mut y = x; x = y; } }";
+		// This program is pretty wierd!!
+		String input = "{ let mut x = 0; { let mut y = box &x; y = box &mut y; } }";
 		check(input, null);
 	}
 
+
+	@Test
+	public void test_09() throws IOException {
+		// This program is pretty wierd!!
+		String input = "{ let mut x = 0; { let mut y = &x; x = *y; } }";
+		check(input, null);
+	}
 	// ==============================================================
 	// Allocation Examples
 	// ==============================================================
@@ -101,7 +109,7 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_21() throws IOException {
-		String input = "{ let mut y = box 123; let mut x = *y; x }";
+		String input = "{ let mut y = box 123; let mut x = *y; !x }";
 		check(input,123);
 	}
 

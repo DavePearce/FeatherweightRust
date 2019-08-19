@@ -23,6 +23,8 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
+import featherweightrust.util.Pair;
+
 /**
  * A simplistic Java binding to the Rust Compiler.
  *
@@ -49,20 +51,24 @@ public final class RustCompiler {
 	 * @throws InterruptedException
 	 * @throws IOException
 	 */
-	public String compile(String filename, String outdir) throws InterruptedException, IOException {
+	public Pair<Boolean,String> compile(String filename, String outdir) throws InterruptedException, IOException {
 		// ===================================================
 		// Construct command
 		// ===================================================
 		ArrayList<String> command = new ArrayList<>();
 		command.add(rust_cmd);
 		command.add("-A");
+		command.add("unused-assignments");
+		command.add("-A");
 		command.add("unused-variables");
 		command.add("-A");
 		command.add("unused-mut");
-		command.add("--out-dir");
-		command.add(outdir);
 		if(nightly) {
-			command.add("-Zno-codegen");
+			command.add("-Z");
+			command.add("no-codegen");
+		} else {
+			command.add("--out-dir");
+			command.add(outdir);
 		}
 		command.add(filename);
 		// ===================================================
@@ -77,11 +83,8 @@ public final class RustCompiler {
 			boolean success = child.waitFor(timeout, TimeUnit.MILLISECONDS);
 			byte[] stdout = readInputStream(input);
 			byte[] stderr = readInputStream(error);
-			if(success && child.exitValue() == 0) {
-				return null;
-			} else {
-				return new String(stderr);
-			}
+			boolean status = success && child.exitValue() == 0;
+			return new Pair<>(status,new String(stderr));
 		} finally {
 			// make sure child process is destroyed.
 			child.destroy();

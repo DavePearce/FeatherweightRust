@@ -93,8 +93,6 @@ public class FuzzTestingExperiment {
 	 */
 	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
-	private static final ConcurrentHashMap<String,Boolean> INVALID_PREFIXES = new ConcurrentHashMap<>();
-
 	static {
 		// Force creation of temporary directory
 		new File(tempDir).mkdirs();
@@ -231,6 +229,16 @@ public class FuzzTestingExperiment {
 		}
 	}
 
+	/**
+	 * Fuzz test a batch of programs in one go.
+	 *
+	 * @param batch --- The batch of programs to check which may include
+	 *              <code>null</code> programs to skip (i.e. in the last batch).
+	 * @return
+	 * @throws NoSuchAlgorithmException
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
 	public static Stats check(Stmt.Block[] batch) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		Stats stats = new Stats(null);
 		for(int i=0;i!=batch.length;++i) {
@@ -242,65 +250,75 @@ public class FuzzTestingExperiment {
 		return stats;
 	}
 
+	/**
+	 * Fuzz test a single program whilst updating the stats accordingly.
+	 *
+	 * @param b
+	 * @param stats
+	 * @throws NoSuchAlgorithmException
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
 	public static void check(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		if(!isCanonical(b)) {
 			stats.notCanonical++;
 		} else if(hasCopy(b)) {
 			stats.hasCopy++;
 		} else {
-			String prefix = toPrefixString(b);
+			// Infer copy expressions
+			Stmt.Block nb = inferVariableClones(b);
+			// Check using calculus
+			boolean checked = calculusCheckProgram(nb);
+			// Construct rust program
+			String program = toRustProgram(b);
+			// Determine hash of program for naming
+			long hash = program.hashCode() & 0x00000000ffffffffL;
+			// Determine filename based on hash
+			String binFilename = tempDir + File.separator + hash;
+			String srcFilename = binFilename + ".rs";
+			// Create temporary file
+			createTemporaryFile(srcFilename, program);
+			// Run the rust compile
+			Pair<Boolean,String> p =  RUSTC.compile(srcFilename, tempDir);
+			boolean status = p.first();
+			String stderr = p.second();
 			//
-			if(INVALID_PREFIXES.containsKey(prefix)) {
-				stats.invalidPrefix++;
-			} else {
-				// Infer copy expressions
-				Stmt.Block nb = inferVariableClones(b);
-				// Check using calculus
-				boolean checked = calculusCheckProgram(nb);
-				// Construct rust program
-				String program = toRustProgram(b);
-				// Determine hash of program for naming
-				long hash = program.hashCode() & 0x00000000ffffffffL;
-				// Determine filename based on hash
-				String binFilename = tempDir + File.separator + hash;
-				String srcFilename = binFilename + ".rs";
-				// Create temporary file
-				createTemporaryFile(srcFilename, program);
-				// Run the rust compile
-				Pair<Boolean,String> p =  RUSTC.compile(srcFilename, tempDir);
-				boolean status = p.first();
-				String stderr = p.second();
-				//
-				if (checked != status) {
-					reportFailure(nb, program, status, stderr);
-					stats.record(stderr);
-					if (status) {
-						stats.inconsistentInvalid++;
-					} else {
-						// Rust says no, FR says yes.
-						stats.inconsistentValid++;
-					}
-					if(!VERBOSE) {
-						// Delete erronous rust source file
-						new File(srcFilename).delete();
-					}
-				} else if (checked) {
-					new File(srcFilename).delete();
-					stats.valid++;
+			if (checked != status) {
+				reportFailure(nb, program, status, stderr);
+				stats.record(stderr);
+				if (status) {
+					stats.inconsistentInvalid++;
 				} else {
+					// Rust says no, FR says yes.
+					stats.inconsistentValid++;
+				}
+				if(!VERBOSE) {
+					// Delete erronous rust source file
 					new File(srcFilename).delete();
-					stats.invalid++;
-					// Record invalid prefix
-					INVALID_PREFIXES.put(prefix, true);
 				}
-				// Always delete binary
-				if(!NIGHTLY) {
-					new File(binFilename).delete();
-				}
+			} else if (checked) {
+				new File(srcFilename).delete();
+				stats.valid++;
+			} else {
+				new File(srcFilename).delete();
+				stats.invalid++;
+			}
+			// Always delete binary
+			if(!NIGHTLY) {
+				new File(binFilename).delete();
 			}
 		}
 	}
 
+	/**
+	 * Report an inconsistency between rustc and Featherweight Rust.
+	 *
+	 * @param b
+	 * @param program
+	 * @param status
+	 * @param stderr
+	 * @throws IOException
+	 */
 	public static void reportFailure(Stmt.Block b, String program, boolean status, String stderr) throws IOException {
 		if(VERBOSE) {
 			// Determine hash of program for naming
@@ -355,7 +373,16 @@ public class FuzzTestingExperiment {
 		return (Stmt.Block) inferVariableClones(stmt, new HashSet<>());
 	}
 
-	public static Stmt inferVariableClones(Stmt stmt, HashSet<String> copyables) {
+	/**
+	 * Infer variable clones for a given statement using a known set of variables
+	 * which have copy semantics (hence, can and should be copied). The key here is
+	 * to reduce work by only allocating new objects when things change.
+	 *
+	 * @param stmt
+	 * @param copyables
+	 * @return
+	 */
+	private static Stmt inferVariableClones(Stmt stmt, HashSet<String> copyables) {
 		if(stmt instanceof Stmt.Block) {
 			copyables = new HashSet<>(copyables);
 			Stmt.Block block = (Stmt.Block) stmt;
@@ -408,6 +435,14 @@ public class FuzzTestingExperiment {
 		}
 	}
 
+	/**
+	 * Infer variable copies where necessary using a given set of variables which
+	 * are known to have copy semantics at this point.
+	 *
+	 * @param expr
+	 * @param copyables
+	 * @return
+	 */
 	public static Expr inferVariableClones(Expr expr, HashSet<String> copyables) {
 		if(expr instanceof Expr.Variable) {
 			Expr.Variable v = (Expr.Variable) expr;
@@ -425,6 +460,12 @@ public class FuzzTestingExperiment {
 		return expr;
 	}
 
+	/**
+	 * Determine variables which have copy semantics at this point.
+	 *
+	 * @param stmt
+	 * @param copyables
+	 */
 	public static void inferCopyables(Stmt stmt, HashSet<String> copyables) {
 		if(stmt instanceof Stmt.Let) {
 			Stmt.Let s = (Stmt.Let) stmt;
@@ -434,6 +475,15 @@ public class FuzzTestingExperiment {
 		}
 	}
 
+	/**
+	 * Check whether the result of a given expression should have copy semantics of
+	 * not. For example, expressions which return integers should exhibit copy
+	 * semantics.
+	 *
+	 * @param expr
+	 * @param copyables
+	 * @return
+	 */
 	public static boolean isCopyable(Expr expr, HashSet<String> copyables) {
 		if (expr instanceof Expr.Box) {
 			return false;
@@ -537,28 +587,86 @@ public class FuzzTestingExperiment {
 	 * @return
 	 */
 	private static String toRustProgram(Stmt.Block b) {
-		return "fn main() " + b.toRustString();
+		return "fn main() " + toRustString(b, new HashSet<>());
+	}
+
+	private static String toRustString(Stmt stmt, HashSet<String> live) {
+		if (stmt instanceof Stmt.Block) {
+			Stmt.Block block = (Stmt.Block) stmt;
+			String contents = "";
+			ArrayList<String> declared = new ArrayList<String>();
+			for (int i = 0; i != block.size(); ++i) {
+				Stmt s = block.get(i);
+				contents += toRustString(s, live) + " ";
+				if (s instanceof Stmt.Let) {
+					Stmt.Let l = (Stmt.Let) s;
+					declared.add(l.variable().name());
+				}
+			}
+			// Remove declared variables
+			for (int i=declared.size()-1;i>=0;--i) {
+				String var = declared.get(i);
+				if (live.contains(var)) {
+					// declared live variable
+					contents = contents + var + "; ";
+					live.remove(var);
+				}
+			}
+			//
+			return "{ " + contents + "}";
+		} else if(stmt instanceof Stmt.Let) {
+			Stmt.Let s = (Stmt.Let) stmt;
+			String init = toRustString(s.initialiser());
+			updateLiveness(s.initialiser(),live);
+			// By definition variable is live after assignment
+			live.add(s.variable().name());
+			return "let mut " + s.variable().name() + " = " + init + ";";
+		} else if(stmt instanceof Stmt.Assignment) {
+			Stmt.Assignment s = (Stmt.Assignment) stmt;
+			updateLiveness(s.rightOperand(),live);
+			// By definition variable is live after assignment
+			live.add(s.leftOperand().name());
+			return s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
+		} else {
+			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+			updateLiveness(s.rightOperand(),live);
+			return "*" + s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
+		}
 	}
 
 	/**
-	 * Compute the "prefix string" for a block. That is, the string of the block
-	 * without trailing curly braces. For example, "{ let mut x = 0; }" becomes "{
-	 * let mut x = 0;".
+	 * Convert an expression into a Rust-equivalent string.
 	 *
-	 * @param b
+	 * @param expr
 	 * @return
 	 */
-	private static String toPrefixString(Stmt.Block b) {
-		String str = b.toRustString();
-		int end = str.length();
-		while (end > 0) {
-			end = end - 1;
-			char c = str.charAt(end);
-			if (c != ' ' && c != '}') {
-				break;
-			}
+	private static String toRustString(Expr expr) {
+		if (expr instanceof Expr.Copy) {
+			Expr.Copy v = (Expr.Copy) expr;
+			return v.operand().name();
+		} else if (expr instanceof Expr.Box) {
+			Expr.Box b = (Expr.Box) expr;
+			return "Box::new(" + toRustString(b.operand()) + ")";
+		} else {
+			return expr.toString();
 		}
-		return str.substring(0, end + 1);
+	}
+
+	/**
+	 * Update the set of live variables by removing any which are moved.
+	 *
+	 * @param expr
+	 * @param liveness
+	 */
+	private static void updateLiveness(Expr expr, HashSet<String> liveness) {
+		if (expr instanceof Expr.Variable) {
+			// Variable move
+			Expr.Variable b = (Expr.Variable) expr;
+			liveness.remove(b.name());
+		} else if (expr instanceof Expr.Box) {
+			Expr.Box b = (Expr.Box) expr;
+			updateLiveness(b.operand(), liveness);
+		}
 	}
 
 	private static <T> int copyToArray(T[] array, Iterator<T> b) {

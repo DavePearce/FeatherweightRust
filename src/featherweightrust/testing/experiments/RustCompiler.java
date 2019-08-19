@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
-
 import featherweightrust.util.Pair;
 
 /**
@@ -63,6 +62,8 @@ public final class RustCompiler {
 		command.add("unused-variables");
 		command.add("-A");
 		command.add("unused-mut");
+		command.add("-A");
+		command.add("path-statements");
 		if(nightly) {
 			command.add("-Z");
 			command.add("no-codegen");

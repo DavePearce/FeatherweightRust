@@ -43,8 +43,6 @@ public class Syntax {
 			}
 		}
 
-		public abstract String toRustString();
-
 		/**
 		 * Represents a variable declaration of the form:
 		 *
@@ -86,11 +84,6 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "let mut " + variable.name() + " = " + initialiser + ";";
-			}
-
-			@Override
-			public String toRustString() {
-				return "let mut " + variable.name() + " = " + initialiser.toRustString() + ";";
 			}
 
 			public static Let construct(String variable, Expr initialiser) {
@@ -135,11 +128,6 @@ public class Syntax {
 				return lhs.name + " = " + rhs + ";";
 			}
 
-			@Override
-			public String toRustString() {
-				return lhs.name + " = " + rhs.toRustString() + ";";
-			}
-
 			public static Assignment construct(String variable, Expr initialiser) {
 				return new Assignment(new Expr.Variable(variable), initialiser);
 			}
@@ -180,11 +168,6 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "*" + lhs.name + " = " + rhs + ";";
-			}
-
-			@Override
-			public String toRustString() {
-				return "*" + lhs.name + " = " + rhs.toRustString() + ";";
 			}
 
 			public static IndirectAssignment construct(String variable, Expr initialiser) {
@@ -237,14 +220,6 @@ public class Syntax {
 				String contents = "";
 				for (int i = 0; i != stmts.length; ++i) {
 					contents += stmts[i] + " ";
-				}
-				return "{ " + contents + "}";
-			}
-			@Override
-			public String toRustString() {
-				String contents = "";
-				for (int i = 0; i != stmts.length; ++i) {
-					contents += stmts[i].toRustString() + " ";
 				}
 				return "{ " + contents + "}";
 			}
@@ -330,11 +305,6 @@ public class Syntax {
 				return name;
 			}
 
-			@Override
-			public String toRustString() {
-				return name;
-			}
-
 			public static Expr.Variable construct(String name) {
 				return new Expr.Variable(name);
 			}
@@ -361,10 +331,6 @@ public class Syntax {
 				return "*" + operand.toString();
 			}
 
-			@Override
-			public String toRustString() {
-				return "*" + operand.toRustString();
-			}
 			public static Expr.Dereference construct(String name) {
 				return new Expr.Dereference(new Expr.Variable(name));
 			}
@@ -401,11 +367,6 @@ public class Syntax {
 				}
 			}
 
-			@Override
-			public String toRustString() {
-				return toString();
-			}
-
 			public static Expr.Borrow construct(String name, Boolean mutable) {
 				return new Expr.Borrow(new Expr.Variable(name), mutable);
 			}
@@ -430,11 +391,6 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "box " + operand;
-			}
-
-			@Override
-			public String toRustString() {
-				return "Box::new(" + operand.toRustString() + ")";
 			}
 
 			public static Expr.Box construct(Expr operand) {
@@ -478,11 +434,6 @@ public class Syntax {
 				return "!" + operand.toString();
 			}
 
-			@Override
-			public String toRustString() {
-				return operand.toRustString();
-			}
-
 			public static Domain.Big<Copy> toBigDomain(Domain.Big<Expr.Variable> subdomain) {
 				return Domains.Adaptor(subdomain, (e) -> new Copy(e));
 			}
@@ -516,11 +467,6 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return java.lang.Integer.toString(value);
-			}
-
-			@Override
-			public String toRustString() {
-				return toString();
 			}
 
 			public static Integer construct(java.lang.Integer i) {
@@ -561,12 +507,6 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "&" + address;
-			}
-
-			@Override
-			public String toRustString() {
-				// NOTE: we cannot denote a location on the heap in Rust!
-				throw new UnsupportedOperationException();
 			}
 		}
 	}

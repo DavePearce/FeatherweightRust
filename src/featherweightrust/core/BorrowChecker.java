@@ -247,6 +247,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Type T = R.get(x).type();
 		// Check variable has copy type
 		check(copyable(T), VARIABLE_NOT_COPY, e.operand());
+		// Check variable not mutably borrowed
+		check(!mutBorrowed(R,x), VARIABLE_BORROWED, e);
 		//
 		return new Pair<>(R,T);
 	}

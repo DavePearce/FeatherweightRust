@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,7 +31,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -255,8 +253,10 @@ public class FuzzTestingExperiment {
 			if(INVALID_PREFIXES.containsKey(prefix)) {
 				stats.invalidPrefix++;
 			} else {
+				// Infer copy expressions
+				Stmt.Block nb = inferVariableClones(b);
 				// Check using calculus
-				boolean checked = calculusCheckProgram(b);
+				boolean checked = calculusCheckProgram(nb);
 				// Construct rust program
 				String program = toRustProgram(b);
 				// Determine hash of program for naming
@@ -272,7 +272,7 @@ public class FuzzTestingExperiment {
 				String stderr = p.second();
 				//
 				if (checked != status) {
-					reportFailure(b,program,status,stderr);
+					reportFailure(nb, program, status, stderr);
 					stats.record(stderr);
 					if (status) {
 						stats.inconsistentInvalid++;
@@ -316,7 +316,7 @@ public class FuzzTestingExperiment {
 		}
 	}
 
-	public static final BorrowChecker checker = new ExtendedBorrowChecker("");
+	public static final BorrowChecker checker = new BorrowChecker("");
 
 	/**
 	 * Borrow check the program using the borrow checker which is part of this
@@ -342,6 +342,109 @@ public class FuzzTestingExperiment {
 		writer.write(contents.getBytes(StandardCharsets.UTF_8));
 		// Done creating file
 		writer.close();
+	}
+
+	/**
+	 * The purpose of this method is to perform a "clone analysis". That is, to
+	 * determine where we are copying items versus moving them.
+	 *
+	 * @param stmt
+	 * @return
+	 */
+	public static Stmt.Block inferVariableClones(Stmt.Block stmt) {
+		return (Stmt.Block) inferVariableClones(stmt, new HashSet<>());
+	}
+
+	public static Stmt inferVariableClones(Stmt stmt, HashSet<String> copyables) {
+		if(stmt instanceof Stmt.Block) {
+			copyables = new HashSet<>(copyables);
+			Stmt.Block block = (Stmt.Block) stmt;
+			final Stmt[] stmts = block.toArray();
+			Stmt[] nstmts = stmts;
+			for (int i = 0; i != block.size(); ++i) {
+				Stmt s = block.get(i);
+				Stmt n = inferVariableClones(s, copyables);
+				if (s != n) {
+					if (stmts == nstmts) {
+						nstmts = Arrays.copyOf(stmts, stmts.length);
+					}
+					nstmts[i] = n;
+				}
+				// Update copyables
+				inferCopyables(s,copyables);
+			}
+			if (stmts == nstmts) {
+				return stmt;
+			} else {
+				return new Stmt.Block(block.lifetime(), nstmts);
+			}
+		} else if(stmt instanceof Stmt.Let) {
+			Stmt.Let s = (Stmt.Let) stmt;
+			Expr e = s.initialiser();
+			Expr ne = inferVariableClones(e,copyables);
+			if(e == ne) {
+				return stmt;
+			} else {
+				return new Stmt.Let(s.variable(), ne);
+			}
+		} else if(stmt instanceof Stmt.Assignment) {
+			Stmt.Assignment s = (Stmt.Assignment) stmt;
+			Expr e = s.rightOperand();
+			Expr ne = inferVariableClones(e,copyables);
+			if(e == ne) {
+				return stmt;
+			} else {
+				return new Stmt.Assignment(s.leftOperand(), ne);
+			}
+		} else {
+			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+			Expr e = s.rightOperand();
+			Expr ne = inferVariableClones(e,copyables);
+			if(e == ne) {
+				return stmt;
+			} else {
+				return new Stmt.IndirectAssignment(s.leftOperand(), ne);
+			}
+		}
+	}
+
+	public static Expr inferVariableClones(Expr expr, HashSet<String> copyables) {
+		if(expr instanceof Expr.Variable) {
+			Expr.Variable v = (Expr.Variable) expr;
+			if(copyables.contains(v.name())) {
+				return new Expr.Copy(v);
+			}
+		} else if(expr instanceof Expr.Box) {
+			Expr.Box b = (Expr.Box) expr;
+			Expr e = b.operand();
+			Expr ne = inferVariableClones(e,copyables);
+			if(e != ne) {
+				return new Expr.Box(ne);
+			}
+		}
+		return expr;
+	}
+
+	public static void inferCopyables(Stmt stmt, HashSet<String> copyables) {
+		if(stmt instanceof Stmt.Let) {
+			Stmt.Let s = (Stmt.Let) stmt;
+			if(isCopyable(s.initialiser(),copyables)) {
+				copyables.add(s.variable().name());
+			}
+		}
+	}
+
+	public static boolean isCopyable(Expr expr, HashSet<String> copyables) {
+		if (expr instanceof Expr.Box) {
+			return false;
+		} else if (expr instanceof Expr.Borrow) {
+			Expr.Borrow b = (Expr.Borrow) expr;
+			return !b.isMutable();
+		} else if (expr instanceof Expr.Variable) {
+			Expr.Variable v = (Expr.Variable) expr;
+			return copyables.contains(v.name());
+		}
+		return true;
 	}
 
 	/**
@@ -438,25 +541,6 @@ public class FuzzTestingExperiment {
 	}
 
 	/**
-	 * Get the SHA-256 hash for a given string. This is helpful for generating a
-	 * unique ID for each filename
-	 *
-	 * @param original
-	 * @return
-	 * @throws NoSuchAlgorithmException
-	 */
-	private static String getHash(String original) throws NoSuchAlgorithmException {
-		// Get SHA-256 hash
-		byte[] hash = MessageDigest.getInstance("SHA-256").digest(original.getBytes(StandardCharsets.UTF_8));
-		// Convert hash to hex string
-	    StringBuffer hexString = new StringBuffer();
-	    for (int i = 0; i < hash.length; i++) {
-			hexString.append(String.format("%02X", hash[i]));
-	    }
-	    return hexString.toString();
-	}
-
-	/**
 	 * Compute the "prefix string" for a block. That is, the string of the block
 	 * without trailing curly braces. For example, "{ let mut x = 0; }" becomes "{
 	 * let mut x = 0;".
@@ -516,55 +600,6 @@ public class FuzzTestingExperiment {
 			return iter.next();
 		}
 
-	}
-
-	/**
-	 * This provides a slightly alternative implementation of the borrow checker
-	 * which infers whether or not a copy or move is being made.
-	 *
-	 * @author David J. Pearce
-	 *
-	 */
-	private final static class ExtendedBorrowChecker extends BorrowChecker {
-
-		public ExtendedBorrowChecker(String sourcefile) {
-			super(sourcefile);
-		}
-		/**
-		 * T-MoveVar
-		 */
-		@Override
-		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Expr.Variable e) {
-			String x = e.name();
-			//
-			check(R1.get(x) != null, UNDECLARED_VARIABLE, e);
-			// Extract type from current environment
-			Type T = R1.get(x).type();
-			//
-			Environment R2;
-			// Implement destructive update (if applicable)
-			if (copyable(T)) {
-				// Check variable not mutably borrowed
-				check(!mutBorrowed(R1,x), VARIABLE_BORROWED, e);
-				//
-				R2 = R1;
-			} else {
-				// Check variable not borrowed to prevent "moving out"
-				check(!borrowed(R1, x), VARIABLE_BORROWED, e);
-				// Implement destructive update (if applicable)
-				R2 = R1.remove(x);
-			}
-			//
-			return new Pair<>(R2,T);
-		}
-
-		/**
-		 * T-CopyVar
-		 */
-		@Override
-		public Pair<Environment, Type> apply(Environment R, Lifetime l, Expr.Copy e) {
-			throw new IllegalArgumentException("copies ignored and, instead, inferred");
-		}
 	}
 
 	private final static class Stats {

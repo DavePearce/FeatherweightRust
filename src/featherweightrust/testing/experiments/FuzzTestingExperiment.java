@@ -101,8 +101,8 @@ public class FuzzTestingExperiment {
 	 * Command-line options
 	 */
 	private static final OptArg[] OPTIONS = {
-			new OptArg("verbose","v",OptArg.BOOL,"set expected domain size",false),
-			new OptArg("nightly",OptArg.BOOL,"specify rust nightly available",false),
+			new OptArg("verbose","v","set expected domain size"),
+			new OptArg("nightly","specify rust nightly available"),
 			new OptArg("expected","e",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("ints","i",OptArg.INT,"set maximum number of integers",1),
 			new OptArg("vars","n",OptArg.INT,"set maximum number of variables",1),
@@ -131,8 +131,8 @@ public class FuzzTestingExperiment {
 			long first = (Long) options.get("first");
 			long last = (Long) options.get("last");
 			//
-			VERBOSE = (Boolean) options.get("verbose");
-			NIGHTLY = (Boolean) options.get("nightly");
+			VERBOSE = options.containsKey("verbose");
+			NIGHTLY = options.containsKey("nightly");
 			System.out.println("VERBOSE: " + VERBOSE);
 			//
 			ProgramSpace space = new ProgramSpace(i, v, d, w);
@@ -594,7 +594,7 @@ public class FuzzTestingExperiment {
 		if (stmt instanceof Stmt.Block) {
 			Stmt.Block block = (Stmt.Block) stmt;
 			String contents = "";
-			ArrayList<String> declared = new ArrayList<String>();
+			ArrayList<String> declared = new ArrayList<>();
 			for (int i = 0; i != block.size(); ++i) {
 				Stmt s = block.get(i);
 				contents += toRustString(s, live) + " ";

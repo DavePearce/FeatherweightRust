@@ -4,8 +4,6 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.*;
 
-import featherweightrust.util.OptArg;
-
 /**
  * A small utility for parsing command-line options. It helps to take some of
  * the hassle out of building the front-end of a Whiley compiler.
@@ -149,7 +147,6 @@ public final class OptArg {
 		void process(String arg, String option, Map<String,Object> options);
 	}
 
-	public final static BOOL BOOL = new BOOL();
 	public final static STRING STRING = new STRING();
 	public final static INT INT = new INT();
 	public final static LONG LONG = new LONG();
@@ -157,21 +154,6 @@ public final class OptArg {
 	public final static FILEDIR FILEDIR = new FILEDIR();
 	public final static FILELIST FILELIST = new FILELIST();
 	public final static OPTIONSMAP OPTIONSMAP = new OPTIONSMAP();
-
-	private static final class BOOL implements Kind {
-		@Override
-		public void process(String arg, String option, Map<String,Object> options) {
-			if(option == null) {
-				options.put(arg, true);
-			} else {
-				options.put(arg, Boolean.parseBoolean(option));
-			}
-		}
-		@Override
-		public String toString() {
-			return "";
-		}
-	}
 
 	private static final class STRING implements Kind {
 		@Override
@@ -181,6 +163,17 @@ public final class OptArg {
 		@Override
 		public String toString() {
 			return "<string>";
+		}
+	}
+
+	private static final class BOOL implements Kind {
+		@Override
+		public void process(String arg, String option, Map<String,Object> options) {
+			options.put(arg,Boolean.parseBoolean(option));
+		}
+		@Override
+		public String toString() {
+			return "<bool>";
 		}
 	}
 
@@ -197,9 +190,10 @@ public final class OptArg {
 
 	private static final class LONG implements Kind {
 		@Override
-		public void process(String arg, String option, Map<String,Object> options) {
-			options.put(arg,Long.parseLong(option));
+		public void process(String arg, String option, Map<String, Object> options) {
+			options.put(arg, Long.parseLong(option));
 		}
+
 		@Override
 		public String toString() {
 			return "<long>";

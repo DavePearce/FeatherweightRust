@@ -34,11 +34,13 @@ public final class RustCompiler {
 	private final String rust_cmd;
 	private final long timeout;
 	private final boolean nightly;
+	private final String edition;
 
-	public RustCompiler(String rust_cmd, long timeout, boolean nightly) {
+	public RustCompiler(String rust_cmd, long timeout, boolean nightly, String edition) {
 		this.rust_cmd = rust_cmd;
 		this.timeout = timeout;
 		this.nightly = nightly;
+		this.edition = edition;
 	}
 
 	/**
@@ -64,6 +66,9 @@ public final class RustCompiler {
 		command.add("unused-mut");
 		command.add("-A");
 		command.add("path-statements");
+		command.add("--edition");
+		command.add(edition);
+		//
 		if(nightly) {
 			command.add("-Z");
 			command.add("no-codegen");

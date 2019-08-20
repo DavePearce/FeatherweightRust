@@ -1,8 +1,8 @@
 #!/bin/bash
 
 declare -a SPACES=(
-    #"-verbose true -i 1 -n 2 -d 2 -w 2 -c 2 -e 4208" # 1,2,2,2,d2    
-    "-verbose true -i 2 -n 2 -d 2 -w 2 -c 2 -e 11280" # 2,2,2,2,d2
+    "-verbose true -i 1 -n 2 -d 2 -w 2 -c 2 -e 4208" # 1,2,2,2,d2    
+    #"-verbose true -i 2 -n 2 -d 2 -w 2 -c 2 -e 11280" # 2,2,2,2,d2
     #    "-verbose true -i 1 -n 2 -d 2 -w 3 -c 2 -e 34038368 -f 0 -l 10000"
 )
 

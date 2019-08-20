@@ -85,18 +85,11 @@ public class RuntimeValidTests {
 
 	@Test
 	public void test_08() throws IOException {
-		// This program is pretty wierd!!
-		String input = "{ let mut x = 0; { let mut y = box &x; y = box &mut y; } }";
-		check(input, null);
+		// Fails incorrectly because move semantics should retain the "shadow" of x.
+		String input = "{ let mut x = box 0; { let mut y = x; x = box 1; } *x }";
+		check(input, 1);
 	}
 
-
-	@Test
-	public void test_09() throws IOException {
-		// This program is pretty wierd!!
-		String input = "{ let mut x = 0; { let mut y = &x; x = *y; } }";
-		check(input, null);
-	}
 	// ==============================================================
 	// Allocation Examples
 	// ==============================================================

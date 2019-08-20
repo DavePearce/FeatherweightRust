@@ -76,7 +76,7 @@ public class FuzzTestingExperiment {
 	/**
 	 * The command to use for executing the rust compiler.
 	 */
-	private static final RustCompiler RUSTC = new RustCompiler("rustc", 5000, NIGHTLY);
+	private static final RustCompiler RUSTC = new RustCompiler("rustc", 5000, NIGHTLY, "2018");
 	/**
 	 * Configure number of threads to use.
 	 */
@@ -102,7 +102,7 @@ public class FuzzTestingExperiment {
 	 */
 	private static final OptArg[] OPTIONS = {
 			new OptArg("verbose","v",OptArg.BOOL,"set expected domain size",false),
-			new OptArg("nightly","n",OptArg.BOOL,"specify rust nightly available",false),
+			new OptArg("nightly",OptArg.BOOL,"specify rust nightly available",false),
 			new OptArg("expected","e",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("ints","i",OptArg.INT,"set maximum number of integers",1),
 			new OptArg("vars","n",OptArg.INT,"set maximum number of variables",1),

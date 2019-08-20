@@ -66,7 +66,7 @@ public class ModelCheckingExperiment {
 		check(new ProgramSpace(1, 1, 1, 1));
 		check(new ProgramSpace(1, 1, 1, 2));
 		check(new ProgramSpace(1, 1, 2, 2));
-		check(new ProgramSpace(1, 2, 2, 2));
+//		check(new ProgramSpace(1, 2, 2, 2));
 //		check(new ProgramSpace(2, 2, 2, 2));
 		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
 		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
@@ -74,7 +74,7 @@ public class ModelCheckingExperiment {
 		// Really hard ones
 		check(new ProgramSpace(1, 2, 2, 2), 3, 9684);
 		check(new ProgramSpace(2, 2, 2, 2), 3, 40864);
-		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
+//		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
 		System.exit(1);
 	}
 
@@ -117,21 +117,22 @@ public class ModelCheckingExperiment {
 	}
 
 	public static void reportProgress(Stats stats, long expected) {
+		stats.print();
+
 		long count = stats.total();
 		long time = System.currentTimeMillis() - stats.start;
 		//
-		if (expected < 0) {
+		if(expected < 0) {
 			System.out.print("\r(" + count + ")");
 		} else {
 			double rate = ((double) time) / count;
 			double remainingMS = (expected - count) * rate;
-			long remainingS = ((long) remainingMS / 1000) % 60;
-			long remainingM = ((long) remainingMS / (60 * 1000)) % 60;
-			long remainingH = ((long) remainingMS / (60 * 60 * 1000));
+			long remainingS = ((long)remainingMS/1000) % 60;
+			long remainingM = ((long)remainingMS/(60*1000)) % 60;
+			long remainingH = ((long)remainingMS/(60*60*1000));
 			long percent = (long) (100D * (count) / expected);
 			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-			System.out.print("\r(" + percent + "%, " + String.format("%.0f", (rate * 1000)) + "/s, remaining "
-					+ remaining + ")           ");
+			System.out.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
 		}
 	}
 

@@ -21,8 +21,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import featherweightrust.util.Pair;
+import featherweightrust.util.Triple;
 
 /**
  * A simplistic Java binding to the Rust Compiler.
@@ -44,6 +46,23 @@ public final class RustCompiler {
 	}
 
 	/**
+	 * Get the version string associated with this compiler.
+	 *
+	 * @return
+	 * @throws InterruptedException
+	 * @throws IOException
+	 */
+	public String version() throws IOException, InterruptedException {
+		// ===================================================
+		// Construct command
+		// ===================================================
+		ArrayList<String> command = new ArrayList<>();
+		command.add(rust_cmd);
+		command.add("--version");
+		return exec(command, timeout).second();
+	}
+
+	/**
 	 * Attempt to compile a given program. If non-null return indicates an error
 	 * occurred (non-zero exit code from rustc).
 	 *
@@ -52,7 +71,7 @@ public final class RustCompiler {
 	 * @throws InterruptedException
 	 * @throws IOException
 	 */
-	public Pair<Boolean,String> compile(String filename, String outdir) throws InterruptedException, IOException {
+	public Triple<Boolean,String,String> compile(String filename, String outdir) throws InterruptedException, IOException {
 		// ===================================================
 		// Construct command
 		// ===================================================
@@ -77,10 +96,15 @@ public final class RustCompiler {
 			command.add(outdir);
 		}
 		command.add(filename);
+		//
+		return exec(command, timeout);
+	}
+
+	private static Triple<Boolean,String,String> exec(List<String> cmd, long timeout) throws IOException, InterruptedException {
 		// ===================================================
 		// Execute Process
 		// ===================================================
-		ProcessBuilder builder = new ProcessBuilder(command);
+		ProcessBuilder builder = new ProcessBuilder(cmd);
 		Process child = builder.start();
 		try {
 			// second, read the result whilst checking for a timeout
@@ -90,7 +114,7 @@ public final class RustCompiler {
 			byte[] stdout = readInputStream(input);
 			byte[] stderr = readInputStream(error);
 			boolean status = success && child.exitValue() == 0;
-			return new Pair<>(status,new String(stderr));
+			return new Triple<>(status, new String(stdout), new String(stderr));
 		} finally {
 			// make sure child process is destroyed.
 			child.destroy();

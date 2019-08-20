@@ -17,7 +17,11 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.testing.experiments;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -28,6 +32,8 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.util.AbstractSemantics;
+import featherweightrust.util.OptArg;
+import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import jmodelgen.core.Domain;
 
@@ -56,43 +62,77 @@ public class ModelCheckingExperiment {
 	private static final int BATCHSIZE = 10000;
 
 	/**
+	 * Flag whether to report failures to the console or not.
+	 */
+	private static boolean VERBOSE;
+
+	/**
 	 * Construct a thread pool to use for parallel processing.
 	 */
 	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
-	public static void main(String[] args) throws Exception {
-		System.out.println("NUM THREADS: " + NTHREADS);
-		// The set of program spaces to be considered.
-		check(new ProgramSpace(1, 1, 1, 1));
-		check(new ProgramSpace(1, 1, 1, 2));
-		check(new ProgramSpace(1, 1, 2, 2));
-//		check(new ProgramSpace(1, 2, 2, 2));
-//		check(new ProgramSpace(2, 2, 2, 2));
-		check(new ProgramSpace(1, 2, 2, 3), 2, 34038368);
-		check(new ProgramSpace(1, 3, 2, 3), 2, 76524416);
-//		check(new ProgramSpace(1, 3, 3, 2), 2, -1);
-		// Really hard ones
-		check(new ProgramSpace(1, 2, 2, 2), 3, 9684);
-		check(new ProgramSpace(2, 2, 2, 2), 3, 40864);
-//		check(new ProgramSpace(1, 2, 2, 3), 3, 40_925_161_340L);
+	/**
+	 * Command-line options
+	 */
+	private static final OptArg[] OPTIONS = {
+			new OptArg("verbose","v","set expected domain size"),
+			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
+			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
+			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
+			new OptArg("range", "r", OptArg.LONGARRAY(2, 2), "set index range of domain to iterate",
+					null)
+	};
+
+	public static void main(String[] _args) throws Exception {
+		List<String> args = new ArrayList<>(Arrays.asList(_args));
+		if(args.size() == 0) {
+			System.out.println("usage: java Main <options> target");
+			System.out.println();
+			OptArg.usage(System.out, OPTIONS);
+		} else {
+			Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
+			long[] ivdw = (long[]) options.get("pspace");
+			int c = (Integer) options.get("constrained");
+			long expected = (Long) options.get("expected");
+			long[] range = (long[]) options.get("range");
+			//
+			VERBOSE = options.containsKey("verbose");
+			//
+			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
+			Iterator<Stmt.Block> iterator;
+			String label;
+			// Create iterator
+			if(c >= 0) {
+				iterator = space.definedVariableWalker(c).iterator();
+				label = space.toString() + "{def," + c + "}";
+			} else {
+				// Get domain
+				Domain.Big<Stmt.Block> domain = space.domain();
+				// Determine expected size
+				expected = domain.bigSize().longValueExact();
+				// Get iterator
+				iterator = domain.iterator();
+				//
+				label = space.toString();
+			}
+			// Slice iterator (if applicable)
+			if (range != null) {
+				// Create sliced iterator
+				iterator = new SliceIterator(iterator, range[0], range[1]);
+				// Update expected
+				expected = range[1] - range[0];
+			}
+			// Done
+			check(iterator, expected, label);
+		}
 		System.exit(1);
 	}
 
-	public static void check(ProgramSpace space) throws Exception {
-		Domain.Big<Stmt.Block> domain = space.domain();
-		check(domain,domain.bigSize().longValueExact(),space.toString());
-	}
-
-	public static void check(ProgramSpace space, int maxBlocks, long expected) throws Exception {
-		check(space.definedVariableWalker(maxBlocks), expected, space.toString() + "{def," + maxBlocks + "}");
-	}
-
-	public static void check(Iterable<Stmt.Block> space, long expected, String label) throws Exception {
+	public static void check(Iterator<Stmt.Block> iterator, long expected, String label) throws Exception {
 		// Construct temporary memory areas
 		Stmt.Block[][] arrays = new Stmt.Block[NTHREADS][BATCHSIZE];
 		Future<Stats>[] threads = new Future[NTHREADS];
 		//
-		Iterator<Stmt.Block> iterator = space.iterator();
 		Stats stats = new Stats(label);
 		//
 		while (iterator.hasNext()) {
@@ -117,13 +157,11 @@ public class ModelCheckingExperiment {
 	}
 
 	public static void reportProgress(Stats stats, long expected) {
-		stats.print();
-
 		long count = stats.total();
 		long time = System.currentTimeMillis() - stats.start;
 		//
 		if(expected < 0) {
-			System.out.print("\r(" + count + ")");
+			System.err.print("\r(" + count + ")");
 		} else {
 			double rate = ((double) time) / count;
 			double remainingMS = (expected - count) * rate;
@@ -132,7 +170,7 @@ public class ModelCheckingExperiment {
 			long remainingH = ((long)remainingMS/(60*60*1000));
 			long percent = (long) (100D * (count) / expected);
 			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-			System.out.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
+			System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
 		}
 	}
 
@@ -174,8 +212,10 @@ public class ModelCheckingExperiment {
 		if (checked && ran) {
 			stats.valid++;
 		} else if (checked) {
-			error.printStackTrace(System.out);
-			System.out.println("*** ERROR(" + error.getMessage() + "): " + stmt.toString());
+			if(VERBOSE) {
+				error.printStackTrace(System.out);
+				System.out.println("*** ERROR(" + error.getMessage() + "): " + stmt.toString());
+			}
 			stats.falseneg++;
 		} else if (ran) {
 			stats.falsepos++;

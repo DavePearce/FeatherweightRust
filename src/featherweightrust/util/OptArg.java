@@ -155,6 +155,9 @@ public final class OptArg {
 	public final static FILELIST FILELIST = new FILELIST();
 	public final static OPTIONSMAP OPTIONSMAP = new OPTIONSMAP();
 
+	public final static LONG_ARRAY LONGARRAY(int min, int max) {
+		return new LONG_ARRAY(min, max);
+	}
 	private static final class STRING implements Kind {
 		@Override
 		public void process(String arg, String option, Map<String,Object> options) {
@@ -192,6 +195,34 @@ public final class OptArg {
 		@Override
 		public void process(String arg, String option, Map<String, Object> options) {
 			options.put(arg, Long.parseLong(option));
+		}
+
+		@Override
+		public String toString() {
+			return "<long>";
+		}
+	}
+
+	private static final class LONG_ARRAY implements Kind {
+		private final int min;
+		private final int max;
+
+		public LONG_ARRAY(int min, int max) {
+			this.min = min;
+			this.max = max;
+		}
+
+		@Override
+		public void process(String arg, String option, Map<String, Object> options) {
+			String[] strings = option.split(":");
+			if (strings.length < min || strings.length > max) {
+				throw new IllegalArgumentException("invalid array --- " + arg);
+			}
+			long[] arr = new long[strings.length];
+			for (int i = 0; i != arr.length; ++i) {
+				arr[i] = Long.parseLong(strings[i]);
+			}
+			options.put(arg, arr);
 		}
 
 		@Override

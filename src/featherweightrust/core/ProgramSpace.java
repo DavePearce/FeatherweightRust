@@ -17,7 +17,6 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
-import java.math.BigInteger;
 import java.util.Arrays;
 
 import featherweightrust.core.Syntax.Lifetime;
@@ -32,7 +31,24 @@ import jmodelgen.util.Walkers;
 
 /**
  * Provides machinery for representing and working with the space of all
- * programs.
+ * programs.  Some numbers:
+ *
+ *<pre>
+ * |P{1}{1}{1}{1}| = 36
+ * |P{1}{1}{1}{2}| = 1332
+ * |P{1}{1}{2}{2}| = 1873792
+ * |P{1}{2}{2}{2}| = 312883032
+ * |P{2}{2}{2}{2}| = 442_029_600
+ *
+ * |P{2}{2}{2}{2}_def{2}| = 11280
+ * |P{1}{2}{2}{3}_def{2}| = 34038368
+ * |P{1}{3}{2}{3}_def{2}| = 76524416
+ *
+ * |P{1}{1}{2}{2}_def{3}| = 9684
+ * |P{1}{2}{2}{2}_def{3}| = 40864
+ * |P{1}{2}{2}{3}_def{3}| = 40_925_161_340L
+ * |P{1}{3}{2}{3}_def{3}| = 100_213_706_876L
+ * </pre>
  *
  * @author David J. Pearce
  *

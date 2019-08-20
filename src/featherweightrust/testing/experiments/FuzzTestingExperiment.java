@@ -31,7 +31,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,12 +39,12 @@ import java.util.concurrent.Future;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Expr;
-import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.core.Syntax.Type;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.Pair;
+import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
+import featherweightrust.util.Triple;
 import jmodelgen.core.Domain;
 
 /**
@@ -62,21 +61,32 @@ public class FuzzTestingExperiment {
 	private static final String tempDir = "tmp";
 
 	/**
+	 * The command to use for executing the rust compiler.
+	 */
+	private static String RUSTC = "rustc";
+
+	/**
+	 * Extracted version tag from RUSTC;
+	 */
+	private static String RUST_VERSION;
+
+	/**
 	 * Flag whether to report failures to the console or not.
 	 */
-	private static boolean VERBOSE = true;
+	private static boolean VERBOSE;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
 	 * as we can use the option "-Zno-codegen" to prevent the generation of object
 	 * code.
 	 */
-	private static boolean NIGHTLY = false;
+	private static boolean NIGHTLY;
 
 	/**
-	 * The command to use for executing the rust compiler.
+	 * Indicate which edition of Rust is being used (e.g. 2015 or 2018).
 	 */
-	private static final RustCompiler RUSTC = new RustCompiler("rustc", 5000, NIGHTLY, "2018");
+	private static String EDITION;
+
 	/**
 	 * Configure number of threads to use.
 	 */
@@ -103,14 +113,12 @@ public class FuzzTestingExperiment {
 	private static final OptArg[] OPTIONS = {
 			new OptArg("verbose","v","set expected domain size"),
 			new OptArg("nightly","specify rust nightly available"),
-			new OptArg("expected","e",OptArg.LONG,"set expected domain size",-1L),
-			new OptArg("ints","i",OptArg.INT,"set maximum number of integers",1),
-			new OptArg("vars","n",OptArg.INT,"set maximum number of variables",1),
-			new OptArg("depth","d",OptArg.INT,"set maximum block nesting",1),
-			new OptArg("width","w",OptArg.INT,"set maximum block width",1),
+			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
+			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
+			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
-			new OptArg("first","f",OptArg.LONG,"set domain index to start iterating from",-1L),
-			new OptArg("last","l",OptArg.LONG,"set domain index to iterate up to (exclusive)",-1L),
+			new OptArg("range", "r", OptArg.LONGARRAY(2, 2), "set index range of domain to iterate",
+					null)
 	};
 	//
 	public static void main(String[] _args) throws Exception {
@@ -122,20 +130,19 @@ public class FuzzTestingExperiment {
 			OptArg.usage(System.out, OPTIONS);
 		} else {
 			Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
-			int i = (Integer) options.get("ints");
-			int v = (Integer) options.get("vars");
-			int d = (Integer) options.get("depth");
-			int w = (Integer) options.get("width");
+			long[] ivdw = (long[]) options.get("pspace");
 			int c = (Integer) options.get("constrained");
 			long expected = (Long) options.get("expected");
-			long first = (Long) options.get("first");
-			long last = (Long) options.get("last");
+			long[] range = (long[]) options.get("range");
 			//
 			VERBOSE = options.containsKey("verbose");
 			NIGHTLY = options.containsKey("nightly");
-			System.out.println("VERBOSE: " + VERBOSE);
+			EDITION = (String) options.get("edition");
+			// Extract version string
+			RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t",
+					"");
 			//
-			ProgramSpace space = new ProgramSpace(i, v, d, w);
+			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
 			Iterator<Stmt.Block> iterator;
 			String label;
 			// Create iterator
@@ -153,13 +160,11 @@ public class FuzzTestingExperiment {
 				label = space.toString();
 			}
 			// Slice iterator (if applicable)
-			if(first >= 0 || last >= 0) {
-				first = Math.max(0, first);
-				last = Math.min(last, expected);
+			if (range != null) {
 				// Create sliced iterator
-				iterator = new SliceIterator(iterator,first,last);
+				iterator = new SliceIterator(iterator, range[0], range[1]);
 				// Update expected
-				expected = last - first;
+				expected = range[1] - range[0];
 			}
 			// Done
 			check(iterator, expected, label);
@@ -210,13 +215,11 @@ public class FuzzTestingExperiment {
 	}
 
 	public static void reportProgress(Stats stats, long expected) {
-		stats.print();
-
 		long count = stats.total();
 		long time = System.currentTimeMillis() - stats.start;
 		//
 		if(expected < 0) {
-			System.out.print("\r(" + count + ")");
+			System.err.print("\r(" + count + ")");
 		} else {
 			double rate = ((double) time) / count;
 			double remainingMS = (expected - count) * rate;
@@ -225,7 +228,7 @@ public class FuzzTestingExperiment {
 			long remainingH = ((long)remainingMS/(60*60*1000));
 			long percent = (long) (100D * (count) / expected);
 			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-			System.out.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
+			System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
 		}
 	}
 
@@ -279,9 +282,10 @@ public class FuzzTestingExperiment {
 			// Create temporary file
 			createTemporaryFile(srcFilename, program);
 			// Run the rust compile
-			Pair<Boolean,String> p =  RUSTC.compile(srcFilename, tempDir);
+			RustCompiler rustc = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION);
+			Triple<Boolean, String, String> p = rustc.compile(srcFilename, tempDir);
 			boolean status = p.first();
-			String stderr = p.second();
+			String stderr = p.third();
 			//
 			if (checked != status) {
 				reportFailure(nb, program, status, stderr);
@@ -292,21 +296,14 @@ public class FuzzTestingExperiment {
 					// Rust says no, FR says yes.
 					stats.inconsistentValid++;
 				}
-				if(!VERBOSE) {
-					// Delete erronous rust source file
-					new File(srcFilename).delete();
-				}
 			} else if (checked) {
-				new File(srcFilename).delete();
 				stats.valid++;
 			} else {
-				new File(srcFilename).delete();
 				stats.invalid++;
 			}
-			// Always delete binary
-			if(!NIGHTLY) {
-				new File(binFilename).delete();
-			}
+			// Delete source and binary files
+			new File(srcFilename).delete();
+			new File(binFilename).delete();
 		}
 	}
 
@@ -323,13 +320,13 @@ public class FuzzTestingExperiment {
 		if(VERBOSE) {
 			// Determine hash of program for naming
 			long hash = program.hashCode() & 0x00000000ffffffffL;
-			System.err.println("********* FAILURE");
-			System.err.println("BLOCK: " + b.toString());
-			System.err.println("PROGRAM: " + program);
-			System.err.println("HASH: " + hash);
-			System.err.println("RUSTC: " + status);
+			System.out.println("********* FAILURE");
+			System.out.println("BLOCK: " + b.toString());
+			System.out.println("PROGRAM: " + program);
+			System.out.println("HASH: " + hash);
+			System.out.println("RUSTC: " + status);
 			if(stderr != null) {
-				System.err.println(stderr);
+				System.out.println(stderr);
 			}
 		}
 	}
@@ -683,33 +680,6 @@ public class FuzzTestingExperiment {
 		return i;
 	}
 
-	private final static class SliceIterator<T> implements Iterator<T> {
-		private final Iterator<T> iter;
-		private long count;
-
-		public SliceIterator(Iterator<T> iter, long start, long end) {
-			this.count = (end - start);
-			// Skip forward
-			while (start > 0) {
-				iter.next();
-				start = start - 1;
-			}
-			this.iter = iter;
-		}
-
-		@Override
-		public boolean hasNext() {
-			return count > 0 && iter.hasNext();
-		}
-
-		@Override
-		public T next() {
-			count = count - 1;
-			return iter.next();
-		}
-
-	}
-
 	private final static class Stats {
 		private final long start = System.currentTimeMillis();
 		private final String label;
@@ -782,6 +752,9 @@ public class FuzzTestingExperiment {
 			long time = System.currentTimeMillis() - start;
 			System.out.println("{");
 			System.out.println("\tSPACE: " + label);
+			System.out.println("\tVERSION: \"" + RUST_VERSION + "\"");
+			System.out.println("\tEDITION: " + EDITION);
+			System.out.println("\tNIGHTLY: " + NIGHTLY);
 			System.out.println("\tTIME: " + (time/1000) + "s");
 			System.out.println("\tTOTAL: " + total());
 			System.out.println("\tVALID: " + valid);

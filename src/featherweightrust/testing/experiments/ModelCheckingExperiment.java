@@ -263,15 +263,16 @@ public class ModelCheckingExperiment {
 
 		public void print() {
 			long time = System.currentTimeMillis() - start;
-			System.out.println("================================");
-			System.out.println("TIME: " + (time/1000) + "s");
-			System.out.println("SPACE: " + label);
-			System.out.println("TOTAL: " + total());
-			System.out.println("VALID: " + valid);
-			System.out.println("INVALID: " + (invalid+falsepos));
+			System.out.println("}");
+			System.out.println("\tTIME: " + (time/1000));
+			System.out.println("\tSPACE: " + label);
+			System.out.println("\tTOTAL: " + total());
+			System.out.println("\tVALID: " + valid);
+			System.out.println("\tINVALID: " + (invalid+falsepos));
 			double percent = (100D*(falsepos) / (invalid+falsepos));
-			System.out.println("FALSEPOS: " + falsepos + " (" + String.format("%.2f",percent) + "%)");
-			System.out.println("FALSENEG: " + falseneg);
+			System.out.println("\tFALSEPOS: " + falsepos + " (" + String.format("%.2f",percent) + "%)");
+			System.out.println("\tFALSENEG: " + falseneg);
+			System.out.println("}");
 		}
 	}
 }

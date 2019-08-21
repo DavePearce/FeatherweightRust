@@ -87,6 +87,12 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_24() throws IOException {
+		String input = "{ let mut x = 123; let mut y = box 0; { let mut z = &x; z = &y; } }";
+		checkInvalid(input);
+	}
+
 	// ==============================================================
 	// Mutable Borrowing Examples
 	// ==============================================================

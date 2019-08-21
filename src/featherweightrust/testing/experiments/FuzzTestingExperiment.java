@@ -41,7 +41,6 @@ import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.util.OptArg;
-import featherweightrust.util.Pair;
 import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;

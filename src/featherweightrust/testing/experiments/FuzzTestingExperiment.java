@@ -789,7 +789,7 @@ public class FuzzTestingExperiment {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + ")=" + e.getValue());
 			}
 			for(Map.Entry<String, Integer> e : warnings.entrySet()) {
-				System.out.println("\tWARNING (" + e.getKey() + ")=" + e.getValue());
+				System.out.println("\tWARNING (" + e.getKey().replace("E", "W") + ")=" + e.getValue());
 			}
 			System.out.println("}");
 		}

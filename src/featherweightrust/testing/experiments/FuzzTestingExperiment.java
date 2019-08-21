@@ -786,10 +786,10 @@ public class FuzzTestingExperiment {
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
-				System.out.println("\tINCONSISTENT (" + e.getKey() + ")=" + e.getValue());
+				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());
 			}
 			for(Map.Entry<String, Integer> e : warnings.entrySet()) {
-				System.out.println("\tWARNING (" + e.getKey().replace("E", "W") + ")=" + e.getValue());
+				System.out.println("\tWARNING (" + e.getKey().replace("E", "W") + "): " + e.getValue());
 			}
 			System.out.println("}");
 		}

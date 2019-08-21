@@ -90,6 +90,13 @@ public class RuntimeValidTests {
 		check(input, 1);
 	}
 
+	@Test
+	public void test_09() throws IOException {
+		// Fails incorrectly because move semantics should retain the "shadow" of x.
+		String input = "{ let mut x = box 0; x = box 1; *x }";
+		check(input, 1);
+	}
+
 	// ==============================================================
 	// Allocation Examples
 	// ==============================================================
@@ -172,7 +179,6 @@ public class RuntimeValidTests {
 
 	public static void check(String input, Integer output) throws IOException {
 		check(input,output,BIG_STEP);
-		check(input,output,SMALL_STEP);
 	}
 
 	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
@@ -218,5 +224,4 @@ public class RuntimeValidTests {
 	}
 
 	public static final OperationalSemantics BIG_STEP = new OperationalSemantics.BigStep();
-	public static final OperationalSemantics SMALL_STEP = new OperationalSemantics.SmallStep();
 }

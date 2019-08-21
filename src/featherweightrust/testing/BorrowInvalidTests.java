@@ -93,6 +93,13 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_25() throws IOException {
+		// Requires Non-Lexical Lifetimes
+		String input = "{ let mut x = 123; let mut y = &x; let mut z = &mut x; }";
+		checkInvalid(input);
+	}
+
 	// ==============================================================
 	// Mutable Borrowing Examples
 	// ==============================================================

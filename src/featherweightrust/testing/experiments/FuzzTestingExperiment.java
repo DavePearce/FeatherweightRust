@@ -87,6 +87,12 @@ public class FuzzTestingExperiment {
 	private static boolean NIGHTLY;
 
 	/**
+	 * Signal whether the rustc supports Non-Lexical Lifetimes or not. And, if so,
+	 * attempt to work around them.
+	 */
+	private static boolean NLL;
+
+	/**
 	 * Indicate which edition of Rust is being used (e.g. 2015 or 2018).
 	 */
 	private static String EDITION;
@@ -118,6 +124,7 @@ public class FuzzTestingExperiment {
 			new OptArg("verbose","v","set verbose output"),
 			new OptArg("quiet","q","disable progress reporting"),
 			new OptArg("nightly","specify rust nightly available"),
+			new OptArg("nll","specify non-lexical lifetimes in play"),
 			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new long[] { 1, 1, 1, 1 }),
@@ -143,6 +150,7 @@ public class FuzzTestingExperiment {
 			QUIET = options.containsKey("quiet");
 			NIGHTLY = options.containsKey("nightly");
 			EDITION = (String) options.get("edition");
+			NLL = options.containsKey("nll");
 			// Extract version string
 			RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t",
 					"");
@@ -610,12 +618,15 @@ public class FuzzTestingExperiment {
 				}
 			}
 			// Remove declared variables
-			for (int i=declared.size()-1;i>=0;--i) {
-				String var = declared.get(i);
-				if (live.contains(var)) {
-					// declared live variable
-					contents = contents + var + "; ";
-					live.remove(var);
+			if(NLL) {
+				// Attempt to work around non-lexical lifetimes
+				for (int i=declared.size()-1;i>=0;--i) {
+					String var = declared.get(i);
+					if (live.contains(var)) {
+						// declared live variable
+						contents = contents + var + "; ";
+						live.remove(var);
+					}
 				}
 			}
 			//

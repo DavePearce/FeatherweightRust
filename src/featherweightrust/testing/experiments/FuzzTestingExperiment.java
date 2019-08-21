@@ -694,7 +694,7 @@ public class FuzzTestingExperiment {
 		if (count > n) {
 			return new long[] { 0, n };
 		} else {
-			long size = n / count;
+			long size = (n / count) + 1;
 			long start = index * size;
 			long end = Math.min(n, (index + 1) * size);
 			return new long[] { start, end };

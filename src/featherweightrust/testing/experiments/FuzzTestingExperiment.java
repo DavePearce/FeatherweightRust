@@ -76,6 +76,11 @@ public class FuzzTestingExperiment {
 	private static boolean VERBOSE;
 
 	/**
+	 * Flag whether to report progress or not.
+	 */
+	private static boolean QUIET;
+
+	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
 	 * as we can use the option "-Zno-codegen" to prevent the generation of object
 	 * code.
@@ -111,14 +116,14 @@ public class FuzzTestingExperiment {
 	 * Command-line options
 	 */
 	private static final OptArg[] OPTIONS = {
-			new OptArg("verbose","v","set expected domain size"),
+			new OptArg("verbose","v","set verbose output"),
+			new OptArg("quiet","q","disable progress reporting"),
 			new OptArg("nightly","specify rust nightly available"),
 			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
-			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
+			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new long[] { 1, 1, 1, 1 }),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
-			new OptArg("range", "r", OptArg.LONGARRAY(2, 2), "set index range of domain to iterate",
-					null)
+			new OptArg("batch", "b", OptArg.LONGARRAY(2, 2), "set batch index and batch count", null),
 	};
 	//
 	public static void main(String[] _args) throws Exception {
@@ -133,9 +138,10 @@ public class FuzzTestingExperiment {
 			long[] ivdw = (long[]) options.get("pspace");
 			int c = (Integer) options.get("constrained");
 			long expected = (Long) options.get("expected");
-			long[] range = (long[]) options.get("range");
+			long[] batch = (long[]) options.get("batch");
 			//
 			VERBOSE = options.containsKey("verbose");
+			QUIET = options.containsKey("quiet");
 			NIGHTLY = options.containsKey("nightly");
 			EDITION = (String) options.get("edition");
 			// Extract version string
@@ -160,7 +166,9 @@ public class FuzzTestingExperiment {
 				label = space.toString();
 			}
 			// Slice iterator (if applicable)
-			if (range != null) {
+			if (batch != null) {
+				long[] range = determineIndexRange(batch[0],batch[1],expected);
+				label += "[" + range[0] + ".." + range[1] + "]";
 				// Create sliced iterator
 				iterator = new SliceIterator(iterator, range[0], range[1]);
 				// Update expected
@@ -215,20 +223,22 @@ public class FuzzTestingExperiment {
 	}
 
 	public static void reportProgress(Stats stats, long expected) {
-		long count = stats.total();
-		long time = System.currentTimeMillis() - stats.start;
-		//
-		if(expected < 0) {
-			System.err.print("\r(" + count + ")");
-		} else {
-			double rate = ((double) time) / count;
-			double remainingMS = (expected - count) * rate;
-			long remainingS = ((long)remainingMS/1000) % 60;
-			long remainingM = ((long)remainingMS/(60*1000)) % 60;
-			long remainingH = ((long)remainingMS/(60*60*1000));
-			long percent = (long) (100D * (count) / expected);
-			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-			System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
+		if(!QUIET) {
+			long count = stats.total();
+			long time = System.currentTimeMillis() - stats.start;
+			//
+			if(expected < 0) {
+				System.err.print("\r(" + count + ")");
+			} else {
+				double rate = ((double) time) / count;
+				double remainingMS = (expected - count) * rate;
+				long remainingS = ((long)remainingMS/1000) % 60;
+				long remainingM = ((long)remainingMS/(60*1000)) % 60;
+				long remainingH = ((long)remainingMS/(60*60*1000));
+				long percent = (long) (100D * (count) / expected);
+				String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
+				System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
+			}
 		}
 	}
 
@@ -678,6 +688,17 @@ public class FuzzTestingExperiment {
 		}
 		// Done
 		return i;
+	}
+
+	private static long[] determineIndexRange(long index, long count, long n) {
+		if (count > n) {
+			return new long[] { 0, n };
+		} else {
+			long size = n / count;
+			long start = index * size;
+			long end = Math.min(n, (index + 1) * size);
+			return new long[] { start, end };
+		}
 	}
 
 	private final static class Stats {

@@ -41,12 +41,17 @@ import java.util.concurrent.Future;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
+import featherweightrust.core.BorrowChecker.Cell;
+import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
 import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.OptArg;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;
@@ -298,7 +303,8 @@ public class FuzzTestingExperiment {
 			// Infer copy expressions
 			Stmt.Block nb = inferVariableClones(b);
 			// Check using calculus
-			boolean checked = calculusCheckProgram(nb);
+			SyntaxError FR_err = calculusCheckProgram(nb);
+			boolean FR_status = (FR_err == null);
 			// Construct rust program
 			String program = toRustProgram(b);
 			// Determine hash of program for naming
@@ -311,20 +317,31 @@ public class FuzzTestingExperiment {
 			// Run the rust compile
 			RustCompiler rustc = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION);
 			Triple<Boolean, String, String> p = rustc.compile(srcFilename, tempDir);
-			boolean status = p.first();
-			String stderr = p.third();
+			boolean rustc_status = p.first();
+			String rustc_err = p.third();
 			//
-			if (checked != status) {
-				stats.record(stderr);
+			if (FR_status != rustc_status) {
+				stats.record(rustc_err);
 				// Attempt to execute program
-				reportFailure(nb, program, status, stderr);
-				if (status) {
-					stats.inconsistentInvalid++;
+				reportFailure(nb, program, FR_err, rustc_err);
+				if (rustc_status) {
+					// Rust says yes, FR says no
+					if(hasUnsoundness(nb)) {
+						stats.inconsistentUnsound++;
+					} else if(hasKnownLimitation(nb)) {
+						stats.inconsistentKnownLimitations++;
+					} else {
+						stats.inconsistentInvalid++;
+					}
 				} else {
 					// Rust says no, FR says yes.
-					stats.inconsistentValid++;
+					if(hasSelfAssignment(nb)) {
+						stats.inconsistentPossibleBug++;
+					} else {
+						stats.inconsistentValid++;
+					}
 				}
-			} else if (checked) {
+			} else if (FR_status) {
 				stats.valid++;
 			} else {
 				stats.invalid++;
@@ -341,10 +358,10 @@ public class FuzzTestingExperiment {
 	 * @param b
 	 * @param program
 	 * @param status
-	 * @param stderr
+	 * @param rustc_err
 	 * @throws IOException
 	 */
-	public static void reportFailure(Stmt.Block b, String program, boolean status, boolean sound, String stderr) throws IOException {
+	public static void reportFailure(Stmt.Block b, String program, SyntaxError FR_err, String rustc_err) throws IOException {
 		if(VERBOSE) {
 			// Determine hash of program for naming
 			long hash = program.hashCode() & 0x00000000ffffffffL;
@@ -352,16 +369,18 @@ public class FuzzTestingExperiment {
 			System.out.println("BLOCK: " + b.toString());
 			System.out.println("PROGRAM: " + program);
 			System.out.println("HASH: " + hash);
-			System.out.println("RUSTC: " + status);
-			System.out.println("SOUND: " + sound);
-			if(stderr != null) {
-				System.out.println(stderr);
+			System.out.println("RUSTC: " + (FR_err != null));
+			System.out.println("HAS UNSOUNDNESS: " + hasUnsoundness(b));
+			System.out.println("POSSIBLE BUG: " + hasSelfAssignment
+					(b));
+			if(rustc_err != null) {
+				System.out.println(rustc_err);
+			}
+			if(FR_err != null) {
+				FR_err.outputSourceError(System.out);
 			}
 		}
 	}
-
-	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
-	public static final BorrowChecker checker = new BorrowChecker("");
 
 	/**
 	 * Borrow check the program using the borrow checker which is part of this
@@ -371,12 +390,13 @@ public class FuzzTestingExperiment {
 	 * @param l
 	 * @return
 	 */
-	public static boolean calculusCheckProgram(Stmt.Block b) {
+	public static SyntaxError calculusCheckProgram(Stmt.Block b) {
+		BorrowChecker checker = new BorrowChecker(b.toString());
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
-			return true;
+			return null;
 		} catch (SyntaxError e) {
-			return false;
+			return e;
 		}
 	}
 
@@ -430,7 +450,7 @@ public class FuzzTestingExperiment {
 			if (stmts == nstmts) {
 				return stmt;
 			} else {
-				return new Stmt.Block(block.lifetime(), nstmts);
+				return new Stmt.Block(block.lifetime(), nstmts, stmt.attributes());
 			}
 		} else if(stmt instanceof Stmt.Let) {
 			Stmt.Let s = (Stmt.Let) stmt;
@@ -439,7 +459,7 @@ public class FuzzTestingExperiment {
 			if(e == ne) {
 				return stmt;
 			} else {
-				return new Stmt.Let(s.variable(), ne);
+				return new Stmt.Let(s.variable(), ne, stmt.attributes());
 			}
 		} else if(stmt instanceof Stmt.Assignment) {
 			Stmt.Assignment s = (Stmt.Assignment) stmt;
@@ -448,7 +468,7 @@ public class FuzzTestingExperiment {
 			if(e == ne) {
 				return stmt;
 			} else {
-				return new Stmt.Assignment(s.leftOperand(), ne);
+				return new Stmt.Assignment(s.leftOperand(), ne, stmt.attributes());
 			}
 		} else {
 			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
@@ -457,7 +477,7 @@ public class FuzzTestingExperiment {
 			if(e == ne) {
 				return stmt;
 			} else {
-				return new Stmt.IndirectAssignment(s.leftOperand(), ne);
+				return new Stmt.IndirectAssignment(s.leftOperand(), ne, stmt.attributes());
 			}
 		}
 	}
@@ -474,14 +494,14 @@ public class FuzzTestingExperiment {
 		if(expr instanceof Expr.Variable) {
 			Expr.Variable v = (Expr.Variable) expr;
 			if(copyables.contains(v.name())) {
-				return new Expr.Copy(v);
+				return new Expr.Copy(v, expr.attributes());
 			}
 		} else if(expr instanceof Expr.Box) {
 			Expr.Box b = (Expr.Box) expr;
 			Expr e = b.operand();
 			Expr ne = inferVariableClones(e,copyables);
 			if(e != ne) {
-				return new Expr.Box(ne);
+				return new Expr.Box(ne, expr.attributes());
 			}
 		}
 		return expr;
@@ -665,6 +685,160 @@ public class FuzzTestingExperiment {
 	}
 
 	/**
+	 * Check for statements of the form <code>y = y</code>. These are incorrectly
+	 * rejected by the original borrow checker (e.g. Rust 1.35.0 edition 2015).
+	 * However, they are accepted (for the most part) by the new borrow checker.
+	 *
+	 * @param stmt
+	 * @return
+	 */
+	private static boolean hasSelfAssignment(Stmt stmt) {
+		if(stmt instanceof Stmt.Block) {
+			Stmt.Block b = (Stmt.Block) stmt;
+			for (int i = 0; i != b.size(); ++i) {
+				if(hasSelfAssignment(b.get(i))) {
+					return true;
+				}
+			}
+			return false;
+		} else if(stmt instanceof Stmt.Assignment) {
+			Stmt.Assignment s = (Stmt.Assignment) stmt;
+			if(s.rhs instanceof Expr.Variable) {
+				Expr.Variable rhs = (Expr.Variable) s.rhs;
+				return s.lhs.name().equals(rhs.name());
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Look for programs which contain statements of the following form:
+	 *
+	 * <pre>
+	 * y = &y
+	 * y = &mut y
+	 * y = box &y
+	 * y = box &mut y
+	 * *y = &y
+	 * *y = &mut y
+	 * *y = box &y
+	 * *y = box &mut y
+	 * </pre>
+	 *
+	 * Statements such as this are unsound, but were accepted by the original borrow
+	 * checker (e.g. Rust v1.35.0 edition 2015). The new borrow checker (e.g. Rust
+	 * v1.36.0 edition 2015) reports a warning for such programs and notes that this
+	 * is for backwards compatibility reasons and will be upgraded in the future to
+	 * an error.
+	 *
+	 * @param b
+	 * @return
+	 */
+	private static boolean hasUnsoundness(Stmt stmt) {
+		if (stmt instanceof Stmt.Block) {
+			Stmt.Block b = (Stmt.Block) stmt;
+			for (int i = 0; i != b.size(); ++i) {
+				if (hasUnsoundness(b.get(i))) {
+					return true;
+				}
+			}
+			return false;
+		} else if (stmt instanceof Stmt.Assignment) {
+			Stmt.Assignment s = (Stmt.Assignment) stmt;
+			return hasUnsoundBorrow(s.lhs.name(), s.rhs);
+		} else if (stmt instanceof Stmt.IndirectAssignment) {
+			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+			return hasUnsoundBorrow(s.leftOperand().name(), s.rightOperand());
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * Check whether an expression attempts to borrow a given variable which, in the
+	 * context this function is used, indicates the enclosing statement is unsound.
+	 *
+	 * @param var
+	 * @param e
+	 * @return
+	 */
+	private static boolean hasUnsoundBorrow(String var, Expr e) {
+		if (e instanceof Expr.Box) {
+			Expr.Box b = (Expr.Box) e;
+			return hasUnsoundBorrow(var, b.operand());
+		} else if (e instanceof Expr.Borrow) {
+			Expr.Borrow b = (Expr.Borrow) e;
+			return b.operand().name().equals(var);
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * <p>
+	 * This determines whether this block exposes a known limitation in the current
+	 * BorrowChecker for FR. Specifically, it does not currently support moving
+	 * through a dereference. For example, the following program is incorrectly
+	 * rejected by FR:
+	 * </p>
+	 *
+	 * <pre>
+	 * { let mut x = box 0; x = x; { let mut y = box x; y = box *y; *y = box 0; } }
+	 * </pre>
+	 *
+	 * <p>
+	 * The current borrow checker for FR reports incorrectly that, in the statement
+	 * <code>y = box *y</code>, the expression <code>*y</code> cannot be copied.
+	 * This is because the current rule T-BoxDeref requires the type in question be
+	 * copyable. In fact, it's possible to destructively update the variable being
+	 * dereferenced as we know it owns the location in question.
+	 * </p>
+	 * <p>
+	 * This rule simply employs an updated borrow checker to determine whether or
+	 * not the program would borrow check if the more flexible rule was supported.
+	 * </p>
+	 *
+	 * @param b
+	 * @return
+	 */
+	private static boolean hasKnownLimitation(Stmt.Block b) {
+		// Extended borrow checker with a more flexible interpretation of T-BoxDeref.
+		BorrowChecker checker = new BorrowChecker(b.toString()) {
+			@Override
+			public Pair<Environment, Type> apply(Environment R1, Lifetime l, Expr.Dereference e) {
+				String x = e.operand().name();
+				Cell Cx = R1.get(x);
+				// Check variable is declared
+				check(Cx != null, UNDECLARED_VARIABLE, e);
+				// Check variable not moved
+				check(!Cx.moved(), VARIABLE_MOVED, e);
+				// Locate operand type
+				Cell C1 = R1.get(x);
+				// Check operand has reference type
+				if (C1.type() instanceof Type.Box) {
+					// T-BoxDeref
+					Type T = ((Type.Box) C1.type()).element();
+					//
+					if (!copyable(T) && !borrowed(R1, x)) {
+						// Implement destructive update
+						Environment R2 = R1.move(x);
+						//
+						return new Pair<>(R2, T);
+					}
+				}
+				// default back to original
+				return super.apply(R1, l, e);
+			}
+		};
+		try {
+			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
+			return true;
+		} catch (SyntaxError e) {
+			return false;
+		}
+	}
+
+	/**
 	 * Convert an expression into a Rust-equivalent string.
 	 *
 	 * @param expr
@@ -752,6 +926,9 @@ public class FuzzTestingExperiment {
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
+		public long inconsistentUnsound = 0;
+		public long inconsistentPossibleBug = 0;
+		public long inconsistentKnownLimitations = 0;
 		private final HashMap<String,Integer> errors;
 		private final HashMap<String,Integer> warnings;
 
@@ -762,8 +939,8 @@ public class FuzzTestingExperiment {
 		}
 
 		public long total() {
-			return valid + invalid + inconsistentValid + inconsistentInvalid + notCanonical + hasCopy
-					+ invalidPrefix;
+			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentUnsound
+					+ inconsistentPossibleBug + inconsistentKnownLimitations + notCanonical + hasCopy + invalidPrefix;
 		}
 
 		public void join(Stats stats) {
@@ -774,6 +951,9 @@ public class FuzzTestingExperiment {
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
+			this.inconsistentUnsound += stats.inconsistentUnsound;
+			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
+			this.inconsistentKnownLimitations += stats.inconsistentKnownLimitations;
 			// Join error classifications
 			join(errors,stats.errors);
 			join(warnings,stats.warnings);
@@ -826,6 +1006,9 @@ public class FuzzTestingExperiment {
 			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
+			System.out.println("\tINCONSISTENT (ACTUAL BUG): " + inconsistentUnsound);
+			System.out.println("\tINCONSISTENT (POSSIBLE BUG): " + inconsistentPossibleBug);
+			System.out.println("\tINCONSISTENT (KNOWN LIMITATIONS): " + inconsistentKnownLimitations);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());
 			}

@@ -21,6 +21,7 @@ import java.util.List;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
@@ -31,15 +32,20 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import featherweightrust.core.BorrowChecker;
+import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.io.Lexer;
+import featherweightrust.io.Parser;
+import featherweightrust.util.AbstractSemantics;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
@@ -127,39 +133,37 @@ public class FuzzTestingExperiment {
 			new OptArg("nll","specify non-lexical lifetimes in play"),
 			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
-			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new long[] { 1, 1, 1, 1 }),
+			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space"),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
 			new OptArg("batch", "b", OptArg.LONGARRAY(2, 2), "set batch index and batch count", null),
 	};
 	//
 	public static void main(String[] _args) throws Exception {
 		System.out.println("NUM THREADS: " + NTHREADS);
+		System.out.println("BETA3");
+
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
-		if(args.size() == 0) {
-			System.out.println("usage: java Main <options> target");
-			System.out.println();
-			OptArg.usage(System.out, OPTIONS);
-		} else {
-			Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
+		Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
+		long expected = (Long) options.get("expected");
+		long[] batch = (long[]) options.get("batch");
+		//
+		VERBOSE = options.containsKey("verbose");
+		QUIET = options.containsKey("quiet");
+		NIGHTLY = options.containsKey("nightly");
+		EDITION = (String) options.get("edition");
+		NLL = options.containsKey("nll");
+		// Extract version string
+		RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
+		//
+		Iterator<Stmt.Block> iterator;
+		String label;
+		//
+		if (options.containsKey("pspace")) {
 			long[] ivdw = (long[]) options.get("pspace");
 			int c = (Integer) options.get("constrained");
-			long expected = (Long) options.get("expected");
-			long[] batch = (long[]) options.get("batch");
-			//
-			VERBOSE = options.containsKey("verbose");
-			QUIET = options.containsKey("quiet");
-			NIGHTLY = options.containsKey("nightly");
-			EDITION = (String) options.get("edition");
-			NLL = options.containsKey("nll");
-			// Extract version string
-			RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t",
-					"");
-			//
 			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
-			Iterator<Stmt.Block> iterator;
-			String label;
 			// Create iterator
-			if(c >= 0) {
+			if (c >= 0) {
 				iterator = space.definedVariableWalker(c).iterator();
 				label = space.toString() + "{def," + c + "}";
 			} else {
@@ -172,18 +176,24 @@ public class FuzzTestingExperiment {
 				//
 				label = space.toString();
 			}
-			// Slice iterator (if applicable)
-			if (batch != null) {
-				long[] range = determineIndexRange(batch[0],batch[1],expected);
-				label += "[" + range[0] + ".." + range[1] + "]";
-				// Create sliced iterator
-				iterator = new SliceIterator(iterator, range[0], range[1]);
-				// Update expected
-				expected = range[1] - range[0];
-			}
-			// Done
-			check(iterator, expected, label);
+		} else {
+			// Read from stdin line by line
+			List<Stmt.Block> inputs = readAll(System.in);
+			iterator = inputs.iterator();
+			expected = inputs.size();
+			label = "STDIN";
 		}
+		// Slice iterator (if applicable)
+		if (batch != null) {
+			long[] range = determineIndexRange(batch[0], batch[1], expected);
+			label += "[" + range[0] + ".." + range[1] + "]";
+			// Create sliced iterator
+			iterator = new SliceIterator(iterator, range[0], range[1]);
+			// Update expected
+			expected = range[1] - range[0];
+		}
+		// Done
+		check(iterator, expected, label);
 		// Done
 		System.exit(1);
 	}
@@ -305,8 +315,9 @@ public class FuzzTestingExperiment {
 			String stderr = p.third();
 			//
 			if (checked != status) {
-				reportFailure(nb, program, status, stderr);
 				stats.record(stderr);
+				// Attempt to execute program
+				reportFailure(nb, program, status, stderr);
 				if (status) {
 					stats.inconsistentInvalid++;
 				} else {
@@ -333,7 +344,7 @@ public class FuzzTestingExperiment {
 	 * @param stderr
 	 * @throws IOException
 	 */
-	public static void reportFailure(Stmt.Block b, String program, boolean status, String stderr) throws IOException {
+	public static void reportFailure(Stmt.Block b, String program, boolean status, boolean sound, String stderr) throws IOException {
 		if(VERBOSE) {
 			// Determine hash of program for naming
 			long hash = program.hashCode() & 0x00000000ffffffffL;
@@ -342,12 +353,14 @@ public class FuzzTestingExperiment {
 			System.out.println("PROGRAM: " + program);
 			System.out.println("HASH: " + hash);
 			System.out.println("RUSTC: " + status);
+			System.out.println("SOUND: " + sound);
 			if(stderr != null) {
 				System.out.println(stderr);
 			}
 		}
 	}
 
+	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
 	public static final BorrowChecker checker = new BorrowChecker("");
 
 	/**
@@ -709,6 +722,24 @@ public class FuzzTestingExperiment {
 			long end = Math.min(n, (index + 1) * size);
 			return new long[] { start, end };
 		}
+	}
+
+	private static List<Stmt.Block> readAll(InputStream in) throws IOException {
+		ArrayList<Stmt.Block> inputs = new ArrayList<>();
+		Scanner stdin = new Scanner(in);
+		while (stdin.hasNext()) {
+		    String input = stdin.nextLine();
+		    // Tokenize input program
+		    List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
+			// Parse block
+			Stmt.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), ProgramSpace.ROOT);
+			// Record it
+		    inputs.add(stmt);
+		}
+		//
+		stdin.close();
+		// Done
+		return inputs;
 	}
 
 	private final static class Stats {

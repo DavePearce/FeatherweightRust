@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -145,7 +146,7 @@ public class FuzzTestingExperiment {
 	//
 	public static void main(String[] _args) throws Exception {
 		System.out.println("NUM THREADS: " + NTHREADS);
-		System.out.println("BETA3");
+		System.out.println("BETA4");
 
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
 		Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
@@ -308,7 +309,7 @@ public class FuzzTestingExperiment {
 			// Construct rust program
 			String program = toRustProgram(b);
 			// Determine hash of program for naming
-			long hash = program.hashCode() & 0x00000000ffffffffL;
+			String hash = getHash(program);
 			// Determine filename based on hash
 			String binFilename = tempDir + File.separator + hash;
 			String srcFilename = binFilename + ".rs";
@@ -360,15 +361,15 @@ public class FuzzTestingExperiment {
 	 * @param status
 	 * @param rustc_err
 	 * @throws IOException
+	 * @throws NoSuchAlgorithmException
 	 */
-	public static void reportFailure(Stmt.Block b, String program, SyntaxError FR_err, String rustc_err) throws IOException {
+	public static void reportFailure(Stmt.Block b, String program, SyntaxError FR_err, String rustc_err) throws IOException, NoSuchAlgorithmException {
 		if(VERBOSE) {
 			// Determine hash of program for naming
-			long hash = program.hashCode() & 0x00000000ffffffffL;
 			System.out.println("********* FAILURE");
 			System.out.println("BLOCK: " + b.toString());
 			System.out.println("PROGRAM: " + program);
-			System.out.println("HASH: " + hash);
+			System.out.println("HASH: " + getHash(program));
 			System.out.println("RUSTC: " + (FR_err != null));
 			System.out.println("HAS UNSOUNDNESS: " + hasUnsoundness(b));
 			System.out.println("POSSIBLE BUG: " + hasSelfAssignment
@@ -896,6 +897,25 @@ public class FuzzTestingExperiment {
 			long end = Math.min(n, (index + 1) * size);
 			return new long[] { start, end };
 		}
+	}
+
+	/**
+	 * Get the SHA-256 hash for a given string. This is helpful for generating a
+	 * unique ID for each filename
+	 *
+	 * @param original
+	 * @return
+	 * @throws NoSuchAlgorithmException
+	 */
+	private static String getHash(String original) throws NoSuchAlgorithmException {
+		// Get SHA-256 hash
+		byte[] hash = MessageDigest.getInstance("SHA-256").digest(original.getBytes(StandardCharsets.UTF_8));
+		// Convert hash to hex string
+		StringBuffer hexString = new StringBuffer();
+		for (int i = 0; i < hash.length; i++) {
+			hexString.append(String.format("%02X", hash[i]));
+		}
+		return hexString.toString();
 	}
 
 	private static List<Stmt.Block> readAll(InputStream in) throws IOException {

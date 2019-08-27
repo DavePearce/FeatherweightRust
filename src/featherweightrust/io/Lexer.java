@@ -41,11 +41,6 @@ public class Lexer {
 	private StringBuffer input;
 	private int pos;
 
-	public Lexer(String filename) throws IOException {
-		this(new InputStreamReader(new FileInputStream(filename), "UTF8"));
-		this.filename = filename;
-	}
-
 	public Lexer(InputStream instream) throws IOException {
 		this(new InputStreamReader(instream, "UTF8"));
 	}

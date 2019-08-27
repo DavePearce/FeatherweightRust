@@ -20,11 +20,13 @@ package featherweightrust.testing.experiments;
 import java.util.List;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -66,11 +68,6 @@ import jmodelgen.core.Domain;
  *
  */
 public class FuzzTestingExperiment {
-	/**
-	 * Temporary directory into which rust programs are placed.
-	 */
-	private static final String tempDir = "tmp";
-
 	/**
 	 * The command to use for executing the rust compiler.
 	 */
@@ -125,10 +122,6 @@ public class FuzzTestingExperiment {
 	 */
 	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
-	static {
-		// Force creation of temporary directory
-		new File(tempDir).mkdirs();
-	}
 	/**
 	 * Command-line options
 	 */
@@ -146,7 +139,7 @@ public class FuzzTestingExperiment {
 	//
 	public static void main(String[] _args) throws Exception {
 		System.out.println("NUM THREADS: " + NTHREADS);
-		System.out.println("BETA4");
+		System.out.println("BETA5");
 
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
 		Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
@@ -193,6 +186,7 @@ public class FuzzTestingExperiment {
 		if (batch != null) {
 			long[] range = determineIndexRange(batch[0], batch[1], expected);
 			label += "[" + range[0] + ".." + range[1] + "]";
+			System.out.println("LABEL: " + label);
 			// Create sliced iterator
 			iterator = new SliceIterator(iterator, range[0], range[1]);
 			// Update expected
@@ -311,16 +305,19 @@ public class FuzzTestingExperiment {
 			// Determine hash of program for naming
 			String hash = getHash(program);
 			// Determine filename based on hash
-			String binFilename = tempDir + File.separator + hash;
-			String srcFilename = binFilename + ".rs";
+			String prefix = File.separator + hash;
 			// Create temporary file
-			createTemporaryFile(srcFilename, program);
+			String srcFilename = createTemporaryFile(prefix, ".rs", program);
+			String binFilename = srcFilename.replace(".rs", "");
 			// Run the rust compile
 			RustCompiler rustc = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION);
-			Triple<Boolean, String, String> p = rustc.compile(srcFilename, tempDir);
+			Triple<Boolean, String, String> p = rustc.compile(srcFilename, binFilename);
 			boolean rustc_status = p.first();
 			String rustc_err = p.third();
-			//
+			// Delete source and binary files
+			new File(srcFilename).delete();
+			new File(binFilename).delete();
+			// Analysis output
 			if (FR_status != rustc_status) {
 				stats.record(rustc_err);
 				// Attempt to execute program
@@ -347,9 +344,6 @@ public class FuzzTestingExperiment {
 			} else {
 				stats.invalid++;
 			}
-			// Delete source and binary files
-			new File(srcFilename).delete();
-			new File(binFilename).delete();
 		}
 	}
 
@@ -401,13 +395,17 @@ public class FuzzTestingExperiment {
 		}
 	}
 
-	public static void createTemporaryFile(String filename, String contents) throws IOException, InterruptedException {
+	public static String createTemporaryFile(String prefix, String suffix, String contents) throws IOException, InterruptedException {
 		// Create new file
-		RandomAccessFile writer = new RandomAccessFile(filename, "rw");
+		File f = File.createTempFile(prefix,suffix);
+		// Open for writing
+		FileWriter writer = new FileWriter(f);
 		// Write contents to file
-		writer.write(contents.getBytes(StandardCharsets.UTF_8));
+		writer.write(contents.toCharArray());
 		// Done creating file
 		writer.close();
+		//
+		return f.getAbsolutePath();
 	}
 
 	/**

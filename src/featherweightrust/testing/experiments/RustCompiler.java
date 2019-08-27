@@ -66,12 +66,12 @@ public final class RustCompiler {
 	 * Attempt to compile a given program. If non-null return indicates an error
 	 * occurred (non-zero exit code from rustc).
 	 *
-	 * @param filename
+	 * @param srcFilename
 	 * @return
 	 * @throws InterruptedException
 	 * @throws IOException
 	 */
-	public Triple<Boolean,String,String> compile(String filename, String outdir) throws InterruptedException, IOException {
+	public Triple<Boolean,String,String> compile(String srcFilename, String binFilename) throws InterruptedException, IOException {
 		// ===================================================
 		// Construct command
 		// ===================================================
@@ -92,10 +92,10 @@ public final class RustCompiler {
 			command.add("-Z");
 			command.add("no-codegen");
 		} else {
-			command.add("--out-dir");
-			command.add(outdir);
+			command.add("-o");
+			command.add(binFilename);
 		}
-		command.add(filename);
+		command.add(srcFilename);
 		//
 		return exec(command, timeout);
 	}

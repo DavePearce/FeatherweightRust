@@ -561,6 +561,11 @@ public class Syntax {
 			public Type element() {
 				return element;
 			}
+
+			@Override
+			public String toString() {
+				return "[]" + element;
+			}
 		}
 	}
 

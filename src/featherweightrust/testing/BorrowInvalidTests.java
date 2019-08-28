@@ -59,6 +59,7 @@ public class BorrowInvalidTests {
 		checkInvalid(input);
 	}
 
+
 	// ==============================================================
 	// Immutable Borrowing Examples
 	// ==============================================================
@@ -210,7 +211,6 @@ public class BorrowInvalidTests {
 		String input = "{ let mut x = 0; { let mut y = box &mut x; *y = &mut y; } }";
 		checkInvalid(input);
 	}
-
 
 	public static void checkInvalid(String input) throws IOException {
 		Lifetime globalLifetime = new Lifetime();

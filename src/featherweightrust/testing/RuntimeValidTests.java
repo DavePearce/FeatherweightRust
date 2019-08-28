@@ -159,7 +159,6 @@ public class RuntimeValidTests {
 		check(input, 123);
 	}
 
-
 	// ==============================================================
 	// Mutable Borrowing Examples
 	// ==============================================================
@@ -175,6 +174,16 @@ public class RuntimeValidTests {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
 		check(input, 123);
 	}
+
+	@Test
+	public void test_62() throws IOException {
+		String input = "{ let mut x = 0; { x = !x; let mut y = box &x; *y = &y; } let mut y = box &x; }";
+		check(input, null);
+	}
+
+	// ==============================================================
+	// Helpers
+	// ==============================================================
 
 
 	public static void check(String input, Integer output) throws IOException {

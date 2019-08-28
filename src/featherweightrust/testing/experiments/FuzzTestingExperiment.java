@@ -326,8 +326,8 @@ public class FuzzTestingExperiment {
 					// Rust says yes, FR says no
 					if(hasUnsoundness(nb)) {
 						stats.inconsistentUnsound++;
-					} else if(hasKnownLimitation(nb)) {
-						stats.inconsistentKnownLimitations++;
+					} else if(hasBoxDerefMoveLimitation(nb)) {
+						stats.inconsistentBoxDerefLimitation++;
 					} else {
 						stats.inconsistentInvalid++;
 					}
@@ -800,7 +800,7 @@ public class FuzzTestingExperiment {
 	 * @param b
 	 * @return
 	 */
-	private static boolean hasKnownLimitation(Stmt.Block b) {
+	private static boolean hasBoxDerefMoveLimitation(Stmt.Block b) {
 		// Extended borrow checker with a more flexible interpretation of T-BoxDeref.
 		BorrowChecker checker = new BorrowChecker(b.toString()) {
 			@Override
@@ -946,7 +946,7 @@ public class FuzzTestingExperiment {
 		public long inconsistentInvalid = 0;
 		public long inconsistentUnsound = 0;
 		public long inconsistentPossibleBug = 0;
-		public long inconsistentKnownLimitations = 0;
+		public long inconsistentBoxDerefLimitation = 0;
 		private final HashMap<String,Integer> errors;
 		private final HashMap<String,Integer> warnings;
 
@@ -958,7 +958,7 @@ public class FuzzTestingExperiment {
 
 		public long total() {
 			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentUnsound
-					+ inconsistentPossibleBug + inconsistentKnownLimitations + notCanonical + hasCopy + invalidPrefix;
+					+ inconsistentPossibleBug + inconsistentBoxDerefLimitation + notCanonical + hasCopy + invalidPrefix;
 		}
 
 		public void join(Stats stats) {
@@ -971,7 +971,7 @@ public class FuzzTestingExperiment {
 			this.inconsistentInvalid += stats.inconsistentInvalid;
 			this.inconsistentUnsound += stats.inconsistentUnsound;
 			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
-			this.inconsistentKnownLimitations += stats.inconsistentKnownLimitations;
+			this.inconsistentBoxDerefLimitation += stats.inconsistentBoxDerefLimitation;
 			// Join error classifications
 			join(errors,stats.errors);
 			join(warnings,stats.warnings);
@@ -1026,7 +1026,7 @@ public class FuzzTestingExperiment {
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
 			System.out.println("\tINCONSISTENT (ACTUAL BUG): " + inconsistentUnsound);
 			System.out.println("\tINCONSISTENT (POSSIBLE BUG): " + inconsistentPossibleBug);
-			System.out.println("\tINCONSISTENT (KNOWN LIMITATIONS): " + inconsistentKnownLimitations);
+			System.out.println("\tINCONSISTENT (BOXDEREF LIMITATIONS): " + inconsistentBoxDerefLimitation);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());
 			}

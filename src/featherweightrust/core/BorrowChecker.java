@@ -62,6 +62,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		this.sourcefile = sourcefile;
 	}
 
+	/**
+	 * T-Declare
+	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.Let s) {
 		// Sanity check variable not already declared
@@ -199,21 +202,19 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(Cx != null, UNDECLARED_VARIABLE, e);
 		// Check variable not moved
 		check(!Cx.moved(), VARIABLE_MOVED, e);
-		// Locate operand type
-		Cell C1 = R.get(x);
 		// Check variable x not mutable borrowed
 		check(!mutBorrowed(R, x), VARIABLE_MUTABLY_BORROWED, e.operand());
 		// Check operand has reference type
-		if (C1.type() instanceof Type.Box) {
+		if (Cx.type() instanceof Type.Box) {
 			// T-BoxDeref
-			Type T = ((Type.Box) C1.type()).element;
+			Type T = ((Type.Box) Cx.type()).element;
 			//
 			check(copyable(T), VARIABLE_NOT_COPY, e);
 			//
 			return new Pair<>(R, T);
-		} else if (C1.type() instanceof Type.Borrow) {
+		} else if (Cx.type() instanceof Type.Borrow) {
 			// T-BorrowDeref
-			Type T = R.get(((Type.Borrow) C1.type()).name()).type();
+			Type T = R.get(((Type.Borrow) Cx.type()).name()).type();
 			//
 			check(copyable(T), VARIABLE_NOT_COPY, e);
 			//
@@ -257,7 +258,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Check variable not moved
 		check(!Cx.moved(), VARIABLE_MOVED, e);
 		// Extract type from current environment
-		Type T = R.get(x).type();
+		Type T = Cx.type();
 		// Check variable has copy type
 		check(copyable(T), VARIABLE_NOT_COPY, e.operand());
 		// Check variable not mutably borrowed

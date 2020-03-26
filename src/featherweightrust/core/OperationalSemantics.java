@@ -90,7 +90,7 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Expr> reduceDereference(State S, Lifetime l, Expr.Variable x) {
+	public Pair<State, Expr> reduceDereference(State S, Expr.Variable x) {
 		// Extract location, or throw exception otherwise
 		Location lx = S.locate(x.name());
 		// Read contents of x (which should be location)
@@ -104,7 +104,7 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Expr> reduceBorrow(State S, Lifetime l, Expr.Variable x) {
+	public Pair<State, Expr> reduceBorrow(State S, Expr.Variable x) {
 		String name = x.name();
 		// Locate operand
 		Location lx = S.locate(x.name());
@@ -119,10 +119,9 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-Box.
 	 */
-	public Pair<State, Expr> reduceBox(State S1, Lifetime l, Value v) {
-		Lifetime globalLifetime = l.getRoot();
+	public Pair<State, Expr> reduceBox(State S1, Value v, Lifetime global) {
 		// Allocate new location
-		Pair<State, Location> pl = S1.allocate(globalLifetime, v);
+		Pair<State, Location> pl = S1.allocate(global, v);
 		State S2 = pl.first();
 		Location ln = pl.second();
 		// Done
@@ -132,7 +131,7 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-CopyVar.
 	 */
-	public Pair<State, Expr> reduceCopy(State S, Lifetime l, Expr.Variable x) {
+	public Pair<State, Expr> reduceCopy(State S, Expr.Variable x) {
 		// Determine location bound by variable
 		Location lx = S.locate(x.name());
 		// Read location from store
@@ -142,7 +141,7 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 	/**
 	 * Rule R-MoveVar.
 	 */
-	public Pair<State, Expr> reduceVariable(State S1, Lifetime l, Expr.Variable x) {
+	public Pair<State, Expr> reduceVariable(State S1, Expr.Variable x) {
 		// Determine location bound by variable
 		Location lx = S1.locate(x.name());
 		// Read value held by x
@@ -226,12 +225,12 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Borrow e) {
-			return reduceBorrow(S, l, e.operand());
+			return reduceBorrow(S, e.operand());
 		}
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Dereference e) {
-			return reduceDereference(S, l, e.operand());
+			return reduceDereference(S, e.operand());
 		}
 
 		@Override
@@ -241,17 +240,17 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 			State S2 = rhs.first();
 			Value v = (Value) rhs.second();
 			// Reduce indirect assignment
-			return reduceBox(S2, l, v);
+			return reduceBox(S2, v, l.getRoot());
 		}
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Variable e) {
-			return reduceVariable(S, l, e);
+			return reduceVariable(S, e);
 		}
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Copy e) {
-			return reduceCopy(S, l, e.operand());
+			return reduceCopy(S, e.operand());
 		}
 
 		@Override
@@ -360,19 +359,19 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Borrow e) {
-			return reduceBorrow(S, l, e.operand());
+			return reduceBorrow(S, e.operand());
 		}
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Dereference e) {
-			return reduceDereference(S, l, e.operand());
+			return reduceDereference(S, e.operand());
 		}
 
 		@Override
 		final public Pair<State, Expr> apply(State S1, Lifetime l, Expr.Box e) {
 			if (e.operand() instanceof Value) {
 				// Statement can be completely reduced
-				return reduceBox(S1, l, (Value) e.operand());
+				return reduceBox(S1, (Value) e.operand(), l.getRoot());
 			} else {
 				// Statement not ready to be reduced yet
 				Pair<State, Expr> rhs = apply(S1, l, e.operand());
@@ -385,12 +384,12 @@ public abstract class OperationalSemantics extends AbstractSemantics {
 
 		@Override
 		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Variable e) {
-			return reduceVariable(S, l, e);
+			return reduceVariable(S, e);
 		}
 
 		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime lifetime, Expr.Copy e) {
-			return reduceCopy(S, lifetime, e.operand());
+		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Copy e) {
+			return reduceCopy(S, e.operand());
 		}
 
 		@Override

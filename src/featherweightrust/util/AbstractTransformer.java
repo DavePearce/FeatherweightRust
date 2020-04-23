@@ -17,68 +17,60 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.util;
 
-import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 
-public abstract class AbstractTransformer<T,S,E extends S> {
+public abstract class AbstractTransformer<T,S> {
 
 	@SuppressWarnings("unchecked")
-	public Pair<T, S> apply(T state, Lifetime lifetime, Stmt stmt) {
-		if (stmt instanceof Stmt.Assignment) {
-			return apply(state, lifetime, (Stmt.Assignment) stmt);
-		} else if (stmt instanceof Stmt.Block) {
-			return apply(state, lifetime, (Stmt.Block) stmt);
-		} else if (stmt instanceof Stmt.IndirectAssignment) {
-			return apply(state, lifetime, (Stmt.IndirectAssignment) stmt);
-		} else if (stmt instanceof Stmt.Let) {
-			return apply(state, lifetime, (Stmt.Let) stmt);
+	public Pair<T, S> apply(T state, Lifetime lifetime, S stmt) {
+		if (stmt instanceof Term.Assignment) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Assignment) stmt);
+		} else if (stmt instanceof Term.Block) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Block) stmt);
+		} else if (stmt instanceof Term.IndirectAssignment) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.IndirectAssignment) stmt);
+		} else if (stmt instanceof Term.Let) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Let) stmt);
+		} else if (stmt instanceof Value.Integer) {
+			return (Pair<T, S>) apply(state, (Value.Integer) stmt);
+		} else if (stmt instanceof Value.Location) {
+			return (Pair<T, S>) apply(state, (Value.Location) stmt);
+		} else if (stmt instanceof Term.Dereference) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Dereference) stmt);
+		} else if (stmt instanceof Term.Borrow) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Borrow) stmt);
+		} else if (stmt instanceof Term.Box) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Box) stmt);
+		} else if (stmt instanceof Term.Copy) {
+			return (Pair<T, S>) apply(state, lifetime, (Term.Copy) stmt);
 		} else {
-			Pair<T,E> p = apply(state, lifetime, (Expr) stmt);
-			return new Pair<>(p.first(),p.second());
+			return (Pair<T, S>) apply(state, lifetime, (Term.Variable) stmt);
 		}
 	}
 
-	public abstract Pair<T,S> apply(T state, Lifetime lifetime, Stmt.Assignment stmt);
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Assignment stmt);
 
-	public abstract Pair<T,S> apply(T state, Lifetime lifetime, Stmt.Block stmt);
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Block stmt);
 
-	public abstract Pair<T,S> apply(T state, Lifetime lifetime, Stmt.IndirectAssignment stmt);
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.IndirectAssignment stmt);
 
-	public abstract Pair<T,S> apply(T state, Lifetime lifetime, Stmt.Let stmt);
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Let stmt);
 
-	@SuppressWarnings("unchecked")
-	public Pair<T,E> apply(T state, Lifetime lifetime, Expr expr) {
-		if(expr instanceof Value.Integer) {
-			return apply(state, (Value.Integer) expr);
-		} else if(expr instanceof Value.Location) {
-			return apply(state, (Value.Location) expr);
-		} else if (expr instanceof Expr.Dereference) {
-			return apply(state, lifetime, (Expr.Dereference) expr);
-		} else if (expr instanceof Expr.Borrow) {
-			return apply(state, lifetime, (Expr.Borrow) expr);
-		} else if (expr instanceof Expr.Box) {
-			return apply(state, lifetime, (Expr.Box) expr);
-		} else if (expr instanceof Expr.Copy){
-			return apply(state, lifetime, (Expr.Copy) expr);
-		} else {
-			return apply(state, lifetime, (Expr.Variable) expr);
-		}
-	}
+	public abstract Pair<T, S> apply(T state, Value.Integer value);
+
+	public abstract Pair<T, S> apply(T state, Value.Location value);
+
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Dereference expr);
+
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Borrow expr);
+
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Box expr);
+
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Variable expr);
+
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Copy expr);
 
 
-	public abstract Pair<T,E> apply(T state, Value.Integer value);
-
-	public abstract Pair<T,E> apply(T state, Value.Location value);
-
-	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Dereference expr);
-
-	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Borrow expr);
-
-	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Box expr);
-
-	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Variable expr);
-
-	public abstract Pair<T,E> apply(T state, Lifetime lifetime, Expr.Copy expr);
 }

@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
@@ -224,7 +224,7 @@ public class CoreBorrowCheckTests {
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
-			Stmt.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
+			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
 			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			//

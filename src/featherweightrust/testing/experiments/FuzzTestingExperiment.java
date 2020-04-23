@@ -46,9 +46,8 @@ import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
-import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
@@ -154,7 +153,7 @@ public class FuzzTestingExperiment {
 		// Extract version string
 		RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
 		//
-		Iterator<Stmt.Block> iterator;
+		Iterator<Term.Block> iterator;
 		String label;
 		//
 		if (options.containsKey("pspace")) {
@@ -167,7 +166,7 @@ public class FuzzTestingExperiment {
 				label = space.toString() + "{def," + c + "}";
 			} else {
 				// Get domain
-				Domain.Big<Stmt.Block> domain = space.domain();
+				Domain.Big<Term.Block> domain = space.domain();
 				// Determine expected size
 				expected = domain.bigSize().longValueExact();
 				// Get iterator
@@ -177,7 +176,7 @@ public class FuzzTestingExperiment {
 			}
 		} else {
 			// Read from stdin line by line
-			List<Stmt.Block> inputs = readAll(System.in);
+			List<Term.Block> inputs = readAll(System.in);
 			iterator = inputs.iterator();
 			expected = inputs.size();
 			label = "STDIN";
@@ -211,10 +210,10 @@ public class FuzzTestingExperiment {
 	 * @throws InterruptedException
 	 * @throws ExecutionException
 	 */
-	public static void check(Iterator<Stmt.Block> iterator, long expected, String label)
+	public static void check(Iterator<Term.Block> iterator, long expected, String label)
 			throws NoSuchAlgorithmException, IOException, InterruptedException, ExecutionException {
 		// Construct temporary memory areas
-		Stmt.Block[][] arrays = new Stmt.Block[NTHREADS][BATCHSIZE];
+		Term.Block[][] arrays = new Term.Block[NTHREADS][BATCHSIZE];
 		Future<Stats>[] threads = new Future[NTHREADS];
 		Stats stats = new Stats(label);
 		//
@@ -225,7 +224,7 @@ public class FuzzTestingExperiment {
 			}
 			// Submit next batch for process
 			for (int i = 0; i != NTHREADS; ++i) {
-				final Stmt.Block[] batch = arrays[i];
+				final Term.Block[] batch = arrays[i];
 				threads[i] = executor.submit(() -> check(batch));
 			}
 			// Join all back together
@@ -269,10 +268,10 @@ public class FuzzTestingExperiment {
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public static Stats check(Stmt.Block[] batch) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static Stats check(Term.Block[] batch) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		Stats stats = new Stats(null);
 		for(int i=0;i!=batch.length;++i) {
-			Stmt.Block block = batch[i];
+			Term.Block block = batch[i];
 			if(block != null) {
 				check(block,stats);
 			}
@@ -289,14 +288,14 @@ public class FuzzTestingExperiment {
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public static void check(Stmt.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static void check(Term.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		if(!isCanonical(b)) {
 			stats.notCanonical++;
 		} else if(hasCopy(b)) {
 			stats.hasCopy++;
 		} else {
 			// Infer copy expressions
-			Stmt.Block nb = inferVariableClones(b);
+			Term.Block nb = inferVariableClones(b);
 			// Check using calculus
 			SyntaxError FR_err = calculusCheckProgram(nb);
 			boolean FR_status = (FR_err == null);
@@ -357,7 +356,7 @@ public class FuzzTestingExperiment {
 	 * @throws IOException
 	 * @throws NoSuchAlgorithmException
 	 */
-	public static void reportFailure(Stmt.Block b, String program, SyntaxError FR_err, String rustc_err) throws IOException, NoSuchAlgorithmException {
+	public static void reportFailure(Term.Block b, String program, SyntaxError FR_err, String rustc_err) throws IOException, NoSuchAlgorithmException {
 		if(VERBOSE) {
 			// Determine hash of program for naming
 			System.out.println("********* FAILURE");
@@ -385,7 +384,7 @@ public class FuzzTestingExperiment {
 	 * @param l
 	 * @return
 	 */
-	public static SyntaxError calculusCheckProgram(Stmt.Block b) {
+	public static SyntaxError calculusCheckProgram(Term.Block b) {
 		BorrowChecker checker = new BorrowChecker(b.toString());
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
@@ -415,8 +414,8 @@ public class FuzzTestingExperiment {
 	 * @param stmt
 	 * @return
 	 */
-	public static Stmt.Block inferVariableClones(Stmt.Block stmt) {
-		return (Stmt.Block) inferVariableClones(stmt, new HashSet<>());
+	public static Term.Block inferVariableClones(Term.Block stmt) {
+		return (Term.Block) inferVariableClones(stmt, new HashSet<>());
 	}
 
 	/**
@@ -424,19 +423,19 @@ public class FuzzTestingExperiment {
 	 * which have copy semantics (hence, can and should be copied). The key here is
 	 * to reduce work by only allocating new objects when things change.
 	 *
-	 * @param stmt
+	 * @param term
 	 * @param copyables
 	 * @return
 	 */
-	private static Stmt inferVariableClones(Stmt stmt, HashSet<String> copyables) {
-		if(stmt instanceof Stmt.Block) {
+	private static Term inferVariableClones(Term term, HashSet<String> copyables) {
+		if (term instanceof Term.Block) {
 			copyables = new HashSet<>(copyables);
-			Stmt.Block block = (Stmt.Block) stmt;
-			final Stmt[] stmts = block.toArray();
-			Stmt[] nstmts = stmts;
+			Term.Block block = (Term.Block) term;
+			final Term[] stmts = block.toArray();
+			Term[] nstmts = stmts;
 			for (int i = 0; i != block.size(); ++i) {
-				Stmt s = block.get(i);
-				Stmt n = inferVariableClones(s, copyables);
+				Term s = block.get(i);
+				Term n = inferVariableClones(s, copyables);
 				if (s != n) {
 					if (stmts == nstmts) {
 						nstmts = Arrays.copyOf(stmts, stmts.length);
@@ -444,66 +443,54 @@ public class FuzzTestingExperiment {
 					nstmts[i] = n;
 				}
 				// Update copyables
-				inferCopyables(s,copyables);
+				inferCopyables(s, copyables);
 			}
 			if (stmts == nstmts) {
-				return stmt;
+				return term;
 			} else {
-				return new Stmt.Block(block.lifetime(), nstmts, stmt.attributes());
+				return new Term.Block(block.lifetime(), nstmts, term.attributes());
 			}
-		} else if(stmt instanceof Stmt.Let) {
-			Stmt.Let s = (Stmt.Let) stmt;
-			Expr e = s.initialiser();
-			Expr ne = inferVariableClones(e,copyables);
-			if(e == ne) {
-				return stmt;
+		} else if (term instanceof Term.Let) {
+			Term.Let s = (Term.Let) term;
+			Term e = s.initialiser();
+			Term ne = inferVariableClones(e, copyables);
+			if (e == ne) {
+				return term;
 			} else {
-				return new Stmt.Let(s.variable(), ne, stmt.attributes());
+				return new Term.Let(s.variable(), ne, term.attributes());
 			}
-		} else if(stmt instanceof Stmt.Assignment) {
-			Stmt.Assignment s = (Stmt.Assignment) stmt;
-			Expr e = s.rightOperand();
-			Expr ne = inferVariableClones(e,copyables);
-			if(e == ne) {
-				return stmt;
+		} else if (term instanceof Term.Assignment) {
+			Term.Assignment s = (Term.Assignment) term;
+			Term e = s.rightOperand();
+			Term ne = inferVariableClones(e, copyables);
+			if (e == ne) {
+				return term;
 			} else {
-				return new Stmt.Assignment(s.leftOperand(), ne, stmt.attributes());
+				return new Term.Assignment(s.leftOperand(), ne, term.attributes());
+			}
+		} else if (term instanceof Term.IndirectAssignment) {
+			Term.IndirectAssignment s = (Term.IndirectAssignment) term;
+			Term e = s.rightOperand();
+			Term ne = inferVariableClones(e, copyables);
+			if (e == ne) {
+				return term;
+			} else {
+				return new Term.IndirectAssignment(s.leftOperand(), ne, term.attributes());
+			}
+		} else if (term instanceof Term.Variable) {
+			Term.Variable v = (Term.Variable) term;
+			if (copyables.contains(v.name())) {
+				return new Term.Copy(v, term.attributes());
 			}
 		} else {
-			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
-			Expr e = s.rightOperand();
-			Expr ne = inferVariableClones(e,copyables);
-			if(e == ne) {
-				return stmt;
-			} else {
-				return new Stmt.IndirectAssignment(s.leftOperand(), ne, stmt.attributes());
+			Term.Box b = (Term.Box) term;
+			Term e = b.operand();
+			Term ne = inferVariableClones(e, copyables);
+			if (e != ne) {
+				return new Term.Box(ne, term.attributes());
 			}
 		}
-	}
-
-	/**
-	 * Infer variable copies where necessary using a given set of variables which
-	 * are known to have copy semantics at this point.
-	 *
-	 * @param expr
-	 * @param copyables
-	 * @return
-	 */
-	public static Expr inferVariableClones(Expr expr, HashSet<String> copyables) {
-		if(expr instanceof Expr.Variable) {
-			Expr.Variable v = (Expr.Variable) expr;
-			if(copyables.contains(v.name())) {
-				return new Expr.Copy(v, expr.attributes());
-			}
-		} else if(expr instanceof Expr.Box) {
-			Expr.Box b = (Expr.Box) expr;
-			Expr e = b.operand();
-			Expr ne = inferVariableClones(e,copyables);
-			if(e != ne) {
-				return new Expr.Box(ne, expr.attributes());
-			}
-		}
-		return expr;
+		return term;
 	}
 
 	/**
@@ -512,9 +499,9 @@ public class FuzzTestingExperiment {
 	 * @param stmt
 	 * @param copyables
 	 */
-	public static void inferCopyables(Stmt stmt, HashSet<String> copyables) {
-		if(stmt instanceof Stmt.Let) {
-			Stmt.Let s = (Stmt.Let) stmt;
+	public static void inferCopyables(Term stmt, HashSet<String> copyables) {
+		if(stmt instanceof Term.Let) {
+			Term.Let s = (Term.Let) stmt;
 			if(isCopyable(s.initialiser(),copyables)) {
 				copyables.add(s.variable().name());
 			}
@@ -530,14 +517,14 @@ public class FuzzTestingExperiment {
 	 * @param copyables
 	 * @return
 	 */
-	public static boolean isCopyable(Expr expr, HashSet<String> copyables) {
-		if (expr instanceof Expr.Box) {
+	public static boolean isCopyable(Term expr, HashSet<String> copyables) {
+		if (expr instanceof Term.Box) {
 			return false;
-		} else if (expr instanceof Expr.Borrow) {
-			Expr.Borrow b = (Expr.Borrow) expr;
+		} else if (expr instanceof Term.Borrow) {
+			Term.Borrow b = (Term.Borrow) expr;
 			return !b.isMutable();
-		} else if (expr instanceof Expr.Variable) {
-			Expr.Variable v = (Expr.Variable) expr;
+		} else if (expr instanceof Term.Variable) {
+			Term.Variable v = (Term.Variable) expr;
 			return copyables.contains(v.name());
 		}
 		return true;
@@ -552,7 +539,7 @@ public class FuzzTestingExperiment {
 	 * @param numDeclared
 	 * @return
 	 */
-	public static boolean isCanonical(Stmt stmt) {
+	public static boolean isCanonical(Term stmt) {
 		try {
 			isCanonical(stmt,0);
 			return true;
@@ -561,16 +548,16 @@ public class FuzzTestingExperiment {
 		}
 	}
 
-	private static int isCanonical(Stmt stmt, int declared) {
-		if(stmt instanceof Stmt.Block) {
-			Stmt.Block s = (Stmt.Block) stmt;
+	private static int isCanonical(Term stmt, int declared) {
+		if(stmt instanceof Term.Block) {
+			Term.Block s = (Term.Block) stmt;
 			int declaredWithin = declared;
 			for(int i=0;i!=s.size();++i) {
 				declaredWithin = isCanonical(s.get(i), declaredWithin);
 			}
 			return declared;
-		} else if(stmt instanceof Stmt.Let) {
-			Stmt.Let s = (Stmt.Let) stmt;
+		} else if(stmt instanceof Term.Let) {
+			Term.Let s = (Term.Let) stmt;
 			String var = s.variable().name();
 			if(!ProgramSpace.VARIABLE_NAMES[declared].equals(var)) {
 				// Program is not canonical
@@ -586,12 +573,12 @@ public class FuzzTestingExperiment {
 	 * live. Such programs are ignored because such expressions will be treated
 	 * differently by the rust compiler (i.e. treated as moves).
 	 *
-	 * @param stmt
+	 * @param term
 	 * @return
 	 */
-	private static boolean hasCopy(Stmt stmt) {
-		if(stmt instanceof Stmt.Block) {
-			Stmt.Block b = (Stmt.Block) stmt;
+	private static boolean hasCopy(Term term) {
+		if (term instanceof Term.Block) {
+			Term.Block b = (Term.Block) term;
 			// Go backwards through the block for obvious reasons.
 			for (int i = 0; i != b.size(); ++i) {
 				if (hasCopy(b.get(i))) {
@@ -599,23 +586,19 @@ public class FuzzTestingExperiment {
 				}
 			}
 			return false;
-		} else if(stmt instanceof Stmt.Let) {
-			Stmt.Let s = (Stmt.Let) stmt;
+		} else if (term instanceof Term.Let) {
+			Term.Let s = (Term.Let) term;
 			return hasCopy(s.initialiser());
-		} else if(stmt instanceof Stmt.Assignment) {
-			Stmt.Assignment s = (Stmt.Assignment) stmt;
+		} else if (term instanceof Term.Assignment) {
+			Term.Assignment s = (Term.Assignment) term;
 			return hasCopy(s.rightOperand());
-		} else {
-			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+		} else if (term instanceof Term.IndirectAssignment) {
+			Term.IndirectAssignment s = (Term.IndirectAssignment) term;
 			return hasCopy(s.leftOperand()) || hasCopy(s.rightOperand());
-		}
-	}
-
-	private static boolean hasCopy(Expr expr) {
-		if(expr instanceof Expr.Copy) {
+		} else if (term instanceof Term.Copy) {
 			return true;
-		} else if(expr instanceof Expr.Box) {
-			Expr.Box e = (Expr.Box) expr;
+		} else if (term instanceof Term.Box) {
+			Term.Box e = (Term.Box) term;
 			return hasCopy(e.operand());
 		}
 		return false;
@@ -632,20 +615,20 @@ public class FuzzTestingExperiment {
 	 * @param b
 	 * @return
 	 */
-	private static String toRustProgram(Stmt.Block b) {
+	private static String toRustProgram(Term.Block b) {
 		return "fn main() " + toRustString(b, new HashSet<>());
 	}
 
-	private static String toRustString(Stmt stmt, HashSet<String> live) {
-		if (stmt instanceof Stmt.Block) {
-			Stmt.Block block = (Stmt.Block) stmt;
+	private static String toRustString(Term stmt, HashSet<String> live) {
+		if (stmt instanceof Term.Block) {
+			Term.Block block = (Term.Block) stmt;
 			String contents = "";
 			ArrayList<String> declared = new ArrayList<>();
 			for (int i = 0; i != block.size(); ++i) {
-				Stmt s = block.get(i);
+				Term s = block.get(i);
 				contents += toRustString(s, live) + " ";
-				if (s instanceof Stmt.Let) {
-					Stmt.Let l = (Stmt.Let) s;
+				if (s instanceof Term.Let) {
+					Term.Let l = (Term.Let) s;
 					declared.add(l.variable().name());
 				}
 			}
@@ -663,21 +646,21 @@ public class FuzzTestingExperiment {
 			}
 			//
 			return "{ " + contents + "}";
-		} else if(stmt instanceof Stmt.Let) {
-			Stmt.Let s = (Stmt.Let) stmt;
+		} else if(stmt instanceof Term.Let) {
+			Term.Let s = (Term.Let) stmt;
 			String init = toRustString(s.initialiser());
 			updateLiveness(s.initialiser(),live);
 			// By definition variable is live after assignment
 			live.add(s.variable().name());
 			return "let mut " + s.variable().name() + " = " + init + ";";
-		} else if(stmt instanceof Stmt.Assignment) {
-			Stmt.Assignment s = (Stmt.Assignment) stmt;
+		} else if(stmt instanceof Term.Assignment) {
+			Term.Assignment s = (Term.Assignment) stmt;
 			updateLiveness(s.rightOperand(),live);
 			// By definition variable is live after assignment
 			live.add(s.leftOperand().name());
 			return s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
 		} else {
-			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+			Term.IndirectAssignment s = (Term.IndirectAssignment) stmt;
 			updateLiveness(s.rightOperand(),live);
 			return "*" + s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
 		}
@@ -691,19 +674,19 @@ public class FuzzTestingExperiment {
 	 * @param stmt
 	 * @return
 	 */
-	private static boolean hasSelfAssignment(Stmt stmt) {
-		if(stmt instanceof Stmt.Block) {
-			Stmt.Block b = (Stmt.Block) stmt;
+	private static boolean hasSelfAssignment(Term stmt) {
+		if(stmt instanceof Term.Block) {
+			Term.Block b = (Term.Block) stmt;
 			for (int i = 0; i != b.size(); ++i) {
 				if(hasSelfAssignment(b.get(i))) {
 					return true;
 				}
 			}
 			return false;
-		} else if(stmt instanceof Stmt.Assignment) {
-			Stmt.Assignment s = (Stmt.Assignment) stmt;
-			if(s.rhs instanceof Expr.Variable) {
-				Expr.Variable rhs = (Expr.Variable) s.rhs;
+		} else if(stmt instanceof Term.Assignment) {
+			Term.Assignment s = (Term.Assignment) stmt;
+			if(s.rhs instanceof Term.Variable) {
+				Term.Variable rhs = (Term.Variable) s.rhs;
 				return s.lhs.name().equals(rhs.name());
 			}
 		}
@@ -733,20 +716,20 @@ public class FuzzTestingExperiment {
 	 * @param b
 	 * @return
 	 */
-	private static boolean hasUnsoundness(Stmt stmt) {
-		if (stmt instanceof Stmt.Block) {
-			Stmt.Block b = (Stmt.Block) stmt;
+	private static boolean hasUnsoundness(Term stmt) {
+		if (stmt instanceof Term.Block) {
+			Term.Block b = (Term.Block) stmt;
 			for (int i = 0; i != b.size(); ++i) {
 				if (hasUnsoundness(b.get(i))) {
 					return true;
 				}
 			}
 			return false;
-		} else if (stmt instanceof Stmt.Assignment) {
-			Stmt.Assignment s = (Stmt.Assignment) stmt;
+		} else if (stmt instanceof Term.Assignment) {
+			Term.Assignment s = (Term.Assignment) stmt;
 			return hasUnsoundBorrow(s.lhs.name(), s.rhs);
-		} else if (stmt instanceof Stmt.IndirectAssignment) {
-			Stmt.IndirectAssignment s = (Stmt.IndirectAssignment) stmt;
+		} else if (stmt instanceof Term.IndirectAssignment) {
+			Term.IndirectAssignment s = (Term.IndirectAssignment) stmt;
 			return hasUnsoundBorrow(s.leftOperand().name(), s.rightOperand());
 		} else {
 			return false;
@@ -761,12 +744,12 @@ public class FuzzTestingExperiment {
 	 * @param e
 	 * @return
 	 */
-	private static boolean hasUnsoundBorrow(String var, Expr e) {
-		if (e instanceof Expr.Box) {
-			Expr.Box b = (Expr.Box) e;
+	private static boolean hasUnsoundBorrow(String var, Term e) {
+		if (e instanceof Term.Box) {
+			Term.Box b = (Term.Box) e;
 			return hasUnsoundBorrow(var, b.operand());
-		} else if (e instanceof Expr.Borrow) {
-			Expr.Borrow b = (Expr.Borrow) e;
+		} else if (e instanceof Term.Borrow) {
+			Term.Borrow b = (Term.Borrow) e;
 			return b.operand().name().equals(var);
 		} else {
 			return false;
@@ -800,11 +783,11 @@ public class FuzzTestingExperiment {
 	 * @param b
 	 * @return
 	 */
-	private static boolean hasBoxDerefMoveLimitation(Stmt.Block b) {
+	private static boolean hasBoxDerefMoveLimitation(Term.Block b) {
 		// Extended borrow checker with a more flexible interpretation of T-BoxDeref.
 		BorrowChecker checker = new BorrowChecker(b.toString()) {
 			@Override
-			public Pair<Environment, Type> apply(Environment R1, Lifetime l, Expr.Dereference e) {
+			public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Dereference e) {
 				String x = e.operand().name();
 				Cell Cx = R1.get(x);
 				// Check variable is declared
@@ -843,12 +826,12 @@ public class FuzzTestingExperiment {
 	 * @param expr
 	 * @return
 	 */
-	private static String toRustString(Expr expr) {
-		if (expr instanceof Expr.Copy) {
-			Expr.Copy v = (Expr.Copy) expr;
+	private static String toRustString(Term expr) {
+		if (expr instanceof Term.Copy) {
+			Term.Copy v = (Term.Copy) expr;
 			return v.operand().name();
-		} else if (expr instanceof Expr.Box) {
-			Expr.Box b = (Expr.Box) expr;
+		} else if (expr instanceof Term.Box) {
+			Term.Box b = (Term.Box) expr;
 			return "Box::new(" + toRustString(b.operand()) + ")";
 		} else {
 			return expr.toString();
@@ -861,13 +844,13 @@ public class FuzzTestingExperiment {
 	 * @param expr
 	 * @param liveness
 	 */
-	private static void updateLiveness(Expr expr, HashSet<String> liveness) {
-		if (expr instanceof Expr.Variable) {
+	private static void updateLiveness(Term expr, HashSet<String> liveness) {
+		if (expr instanceof Term.Variable) {
 			// Variable move
-			Expr.Variable b = (Expr.Variable) expr;
+			Term.Variable b = (Term.Variable) expr;
 			liveness.remove(b.name());
-		} else if (expr instanceof Expr.Box) {
-			Expr.Box b = (Expr.Box) expr;
+		} else if (expr instanceof Term.Box) {
+			Term.Box b = (Term.Box) expr;
 			updateLiveness(b.operand(), liveness);
 		}
 	}
@@ -916,15 +899,15 @@ public class FuzzTestingExperiment {
 		return hexString.toString();
 	}
 
-	private static List<Stmt.Block> readAll(InputStream in) throws IOException {
-		ArrayList<Stmt.Block> inputs = new ArrayList<>();
+	private static List<Term.Block> readAll(InputStream in) throws IOException {
+		ArrayList<Term.Block> inputs = new ArrayList<>();
 		Scanner stdin = new Scanner(in);
 		while (stdin.hasNext()) {
 		    String input = stdin.nextLine();
 		    // Tokenize input program
 		    List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
-			Stmt.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), ProgramSpace.ROOT);
+			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), ProgramSpace.ROOT);
 			// Record it
 		    inputs.add(stmt);
 		}

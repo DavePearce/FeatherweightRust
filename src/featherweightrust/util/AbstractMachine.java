@@ -23,9 +23,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 

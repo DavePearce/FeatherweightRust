@@ -1,9 +1,8 @@
 package featherweightrust.extensions;
 
-import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.core.Syntax.Stmt.AbstractStmt;
+import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Term.AbstractStmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
@@ -32,12 +31,12 @@ public class ControlFlow {
 		 *
 		 */
 		public static class IfElse extends AbstractStmt {
-			private final Expr lhs;
-			private final Expr rhs;
-			private final Stmt.Block trueBlock;
-			private final Stmt.Block falseBlock;
+			private final Term lhs;
+			private final Term rhs;
+			private final Term.Block trueBlock;
+			private final Term.Block falseBlock;
 
-			public IfElse(Expr lhs, Expr rhs, Stmt.Block trueBlock, Stmt.Block falseBlock,
+			public IfElse(Term lhs, Term rhs, Term.Block trueBlock, Term.Block falseBlock,
 					Attribute... attributes) {
 				super(attributes);
 				this.lhs = lhs;
@@ -51,7 +50,7 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Expr getLeftHandSide() {
+			public Term getLeftHandSide() {
 				return lhs;
 			}
 
@@ -60,7 +59,7 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Expr getRightHandSide() {
+			public Term getRightHandSide() {
 				return rhs;
 			}
 
@@ -69,7 +68,7 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Stmt.Block getTrueBlock() {
+			public Term.Block getTrueBlock() {
 				return trueBlock;
 			}
 
@@ -78,7 +77,7 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Stmt.Block getFalseBlock() {
+			public Term.Block getFalseBlock() {
 				return falseBlock;
 			}
 
@@ -90,9 +89,9 @@ public class ControlFlow {
 	}
 
 	public static class Semantics {
-		public Pair<State, Stmt> apply(State S, Lifetime l, Syntax.IfElse s) {
-			Expr lhs = s.getLeftHandSide();
-			Expr rhs = s.getRightHandSide();
+		public Pair<State, Term> apply(State S, Lifetime l, Syntax.IfElse s) {
+			Term lhs = s.getLeftHandSide();
+			Term rhs = s.getRightHandSide();
 			//
 			if (lhs instanceof Value && rhs instanceof Value) {
 				// Both lhs and rhs fully reduced
@@ -103,18 +102,18 @@ public class ControlFlow {
 				}
 			} else if(lhs instanceof Value) {
 				// lhs is fully reduced
-				Pair<State, Expr> r = apply(S, l, rhs);
+				Pair<State, Term> r = apply(S, l, rhs);
 				State S2 = r.first();
-				Stmt s2 = new Syntax.IfElse(lhs,r.second(),s.getTrueBlock(),s.getFalseBlock(),s.attributes());
+				Term s2 = new Syntax.IfElse(lhs,r.second(),s.getTrueBlock(),s.getFalseBlock(),s.attributes());
 				//
-				return new Pair<State,Stmt>(S2,s);
+				return new Pair<State,Term>(S2,s);
 			} else {
 				// lhs not fully reduced
-				Pair<State, Expr> l = apply(S, l, lhs);
+				Pair<State, Term> l = apply(S, l, lhs);
 				State S2 = l.first();
-				Stmt s2 = new Syntax.IfElse(l.second(),lhs,s.getTrueBlock(),s.getFalseBlock(),s.attributes());
+				Term s2 = new Syntax.IfElse(l.second(),lhs,s.getTrueBlock(),s.getFalseBlock(),s.attributes());
 				//
-				return new Pair<State,Stmt>(S2,s);
+				return new Pair<State,Term>(S2,s);
 			}
 		}
 	}

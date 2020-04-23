@@ -195,8 +195,7 @@ public class CoreRuntimeTests {
 
 
 	public static void check(String input, Integer output) throws IOException {
-		check(input,output,BIG_STEP);
-		check(input,output,SMALL_STEP);
+		check(input,output,SEMANTICS);
 	}
 
 	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
@@ -241,6 +240,5 @@ public class CoreRuntimeTests {
 		fail("expected: " + expected + ", got: " + actual);
 	}
 
-	public static final OperationalSemantics BIG_STEP = new OperationalSemantics.BigStep();
-	public static final OperationalSemantics SMALL_STEP = new OperationalSemantics.SmallStep();
+	public static final OperationalSemantics SEMANTICS = new OperationalSemantics();
 }

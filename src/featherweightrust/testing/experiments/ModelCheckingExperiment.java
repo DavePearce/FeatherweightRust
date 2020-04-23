@@ -186,7 +186,7 @@ public class ModelCheckingExperiment {
 	}
 
 	// NOTE: must use BigStep semantics because its more efficient!
-	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
+	public static final OperationalSemantics semantics = new OperationalSemantics();
 	public static final BorrowChecker checker = new BorrowChecker("");
 
 	public static void check(Term.Block stmt, Lifetime lifetime, Stats stats) {

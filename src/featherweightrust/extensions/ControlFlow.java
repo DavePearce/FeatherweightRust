@@ -2,7 +2,7 @@ package featherweightrust.extensions;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
-import featherweightrust.core.Syntax.Term.AbstractStmt;
+import featherweightrust.core.Syntax.Term.AbstractTerm;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
@@ -30,7 +30,7 @@ public class ControlFlow {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class IfElse extends AbstractStmt {
+		public static class IfElse extends AbstractTerm {
 			private final Term lhs;
 			private final Term rhs;
 			private final Term.Block trueBlock;

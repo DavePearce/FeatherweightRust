@@ -26,12 +26,44 @@ import jmodelgen.core.Domains;
 import jmodelgen.util.Walkers;
 
 public class Syntax {
+	public final static int TERM_let = 0;
+	public final static int TERM_assignment = 1;
+	public final static int TERM_indirectassignment = 2;
+	public final static int TERM_block = 3;
+	public final static int TERM_move = 4;
+	public final static int TERM_copy = 5;
+	public final static int TERM_borrow = 6;
+	public final static int TERM_dereference = 7;
+	public final static int TERM_box = 8;
+	public final static int TERM_integer = 9;
+	public final static int TERM_location = 10;
 
 	public interface Term extends SyntacticElement {
 
-		public static abstract class AbstractStmt extends SyntacticElement.Impl implements Term {
-			public AbstractStmt(Attribute... attributes) {
+		/**
+		 * Get the opcode associated with the syntactic form of this term.
+		 *
+		 * @return
+		 */
+		public int getOpcode();
+
+		/**
+		 * An abstract term to be implemented by all other terms.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public static abstract class AbstractTerm extends SyntacticElement.Impl implements Term {
+			private final int opcode;
+
+			public AbstractTerm(int opcode, Attribute... attributes) {
 				super(attributes);
+				this.opcode = opcode;
+			}
+
+			@Override
+			public int getOpcode() {
+				return opcode;
 			}
 		}
 
@@ -45,12 +77,12 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public class Let extends AbstractStmt {
+		public class Let extends AbstractTerm {
 			private final Term.Variable variable;
 			private final Term initialiser;
 
 			public Let(Term.Variable variable, Term initialiser, Attribute... attributes) {
-				super(attributes);
+				super(TERM_let, attributes);
 				this.variable = variable;
 				this.initialiser = initialiser;
 			}
@@ -97,12 +129,12 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public class Assignment extends AbstractStmt {
+		public class Assignment extends AbstractTerm {
 			public final Term.Variable lhs;
 			public final Term rhs;
 
 			public Assignment(Term.Variable lhs, Term rhs, Attribute... attributes) {
-				super(attributes);
+				super(TERM_assignment,attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -139,12 +171,12 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public class IndirectAssignment extends AbstractStmt {
+		public class IndirectAssignment extends AbstractTerm {
 			private final Term.Variable lhs;
 			private final Term rhs;
 
 			public IndirectAssignment(Term.Variable lhs, Term rhs, Attribute... attributes) {
-				super(attributes);
+				super(TERM_indirectassignment,attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -182,12 +214,12 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public class Block extends AbstractStmt {
+		public class Block extends AbstractTerm {
 			private final Lifetime lifetime;
 			private final Term[] stmts;
 
 			public Block(Lifetime lifetime, Term[] stmts, Attribute... attributes) {
-				super(attributes);
+				super(TERM_block,attributes);
 				this.lifetime = lifetime;
 				this.stmts = stmts;
 			}
@@ -230,11 +262,11 @@ public class Syntax {
 			}
 		}
 
-		public class Variable extends AbstractStmt implements Term {
+		public class Variable extends AbstractTerm implements Term {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
-				super(attributes);
+				super(TERM_move, attributes);
 				this.name = name;
 			}
 
@@ -256,11 +288,11 @@ public class Syntax {
 			}
 		}
 
-		public class Dereference extends AbstractStmt implements Term {
+		public class Dereference extends AbstractTerm implements Term {
 			private final Term.Variable operand;
 
 			public Dereference(Term.Variable operand, Attribute... attributes) {
-				super(attributes);
+				super(TERM_dereference, attributes);
 				this.operand = operand;
 			}
 
@@ -282,12 +314,12 @@ public class Syntax {
 			}
 		}
 
-		public class Borrow extends AbstractStmt implements Term {
+		public class Borrow extends AbstractTerm implements Term {
 			private final Term.Variable operand;
 			private final boolean mutable;
 
 			public Borrow(Term.Variable operand, boolean mutable, Attribute... attributes) {
-				super(attributes);
+				super(TERM_borrow,attributes);
 				this.operand = operand;
 				this.mutable = mutable;
 			}
@@ -318,11 +350,11 @@ public class Syntax {
 			}
 		}
 
-		public class Box extends AbstractStmt implements Term {
+		public class Box extends AbstractTerm implements Term {
 			private final Term operand;
 
 			public Box(Term operand, Attribute... attributes) {
-				super(attributes);
+				super(TERM_box, attributes);
 				this.operand = operand;
 			}
 
@@ -344,11 +376,11 @@ public class Syntax {
 			}
 		}
 
-		public class Copy extends AbstractStmt implements Term {
+		public class Copy extends AbstractTerm implements Term {
 			private final Term.Variable operand;
 
 			public Copy(Term.Variable operand, Attribute... attributes) {
-				super(attributes);
+				super(TERM_copy, attributes);
 				this.operand = operand;
 			}
 
@@ -369,11 +401,11 @@ public class Syntax {
 
 	public interface Value extends Term {
 
-		public class Integer extends AbstractStmt implements Value {
+		public class Integer extends AbstractTerm implements Value {
 			private final int value;
 
 			public Integer(int value, Attribute... attributes) {
-				super(attributes);
+				super(TERM_integer,attributes);
 				this.value = value;
 			}
 
@@ -405,11 +437,11 @@ public class Syntax {
 			}
 		}
 
-		public class Location extends AbstractStmt implements Value {
+		public class Location extends AbstractTerm implements Value {
 			private final int address;
 
 			public Location(int value, Attribute... attributes) {
-				super(attributes);
+				super(TERM_location, attributes);
 				this.address = value;
 			}
 

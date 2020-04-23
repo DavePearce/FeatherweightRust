@@ -193,19 +193,18 @@ public class CoreRuntimeTests {
 	// Helpers
 	// ==============================================================
 
-
 	public static void check(String input, Integer output) throws IOException {
-		check(input,output,SEMANTICS);
+		check(input, output, SEMANTICS, new BorrowChecker(input));
 	}
 
-	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
+	public static void check(String input, Integer output, OperationalSemantics semantics, BorrowChecker typing) throws IOException {
 		Lifetime globalLifetime = new Lifetime();
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
 			Term.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
+			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
 			Pair<State, Term> state = new Pair<>(new State(),stmt);
 			// Execute continually until all reductions complete

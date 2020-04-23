@@ -22,6 +22,7 @@ import java.util.*;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.extensions.ControlFlow;
 import featherweightrust.io.Lexer.*;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
@@ -86,6 +87,8 @@ public class Parser {
 		//
 		if (lookahead.text.equals("let")) {
 			return parseVariableDeclaration(context, lifetime);
+		} else if (lookahead.text.equals("if")) {
+			return parseIfStmt(context, lifetime);
 		} else if (lookahead instanceof LeftCurly) {
 			// nested block
 			return parseStatementBlock(context, lifetime);
@@ -178,6 +181,26 @@ public class Parser {
 		match(";");
 		// Done.
 		return new Term.Let(variable, initialiser, sourceAttr(start, index - 1));
+	}
+
+	public Term parseIfStmt(Context context, Lifetime lifetime) {
+		int start = index;
+		matchKeyword("if");
+		// Match and declare lhs variable
+		Term.Variable lhs = parseVariable(context, lifetime);
+		context.declare(lhs.name());
+		match("==");
+		// Match and declare rhs variable
+		Term.Variable rhs = parseVariable(context, lifetime);
+		context.declare(rhs.name());
+		// Parse true block
+		Term.Block trueBlock = parseStatementBlock(context,lifetime);
+		// Match else
+		matchKeyword("else");
+		// Parse false block
+		Term.Block falseBlock = parseStatementBlock(context,lifetime);
+		// Return extended term
+		return new ControlFlow.Syntax.IfElse(lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
 	}
 
 	public Term.Variable parseVariable(Context context, Lifetime lifetime) {

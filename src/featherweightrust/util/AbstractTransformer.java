@@ -22,9 +22,17 @@ import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 
-public abstract class AbstractTransformer<T,S> {
+public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Extension<T, S>> {
+	/**
+	 * The set of available extensions for this transformer.
+	 */
+	private final E[] extensions;
 
-	@SuppressWarnings("unchecked")
+	@SafeVarargs
+	public AbstractTransformer(E... extensions) {
+		this.extensions = extensions;
+	}
+
 	public Pair<T, S> apply(T state, Lifetime lifetime, Term term) {
 		switch(term.getOpcode()) {
 		case Syntax.TERM_let:
@@ -46,34 +54,139 @@ public abstract class AbstractTransformer<T,S> {
 		case Syntax.TERM_box:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Box) term);
 		case Syntax.TERM_integer:
-			return (Pair<T, S>) apply(state, (Value.Integer) term);
+			return (Pair<T, S>) apply(state, lifetime, (Value.Integer) term);
 		case Syntax.TERM_location:
-			return (Pair<T, S>) apply(state, (Value.Location) term);
+			return (Pair<T, S>) apply(state, lifetime, (Value.Location) term);
 		}
+		// Attempt to run extensions
+		for(int i=0;i!=extensions.length;++i) {
+			Pair<T,S> r = extensions[i].apply(state, lifetime, term);
+			if(r != null) {
+				return r;
+			}
+		}
+		// Give up
 		throw new IllegalArgumentException("Invalid term encountered: " + term);
 	}
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Assignment stmt);
+	/**
+	 * Apply this transformer to a given assignment statement.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Assignment term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Block stmt);
+	/**
+	 * Apply this transformer to a given block statement.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Block term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.IndirectAssignment stmt);
+	/**
+	 * Apply this transformer to a given indirect assignment statement.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.IndirectAssignment term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Let stmt);
+	/**
+	 * Apply this transformer to a given let statement.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Let term);
 
-	public abstract Pair<T, S> apply(T state, Value.Integer value);
+	/**
+	 * Apply this transformer to a given dereference expression.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Dereference term);
 
-	public abstract Pair<T, S> apply(T state, Value.Location value);
+	/**
+	 * Apply this transformer to a given borrow expression.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Borrow term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Dereference expr);
+	/**
+	 * Apply this transformer to a given box expression.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Box term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Borrow expr);
+	/**
+	 * Apply this transformer to a given variable move expression.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Variable term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Box expr);
+	/**
+	 * Apply this transformer to a given variable copy expression.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Copy term);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Variable expr);
 
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Copy expr);
+	/**
+	 * Apply this transformer to a given integer constant.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Value.Integer value);
 
+	/**
+	 * Apply this transformer to a given assignment statement.
+	 *
+	 * @param state    The current state (e.g. typing or runtime store)
+	 * @param lifetime The enclosing lifetime of this term
+	 * @param stmt     The term being transformed.
+	 * @return
+	 */
+	public abstract Pair<T, S> apply(T state, Lifetime lifetim, Value.Location value);
 
+	/**
+	 * Provides a mechanism by which a transformer can be extended.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public interface Extension<T,S> {
+		abstract Pair<T, S> apply(T state, Lifetime lifetime, Term term);
+	}
 }

@@ -22,6 +22,7 @@ import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
@@ -40,7 +41,16 @@ import featherweightrust.util.Pair;
  * @author David J. Pearce
  *
  */
-public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term> {
+public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
+
+	public OperationalSemantics(Extension... extensions) {
+		super(extensions);
+		// Bind self in extensions
+		for(Extension e : extensions) {
+			e.self = this;
+		}
+	}
+
 	/**
 	 * Rule R-Assign.
 	 */
@@ -271,13 +281,23 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Value.Integer v) {
+	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Integer v) {
 		return new Pair<>(S, v);
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Value.Location v) {
+	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Location v) {
 		return new Pair<>(S, v);
+	}
+
+	/**
+	 * Provides a specific extension mechanism for the semantics.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public abstract static class Extension implements AbstractTransformer.Extension<AbstractMachine.State, Term> {
+		protected OperationalSemantics self;
 	}
 
 	/**

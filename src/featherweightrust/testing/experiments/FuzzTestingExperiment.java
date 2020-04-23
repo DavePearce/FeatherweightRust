@@ -52,7 +52,7 @@ import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
-import featherweightrust.util.AbstractSemantics;
+import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SliceIterator;

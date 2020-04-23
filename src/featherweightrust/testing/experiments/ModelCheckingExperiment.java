@@ -31,7 +31,7 @@ import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.util.AbstractSemantics;
+import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
@@ -203,7 +203,7 @@ public class ModelCheckingExperiment {
 		// See whether or not it executes
 		try {
 			// Execute block in outermost lifetime "*")
-			semantics.apply(AbstractSemantics.EMPTY_STATE, lifetime, stmt);
+			semantics.apply(AbstractMachine.EMPTY_STATE, lifetime, stmt);
 			ran = true;
 		} catch (Exception e) {
 			error = e;

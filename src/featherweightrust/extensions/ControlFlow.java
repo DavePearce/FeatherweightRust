@@ -5,7 +5,7 @@ import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Stmt.AbstractStmt;
 import featherweightrust.core.Syntax.Value;
-import featherweightrust.util.AbstractSemantics.State;
+import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
 
 /**

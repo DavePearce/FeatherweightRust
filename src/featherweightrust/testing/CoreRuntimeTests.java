@@ -31,6 +31,7 @@ import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
+import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 
@@ -207,7 +208,7 @@ public class CoreRuntimeTests {
 			// Borrow Check block
 			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
-			Pair<OperationalSemantics.State, Stmt> state = new Pair<>(new OperationalSemantics.State(),stmt);
+			Pair<State, Stmt> state = new Pair<>(new State(),stmt);
 			// Execute continually until all reductions complete
 			Stmt result;
 			do {

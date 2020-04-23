@@ -29,9 +29,9 @@ import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 
-public abstract class AbstractSemantics extends AbstractTransformer<AbstractSemantics.State, Stmt, Expr> {
+public abstract class AbstractMachine {
 
-	public static final State EMPTY_STATE = new AbstractSemantics.State();
+	public static final State EMPTY_STATE = new AbstractMachine.State();
 
 	/**
 	 * Represents the state before and after each transition by the operation
@@ -42,16 +42,16 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 	 */
 	public static class State {
 		private final StackFrame stack;
-		private final Store store;
+		private final Store heap;
 
 		public State() {
 			this.stack = new StackFrame();
-			this.store = new Store();
+			this.heap = new Store();
 		}
 
 		public State(StackFrame stack, Store store) {
 			this.stack = stack;
-			this.store = store;
+			this.heap = store;
 		}
 
 		/**
@@ -60,7 +60,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public Store store() {
-			return store;
+			return heap;
 		}
 
 		/**
@@ -93,7 +93,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 */
 		public Pair<State, Location> allocate(Lifetime lifetime, Value v) {
 			// Allocate cell in store
-			Pair<Store, Location> p = store.allocate(lifetime, v);
+			Pair<Store, Location> p = heap.allocate(lifetime, v);
 			// Return updated state
 			return new Pair<>(new State(stack, p.first()), p.second());
 		}
@@ -106,7 +106,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public Value read(Location location) {
-			return store.read(location);
+			return heap.read(location);
 		}
 
 		/**
@@ -119,7 +119,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public State write(Location location, Value value) {
-			Store nstore = store.write(location, value);
+			Store nstore = heap.write(location, value);
 			return new State(stack, nstore);
 		}
 
@@ -132,7 +132,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public State remove(Location location) {
-			Store nstore = store.remove(location);
+			Store nstore = heap.remove(location);
 			return new State(stack, nstore);
 		}
 
@@ -147,7 +147,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 */
 		public State bind(String name, Location location) {
 			StackFrame nstack = stack.bind(name, location);
-			return new State(nstack, store);
+			return new State(nstack, heap);
 		}
 
 		/**
@@ -161,7 +161,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public State drop(Value value) {
-			return new State(stack, store.drop(value));
+			return new State(stack, heap.drop(value));
 		}
 
 		/**
@@ -171,7 +171,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public State drop(Set<Location> locations) {
-			return new State(stack, store.drop(locations));
+			return new State(stack, heap.drop(locations));
 		}
 
 		/**
@@ -181,7 +181,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 		 * @return
 		 */
 		public Set<Location> findAll(Lifetime lifetime) {
-			return store.findAll(lifetime);
+			return heap.findAll(lifetime);
 		}
 
 		public void push(Map<String, Location> frame) {
@@ -190,7 +190,7 @@ public abstract class AbstractSemantics extends AbstractTransformer<AbstractSema
 
 		@Override
 		public String toString() {
-			return store.toString() + ":" + stack.toString();
+			return heap.toString() + ":" + stack.toString();
 		}
 	}
 

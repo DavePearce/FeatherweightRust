@@ -26,7 +26,10 @@ import featherweightrust.core.Syntax.Stmt;
 import featherweightrust.core.Syntax.Stmt.Block;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
-import featherweightrust.util.AbstractSemantics;
+import featherweightrust.util.AbstractMachine;
+import featherweightrust.util.AbstractMachine.StackFrame;
+import featherweightrust.util.AbstractMachine.State;
+import featherweightrust.util.AbstractTransformer;
 import featherweightrust.util.Pair;
 
 /**
@@ -38,7 +41,7 @@ import featherweightrust.util.Pair;
  * @author David J. Pearce
  *
  */
-public abstract class OperationalSemantics extends AbstractSemantics {
+public abstract class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Stmt, Expr> {
 	/**
 	 * Rule R-Assign.
 	 */

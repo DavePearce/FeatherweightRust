@@ -35,7 +35,14 @@ import featherweightrust.io.Parser;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 
-public class BorrowInvalidTests {
+/**
+ * Borrow checking tests for the core syntax. Each test should fail to borrow
+ * check.
+ *
+ * @author David J. Pearce
+ *
+ */
+public class CoreBorrowCheckTests {
 
 	// ==============================================================
 	// Straightforward Examples

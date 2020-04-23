@@ -34,7 +34,14 @@ import featherweightrust.io.Parser;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 
-public class RuntimeValidTests {
+/**
+ * Runtime test cases for the core syntax. Each test should pass borrow checking
+ * and execute without raising a fault.
+ *
+ * @author David J. Pearce
+ *
+ */
+public class CoreRuntimeTests {
 
 	// ==============================================================
 	// Straightforward Examples
@@ -188,6 +195,7 @@ public class RuntimeValidTests {
 
 	public static void check(String input, Integer output) throws IOException {
 		check(input,output,BIG_STEP);
+		check(input,output,SMALL_STEP);
 	}
 
 	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
@@ -233,4 +241,5 @@ public class RuntimeValidTests {
 	}
 
 	public static final OperationalSemantics BIG_STEP = new OperationalSemantics.BigStep();
+	public static final OperationalSemantics SMALL_STEP = new OperationalSemantics.SmallStep();
 }

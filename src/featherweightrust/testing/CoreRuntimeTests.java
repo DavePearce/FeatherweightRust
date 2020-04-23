@@ -43,6 +43,8 @@ import featherweightrust.util.SyntaxError;
  *
  */
 public class CoreRuntimeTests {
+	private static Value.Integer One = new Value.Integer(1);
+	private static Value.Integer OneTwoThree = new Value.Integer(123);
 
 	// ==============================================================
 	// Straightforward Examples
@@ -51,58 +53,58 @@ public class CoreRuntimeTests {
 	@Test
 	public void test_01() throws IOException {
 		String input = "{ let mut x = 123; x }";
-		check(input,123);
+		check(input,OneTwoThree);
 	}
 
 	@Test
 	public void test_02() throws IOException {
 		String input = "{ let mut x = 123; let mut y = !x; y}";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_03() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 123; y}";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_04() throws IOException {
 		String input = "{ let mut x = 123; let mut y = 1; x}";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_05() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 123; x = 2; !y}";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_06() throws IOException {
 		String input = "{ let mut x = 1; { let mut y = 123; !y } }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 
 	@Test
 	public void test_07() throws IOException {
 		String input = "{ let mut x = 1; { x = 123; } x }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_08() throws IOException {
 		// Fails incorrectly because move semantics should retain the "shadow" of x.
 		String input = "{ let mut x = box 0; { let mut y = x; x = box 1; } *x }";
-		check(input, 1);
+		check(input, One);
 	}
 
 	@Test
 	public void test_09() throws IOException {
 		// Fails incorrectly because move semantics should retain the "shadow" of x.
 		String input = "{ let mut x = box 0; x = box 1; *x }";
-		check(input, 1);
+		check(input, One);
 	}
 
 	// ==============================================================
@@ -112,31 +114,31 @@ public class CoreRuntimeTests {
 	@Test
 	public void test_20() throws IOException {
 		String input = "{ let mut x = box 123; *x }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_21() throws IOException {
 		String input = "{ let mut y = box 123; let mut x = *y; !x }";
-		check(input,123);
+		check(input,OneTwoThree);
 	}
 
 	@Test
 	public void test_22() throws IOException {
 		String input = "{ let mut y = 123; let mut z = box &y; let mut x = *z; *x }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_23() throws IOException {
 		String input = "{ let mut x = box 1; *x = 123; *x }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_24() throws IOException {
 		String input = "{ let mut x = box 123; let mut y = box 1; *y = 2; *x }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	// ==============================================================
@@ -146,25 +148,25 @@ public class CoreRuntimeTests {
 	@Test
 	public void test_40() throws IOException {
 		String input = "{ let mut x = 123; let mut y = &x; *y }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_41() throws IOException {
 		String input = "{ let mut x = 123; let mut y = &x; *y }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_42() throws IOException {
 		String input = "{ let mut x = 123; let mut y = &x; let mut z = *y; z }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_43() throws IOException {
 		String input = "{ let mut x = 123; { let mut y = &x; *y } }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	// ==============================================================
@@ -174,38 +176,34 @@ public class CoreRuntimeTests {
 	@Test
 	public void test_60() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
-		check(input, 123);
+		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_61() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
-		check(input, 123);
-	}
-
-	@Test
-	public void test_62() throws IOException {
-		String input = "{ let mut x = 0; { x = !x; let mut y = box &x; *y = &y; } let mut y = box &x; }";
-		check(input, null);
+		check(input, OneTwoThree);
 	}
 
 	// ==============================================================
 	// Helpers
 	// ==============================================================
 
-
-	public static void check(String input, Integer output) throws IOException {
-		check(input,output,SEMANTICS);
+	public static void check(String input, Value output) throws IOException {
+		check(input, output, SEMANTICS, new BorrowChecker(input));
 	}
 
-	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
+	public static void check(String input, Value output, OperationalSemantics semantics, BorrowChecker typing) throws IOException {
+		// Allocate the global lifetime. This is the lifetime where all heap allocated
+		// data will reside.
 		Lifetime globalLifetime = new Lifetime();
+		//
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
 			Term.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
+			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
 			Pair<State, Term> state = new Pair<>(new State(),stmt);
 			// Execute continually until all reductions complete
@@ -215,7 +213,7 @@ public class CoreRuntimeTests {
 				result = state.second();
 			} while (result != null && !(result instanceof Value));
 			//
-			check(output, state.second());
+			check(output, (Value) result);
 		} catch (SyntaxError e) {
 			e.outputSourceError(System.err);
 			e.printStackTrace();
@@ -223,21 +221,11 @@ public class CoreRuntimeTests {
 		}
 	}
 
-	public static void check(Integer expected, Term actual) {
-		//
-		//
-		if(expected != null) {
-			if(actual instanceof Value.Integer) {
-				Value.Integer i = (Value.Integer) actual;
-				if(i.value() == expected) {
-					return;
-				}
-			}
-		} else if(expected == null && actual == null) {
-			return;
+	public static void check(Value expected, Value actual) {
+		if(!expected.equals(actual)) {
+			// Failed
+			fail("expected: " + expected + ", got: " + actual);
 		}
-		// Failed
-		fail("expected: " + expected + ", got: " + actual);
 	}
 
 	public static final OperationalSemantics SEMANTICS = new OperationalSemantics();

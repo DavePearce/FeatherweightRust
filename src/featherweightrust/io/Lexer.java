@@ -134,18 +134,28 @@ public class Lexer {
 		} else if (c == '}') {
 			return new RightCurly(pos++);
 		} else if (c == '=') {
-			return new Equals(pos++);
+			if((pos+1) < input.length() && input.charAt(pos+1) == '=' ) {
+				pos = pos + 2;
+				return new EqualsEquals(pos-2);
+			} else {
+				return new Equals(pos++);
+			}
 		} else if (c == '*') {
 			return new Star(pos++);
 		} else if (c == '!') {
-			return new Shreak(pos++);
+			if((pos+1) < input.length() && input.charAt(pos+1) == '=' ) {
+				pos = pos + 2;
+				return new NotEquals(pos-2);
+			} else {
+				return new Shreak(pos++);
+			}
 		}
 
 		syntaxError("unknown operator encountered: " + c);
 		return null;
 	}
 
-	public static final String[] keywords = {  "int", "let", "mut", "box" };
+	public static final String[] keywords = {  "int", "let", "mut", "box", "if", "else", "while", "do" };
 
 	public Token scanIdentifier() {
 		int start = pos;
@@ -322,6 +332,21 @@ public class Lexer {
 			super("=", pos);
 		}
 	}
+
+	public static class NotEquals extends Token {
+
+		public NotEquals(int pos) {
+			super("!=", pos);
+		}
+	}
+
+	public static class EqualsEquals extends Token {
+
+		public EqualsEquals(int pos) {
+			super("==", pos);
+		}
+	}
+
 
 	public static class Star extends Token {
 		public Star(int pos) {

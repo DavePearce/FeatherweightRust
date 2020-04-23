@@ -22,8 +22,10 @@ import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
+import static featherweightrust.core.Syntax.Value.Unit;
 import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.AbstractMachine.StackFrame;
@@ -40,7 +42,16 @@ import featherweightrust.util.Pair;
  * @author David J. Pearce
  *
  */
-public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term> {
+public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
+
+	public OperationalSemantics(Extension... extensions) {
+		super(extensions);
+		// Bind self in extensions
+		for(Extension e : extensions) {
+			e.self = this;
+		}
+	}
+
 	/**
 	 * Rule R-Assign.
 	 */
@@ -54,7 +65,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		// Perform the assignment
 		State S3 = S2.write(lx, v2);
 		// Done
-		return new Pair<>(S3, null);
+		return new Pair<>(S3, Unit);
 	}
 
 	/**
@@ -68,7 +79,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		// Bind variable to location
 		State S3 = S2.bind(x.name(), lx);
 		// Done
-		return new Pair<>(S3, null);
+		return new Pair<>(S3, Unit);
 	}
 
 	/**
@@ -86,7 +97,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		// Perform the indirect assignment
 		State S3 = S2.write(ly, v);
 		// Done
-		return new Pair<>(S3, null);
+		return new Pair<>(S3, Unit);
 	}
 
 	/**
@@ -158,7 +169,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	public Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
 		// Save current bindings so they can be restored
 		StackFrame outerFrame = S1.frame();
-		Term returnValue = null;
+		Term returnValue = Unit;
 		//
 		if (b.size() == 1 && b.get(0) instanceof Value) {
 			// Return value produced
@@ -167,16 +178,16 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 			Pair<State, Term> p = apply(S1, b.lifetime(), b.get(0));
 			Term s = p.second();
 			S1 = p.first();
-			if (s != null) {
+			if(s == Unit) {
+				// Slice off head
+				return new Pair<>(S1, new Term.Block(b.lifetime(), slice(b, 1), b.attributes()));
+			} else {
 				// Statement hasn't completed
 				Term[] stmts = Arrays.copyOf(b.toArray(), b.size());
 				// Replace with partially reduced statement
 				stmts[0] = s;
 				// Go around again
-				return new Pair<>(S1, new Term.Block(lifetime, stmts, b.attributes()));
-			} else {
-				// Slice off head
-				return new Pair<>(S1, new Term.Block(lifetime, slice(b, 1), b.attributes()));
+				return new Pair<>(S1, new Term.Block(b.lifetime(), stmts, b.attributes()));
 			}
 		}
 		// drop all bindings created within block
@@ -271,13 +282,28 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Value.Integer v) {
+	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Unit v) {
 		return new Pair<>(S, v);
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Value.Location v) {
+	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Integer v) {
 		return new Pair<>(S, v);
+	}
+
+	@Override
+	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Location v) {
+		return new Pair<>(S, v);
+	}
+
+	/**
+	 * Provides a specific extension mechanism for the semantics.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public abstract static class Extension implements AbstractTransformer.Extension<AbstractMachine.State, Term> {
+		protected OperationalSemantics self;
 	}
 
 	/**

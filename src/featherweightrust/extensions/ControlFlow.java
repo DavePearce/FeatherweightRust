@@ -1,11 +1,20 @@
 package featherweightrust.extensions;
 
+import java.util.Set;
+
+import featherweightrust.core.BorrowChecker;
+import featherweightrust.core.BorrowChecker.Cell;
+import featherweightrust.core.BorrowChecker.Environment;
+import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
+import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
+import featherweightrust.util.SyntacticElement;
 
 /**
  * Extensions to the core calculus for simple control-flow constructs (e.g. if-else, while, etc).
@@ -14,6 +23,23 @@ import featherweightrust.util.Pair;
  *
  */
 public class ControlFlow {
+	public final static int TERM_ifelse = 20;
+	public final static int TERM_if = 21;
+	public final static int TERM_while = 22;
+	public final static int TERM_dowhile = 23;
+	/**
+	 * Indicates we're attempt to join two environments with differing key sets.
+	 */
+	private final static String INVALID_ENVIRONMENT_KEYS = "invalid environment keys";
+	/**
+	 * Indicates we're attempt to join two environments with incompatible cells
+	 */
+	private final static String INVALID_ENVIRONMENT_CELLS = "invalid environment cells (lifetime)";
+	/**
+	 * Indicates we're attempt to join two environments with incompatible cells
+	 */
+	private final static String INVALID_ENVIRONMENT_TYPES = "invalid environment cells (type)";
+
 	/**
 	 * Extensions to the core syntax of the language.
 	 *
@@ -31,14 +57,15 @@ public class ControlFlow {
 		 *
 		 */
 		public static class IfElse extends AbstractTerm {
+			private final boolean eq;
 			private final Term lhs;
 			private final Term rhs;
 			private final Term.Block trueBlock;
 			private final Term.Block falseBlock;
 
-			public IfElse(Term lhs, Term rhs, Term.Block trueBlock, Term.Block falseBlock,
-					Attribute... attributes) {
-				super(attributes);
+			public IfElse(boolean eq, Term lhs, Term rhs, Term.Block trueBlock, Term.Block falseBlock, Attribute... attributes) {
+				super(TERM_ifelse, attributes);
+				this.eq = eq;
 				this.lhs = lhs;
 				this.rhs = rhs;
 				this.trueBlock = trueBlock;
@@ -50,7 +77,7 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Term getLeftHandSide() {
+			public Term leftHandSide() {
 				return lhs;
 			}
 
@@ -59,8 +86,18 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Term getRightHandSide() {
+			public Term rightHandSide() {
 				return rhs;
+			}
+
+			/**
+			 * Determine whether condition is equality (<code>==</code>) or inequality
+			 * (<code>!=</code>).
+			 *
+			 * @return
+			 */
+			public boolean condition() {
+				return eq;
 			}
 
 			/**
@@ -68,7 +105,7 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Term.Block getTrueBlock() {
+			public Term.Block trueBlock() {
 				return trueBlock;
 			}
 
@@ -77,48 +114,124 @@ public class ControlFlow {
 			 *
 			 * @return
 			 */
-			public Term.Block getFalseBlock() {
+			public Term.Block falseBlock() {
 				return falseBlock;
 			}
 
 			@Override
 			public String toString() {
-				return "if(" + lhs + "==" + rhs + ")" + trueBlock + "else" + falseBlock;
+				return "if " + lhs + "==" + rhs + " " + trueBlock + " else " + falseBlock;
 			}
 		}
 	}
 
-	public static class Semantics {
-		public Pair<State, Term> apply(State S, Lifetime l, Syntax.IfElse s) {
-			Term lhs = s.getLeftHandSide();
-			Term rhs = s.getRightHandSide();
+	public static class Semantics extends OperationalSemantics.Extension {
+
+		@Override
+		public Pair<State, Term> apply(State S, Lifetime l, Term term) {
+			if(term instanceof Syntax.IfElse) {
+				return apply(S,l,((Syntax.IfElse)term));
+			} else {
+				return null;
+			}
+		}
+
+		private Pair<State, Term> apply(State S, Lifetime l, Syntax.IfElse t1) {
+			Term lhs = t1.leftHandSide();
+			Term rhs = t1.rightHandSide();
 			//
 			if (lhs instanceof Value && rhs instanceof Value) {
+				boolean eq = lhs.equals(rhs);
 				// Both lhs and rhs fully reduced
-				if(lhs.equals(rhs)) {
-					return new Pair<>(S,s.getTrueBlock());
+				if (t1.condition() == eq) {
+					return new Pair<>(S, t1.trueBlock());
 				} else {
-					return new Pair<>(S,s.getFalseBlock());
+					return new Pair<>(S, t1.falseBlock());
 				}
-			} else if(lhs instanceof Value) {
-				// lhs is fully reduced
-				Pair<State, Term> r = apply(S, l, rhs);
-				State S2 = r.first();
-				Term s2 = new Syntax.IfElse(lhs,r.second(),s.getTrueBlock(),s.getFalseBlock(),s.attributes());
-				//
-				return new Pair<State,Term>(S2,s);
+			} else if (lhs instanceof Value) {
+				// lhs fully reduced but rhs not, so reduce it
+				Term.Variable rv = (Term.Variable) rhs;
+				// Read lhs from store
+				Value v = S.read(S.locate(rv.name()));
+				// Read location from store
+				Term t2 = new Syntax.IfElse(t1.eq, lhs, v, t1.trueBlock(), t1.falseBlock(), t1.attributes());
+				// Done
+				return new Pair<State, Term>(S, t2);
 			} else {
-				// lhs not fully reduced
-				Pair<State, Term> l = apply(S, l, lhs);
-				State S2 = l.first();
-				Term s2 = new Syntax.IfElse(l.second(),lhs,s.getTrueBlock(),s.getFalseBlock(),s.attributes());
-				//
-				return new Pair<State,Term>(S2,s);
+				// lhs not fully reduced, so reduce it
+				Term.Variable lv = (Term.Variable) lhs;
+				// Read lhs from store
+				Value v = S.read(S.locate(lv.name()));
+				// Construct reduced term
+				Term t2 = new Syntax.IfElse(t1.eq, v, rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
+				// Done
+				return new Pair<State, Term>(S, t2);
 			}
 		}
 	}
 
-	public static class Typing {
+	public static class Typing extends BorrowChecker.Extension {
 
+		@Override
+		public Pair<Environment, Type> apply(Environment state, Lifetime lifetime, Term term) {
+			if (term instanceof Syntax.IfElse) {
+				return apply(state, lifetime, (Syntax.IfElse) term);
+			} else {
+				return null;
+			}
+		}
+
+		private Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.IfElse t) {
+			// Type left-hand side
+			Type Tx = self.apply(R1, l, t.leftHandSide()).second();
+			// Type right-hand side
+			Type Ty = self.apply(R1, l, t.rightHandSide()).second();
+			// Check operands are compatible
+			self.check(self.compatible(R1, Tx, R1, Ty), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			// Type true and false blocks
+			Pair<Environment, Type> pTrue = self.apply(R1, l, t.trueBlock());
+			Pair<Environment, Type> pFalse = self.apply(R1, l, t.falseBlock());
+			// Destructure pairs
+			Environment R2 = pTrue.first();
+			Environment R3 = pFalse.first();
+			Type T2 = pTrue.second();
+			Type T3 = pFalse.second();
+			// Check return types are compatible
+			self.check(self.compatible(R2, T2, R3, T3), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			// Join environment and types from both branches
+			return new Pair<>(join(R2, R3, t), T2.join(T3));
+		}
+
+		private Environment join(Environment lhs, Environment rhs, SyntacticElement e) {
+			Set<String> lhsBindings = lhs.bindings();
+			Set<String> rhsBindings = rhs.bindings();
+			// When joining environments, should always have same number of keys.
+			self.check(lhsBindings.equals(rhsBindings), INVALID_ENVIRONMENT_KEYS, e);
+			// Join all keys
+			for(String key : lhsBindings) {
+				Cell Cl = lhs.get(key);
+				Cell Cr = rhs.get(key);
+				// Sanity check lifetimes match
+				self.check(Cl.lifetime().equals(Cr.lifetime()), INVALID_ENVIRONMENT_CELLS, e);
+				// Check types are compatible
+				self.check(self.compatible(lhs, Cl.type(), rhs, Cr.type()), BorrowChecker.INCOMPATIBLE_TYPE, e);
+				// Determine joined type
+				Type type = Cl.type().join(Cr.type());
+				// Determine joined effect
+				boolean moved = join(Cl.moved(),Cr.moved());
+				// Done
+				lhs = lhs.put(key, type, Cl.lifetime());
+				//
+				if(moved) {
+					// FIXME: this is ugly
+					lhs = lhs.move(key);
+				}
+			}
+			return lhs;
+		}
+
+		private boolean join(boolean lhs, boolean rhs) {
+			return lhs || rhs;
+		}
 	}
 }

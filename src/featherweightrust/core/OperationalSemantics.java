@@ -20,10 +20,9 @@ package featherweightrust.core;
 import java.util.Arrays;
 import java.util.Set;
 
-import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.core.Syntax.Stmt.Block;
+import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.util.AbstractMachine;
@@ -41,17 +40,17 @@ import featherweightrust.util.Pair;
  * @author David J. Pearce
  *
  */
-public abstract class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Stmt, Expr> {
+public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term> {
 	/**
 	 * Rule R-Assign.
 	 */
-	public Pair<State, Stmt> reduceAssignment(State S1, Lifetime l, Expr.Variable x, Value v2) {
+	public Pair<State, Term> reduceAssignment(State S1, Lifetime l, Term.Variable x, Value v2) {
 		// Extract the location being assigned
 		Location lx = S1.locate(x.name());
 		// Extract value being overwritten
 		Value v1 = S1.read(lx);
 		// Drop overwritten value (and any owned boxes)
-		State S2 = S1.write(lx,null).drop(v1);
+		State S2 = S1.write(lx, null).drop(v1);
 		// Perform the assignment
 		State S3 = S2.write(lx, v2);
 		// Done
@@ -61,7 +60,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-Declare.
 	 */
-	public Pair<State, Stmt> reduceLet(State S1, Lifetime l, Expr.Variable x, Value v) {
+	public Pair<State, Term> reduceLet(State S1, Lifetime l, Term.Variable x, Value v) {
 		// Allocate new location
 		Pair<State, Location> pl = S1.allocate(l, v);
 		State S2 = pl.first();
@@ -75,7 +74,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-IndAssign.
 	 */
-	public Pair<State, Stmt> reduceIndirectAssignment(State S1, Lifetime l, Expr.Variable x, Value v) {
+	public Pair<State, Term> reduceIndirectAssignment(State S1, Lifetime l, Term.Variable x, Value v) {
 		// Extract the location of x
 		Location lx = S1.locate(x.name());
 		// Extract target location being assigned
@@ -83,7 +82,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 		// Extract value being overwritten
 		Value v1 = S1.read(ly);
 		// Drop any owned locations
-		State S2 = S1.write(ly,null).drop(v1);
+		State S2 = S1.write(ly, null).drop(v1);
 		// Perform the indirect assignment
 		State S3 = S2.write(ly, v);
 		// Done
@@ -93,7 +92,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Expr> reduceDereference(State S, Expr.Variable x) {
+	public Pair<State, Term> reduceDereference(State S, Term.Variable x) {
 		// Extract location, or throw exception otherwise
 		Location lx = S.locate(x.name());
 		// Read contents of x (which should be location)
@@ -107,7 +106,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Expr> reduceBorrow(State S, Expr.Variable x) {
+	public Pair<State, Term> reduceBorrow(State S, Term.Variable x) {
 		String name = x.name();
 		// Locate operand
 		Location lx = S.locate(x.name());
@@ -122,7 +121,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-Box.
 	 */
-	public Pair<State, Expr> reduceBox(State S1, Value v, Lifetime global) {
+	public Pair<State, Term> reduceBox(State S1, Value v, Lifetime global) {
 		// Allocate new location
 		Pair<State, Location> pl = S1.allocate(global, v);
 		State S2 = pl.first();
@@ -134,7 +133,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-CopyVar.
 	 */
-	public Pair<State, Expr> reduceCopy(State S, Expr.Variable x) {
+	public Pair<State, Term> reduceCopy(State S, Term.Variable x) {
 		// Determine location bound by variable
 		Location lx = S.locate(x.name());
 		// Read location from store
@@ -144,7 +143,7 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 	/**
 	 * Rule R-MoveVar.
 	 */
-	public Pair<State, Expr> reduceVariable(State S1, Expr.Variable x) {
+	public Pair<State, Term> reduceVariable(State S1, Term.Variable x) {
 		// Determine location bound by variable
 		Location lx = S1.locate(x.name());
 		// Read value held by x
@@ -155,269 +154,144 @@ public abstract class OperationalSemantics extends AbstractTransformer<AbstractM
 		return new Pair<>(S2, v);
 	}
 
-	/**
-	 * Implementation of big step semantics for Featherweight Rust. This recursively
-	 * reduces expressions and statements immediately. Thus, each step can consist
-	 * of multiple applications of the operational semantic rules above (hence why
-	 * it's called "big step").
-	 *
-	 * @author David J. Pearce
-	 *
-	 */
-	public static class BigStep extends OperationalSemantics {
-
-		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Assignment s) {
-			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
-			State S2 = rhs.first();
-			Value v = (Value) rhs.second();
-			// Reduce right hand side
-			return reduceAssignment(S2, l, s.leftOperand(), v);
-		}
-
-		/**
-		 * Rule R-Block.
-		 */
-		@Override
-		public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Block b) {
-			// Save current bindings so they can be restored
-			StackFrame outerFrame = S1.frame();
-			Stmt returnValue = null;
-			//
-			for (int i = 0; i != b.size(); ++i) {
-				Pair<State, Stmt> p = apply(S1, b.lifetime(), b.get(i));
-				Stmt s = p.second();
-				S1 = p.first();
-				//
-				if(s instanceof Value) {
-					// We produced a return value.
-					returnValue = s;
-					break;
-				}
+	@Override
+	public Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
+		// Save current bindings so they can be restored
+		StackFrame outerFrame = S1.frame();
+		Term returnValue = null;
+		//
+		if (b.size() == 1 && b.get(0) instanceof Value) {
+			// Return value produced
+			returnValue = b.get(0);
+		} else if (b.size() > 0) {
+			Pair<State, Term> p = apply(S1, b.lifetime(), b.get(0));
+			Term s = p.second();
+			S1 = p.first();
+			if (s != null) {
+				// Statement hasn't completed
+				Term[] stmts = Arrays.copyOf(b.toArray(), b.size());
+				// Replace with partially reduced statement
+				stmts[0] = s;
+				// Go around again
+				return new Pair<>(S1, new Term.Block(lifetime, stmts, b.attributes()));
+			} else {
+				// Slice off head
+				return new Pair<>(S1, new Term.Block(lifetime, slice(b, 1), b.attributes()));
 			}
-			// drop all bindings created within block
-			State S2 = new State(outerFrame, S1.store());
-			// Identify locations allocated in this lifetime
-			Set<Location> phi = S2.findAll(b.lifetime());
-			// drop all matching locations
-			State S3 = S2.drop(phi);
-			//
-			return new Pair<>(S3, returnValue);
 		}
+		// drop all bindings created within block
+		State S2 = new State(outerFrame, S1.store());
+		// Identify locations allocated in this lifetime
+		Set<Location> phi = S2.findAll(b.lifetime());
+		// drop all matching locations
+		State S3 = S2.drop(phi);
+		//
+		return new Pair<>(S3, returnValue);
+	}
 
-		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Let s) {
-			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, l, s.initialiser());
-			State S2 = rhs.first();
-			Value v = (Value) rhs.second();
-			// Reduce right hand side
-			return reduceLet(S2, l, s.variable(), v);
-		}
-
-		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.IndirectAssignment s) {
-			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
-			State S2 = rhs.first();
-			Value v = (Value) rhs.second();
-			// Reduce right hand side
-			return reduceIndirectAssignment(S2, l, s.leftOperand(), v);
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Borrow e) {
-			return reduceBorrow(S, e.operand());
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Dereference e) {
-			return reduceDereference(S, e.operand());
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime l, Expr.Box e) {
-			// Evaluate right hand side operand
-			Pair<State, Expr> rhs = apply(S1, l, e.operand());
-			State S2 = rhs.first();
-			Value v = (Value) rhs.second();
-			// Reduce indirect assignment
-			return reduceBox(S2, v, l.getRoot());
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Variable e) {
-			return reduceVariable(S, e);
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Copy e) {
-			return reduceCopy(S, e.operand());
-		}
-
-		@Override
-		public Pair<State, Expr> apply(State S, Value.Integer v) {
-			return new Pair<>(S, v);
-		}
-
-		@Override
-		public Pair<State, Expr> apply(State S, Value.Location v) {
-			return new Pair<>(S, v);
+	@Override
+	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Assignment s) {
+		if (s.rightOperand() instanceof Value) {
+			// Statement can be completely reduced
+			return reduceAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
+		} else {
+			// Statement not ready to be reduced yet
+			Pair<State, Term> rhs = apply(S1, l, s.rightOperand());
+			// Construct reduce statement
+			s = new Term.Assignment(s.leftOperand(), rhs.second(), s.attributes());
+			// Done
+			return new Pair<>(rhs.first(), s);
 		}
 	}
 
+	@Override
+	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Let s) {
+		if (s.initialiser() instanceof Value) {
+			// Statement can be completely reduced
+			Value v = (Value) s.initialiser();
+			return reduceLet(S1, l, s.variable(), v);
+		} else {
+			// Statement not ready to be reduced yet
+			Pair<State, Term> rhs = apply(S1, l, s.initialiser());
+			// Construct reduce statement
+			s = new Term.Let(s.variable(), rhs.second(), s.attributes());
+			// Done
+			return new Pair<>(rhs.first(), s);
+		}
+	}
+
+	@Override
+	final public Pair<State, Term> apply(State S1, Lifetime l, Term.IndirectAssignment s) {
+		if (s.rightOperand() instanceof Value) {
+			// Statement can be completely reduced
+			return reduceIndirectAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
+		} else {
+			// Statement not ready to be reduced yet
+			Pair<State, Term> rhs = apply(S1, l, s.rightOperand());
+			// Construct reduce statement
+			s = new Term.IndirectAssignment(s.leftOperand(), rhs.second(), s.attributes());
+			// Done
+			return new Pair<>(rhs.first(), s);
+		}
+	}
+
+	@Override
+	final public Pair<State, Term> apply(State S, Lifetime l, Term.Borrow e) {
+		return reduceBorrow(S, e.operand());
+	}
+
+	@Override
+	final public Pair<State, Term> apply(State S, Lifetime l, Term.Dereference e) {
+		return reduceDereference(S, e.operand());
+	}
+
+	@Override
+	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Box e) {
+		if (e.operand() instanceof Value) {
+			// Statement can be completely reduced
+			return reduceBox(S1, (Value) e.operand(), l.getRoot());
+		} else {
+			// Statement not ready to be reduced yet
+			Pair<State, Term> rhs = apply(S1, l, e.operand());
+			// Construct reduce statement
+			e = new Term.Box(rhs.second(), e.attributes());
+			// Done
+			return new Pair<>(rhs.first(), e);
+		}
+	}
+
+	@Override
+	final public Pair<State, Term> apply(State S, Lifetime l, Term.Variable e) {
+		return reduceVariable(S, e);
+	}
+
+	@Override
+	final public Pair<State, Term> apply(State S, Lifetime l, Term.Copy e) {
+		return reduceCopy(S, e.operand());
+	}
+
+	@Override
+	public Pair<State, Term> apply(State S, Value.Integer v) {
+		return new Pair<>(S, v);
+	}
+
+	@Override
+	public Pair<State, Term> apply(State S, Value.Location v) {
+		return new Pair<>(S, v);
+	}
 
 	/**
-	 * Implementation of small step semantics for Featherweight Rust. This reduces
-	 * expressions and statements step-by-step. Thus, each step consists of exactly
-	 * one application of the operational semantic rules above (hence why it's
-	 * called "small step").
+	 * Return a new block with only a given number of its statements.
 	 *
-	 * @author David J. Pearce
-	 *
+	 * @param b
+	 * @param n
+	 * @return
 	 */
-	public static class SmallStep extends OperationalSemantics {
-
-		@Override
-		public Pair<State, Stmt> apply(State S1, Lifetime lifetime, Block b) {
-			// Save current bindings so they can be restored
-			StackFrame outerFrame = S1.frame();
-			Stmt returnValue = null;
-			//
-			if(b.size() == 1 && b.get(0) instanceof Value) {
-				// Return value produced
-				returnValue = b.get(0);
-			} else if(b.size() > 0) {
-				Pair<State, Stmt> p = apply(S1, b.lifetime(), b.get(0));
-				Stmt s = p.second();
-				S1 = p.first();
-				if(s != null) {
-					// Statement hasn't completed
-					Stmt[] stmts = Arrays.copyOf(b.toArray(), b.size());
-					// Replace with partially reduced statement
-					stmts[0] = s;
-					// Go around again
-					return new Pair<>(S1, new Stmt.Block(lifetime, stmts, b.attributes()));
-				} else {
-					// Slice off head
-					return new Pair<>(S1, new Stmt.Block(lifetime, slice(b, 1), b.attributes()));
-				}
-			}
-			// drop all bindings created within block
-			State S2 = new State(outerFrame, S1.store());
-			// Identify locations allocated in this lifetime
-			Set<Location> phi = S2.findAll(b.lifetime());
-			// drop all matching locations
-			State S3 = S2.drop(phi);
-			//
-			return new Pair<>(S3, returnValue);
+	private static Term[] slice(Term.Block b, int n) {
+		Term[] stmts = new Term[b.size() - n];
+		for (int i = n; i != b.size(); ++i) {
+			stmts[i - n] = b.get(i);
 		}
-
-		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Assignment s) {
-			if (s.rightOperand() instanceof Value) {
-				// Statement can be completely reduced
-				return reduceAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
-			} else {
-				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
-				// Construct reduce statement
-				s = new Stmt.Assignment(s.leftOperand(), rhs.second(), s.attributes());
-				// Done
-				return new Pair<>(rhs.first(),s);
-			}
-		}
-
-		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.Let s) {
-			if (s.initialiser() instanceof Value) {
-				// Statement can be completely reduced
-				Value v = (Value) s.initialiser();
-				return reduceLet(S1, l, s.variable(), v);
-			} else {
-				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, l, s.initialiser());
-				// Construct reduce statement
-				s = new Stmt.Let(s.variable(), rhs.second(), s.attributes());
-				// Done
-				return new Pair<>(rhs.first(), s);
-			}
-		}
-
-		@Override
-		final public Pair<State, Stmt> apply(State S1, Lifetime l, Stmt.IndirectAssignment s) {
-			if (s.rightOperand() instanceof Value) {
-				// Statement can be completely reduced
-				return reduceIndirectAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
-			} else {
-				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, l, s.rightOperand());
-				// Construct reduce statement
-				s = new Stmt.IndirectAssignment(s.leftOperand(), rhs.second(), s.attributes());
-				// Done
-				return new Pair<>(rhs.first(),s);
-			}
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Borrow e) {
-			return reduceBorrow(S, e.operand());
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Dereference e) {
-			return reduceDereference(S, e.operand());
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S1, Lifetime l, Expr.Box e) {
-			if (e.operand() instanceof Value) {
-				// Statement can be completely reduced
-				return reduceBox(S1, (Value) e.operand(), l.getRoot());
-			} else {
-				// Statement not ready to be reduced yet
-				Pair<State, Expr> rhs = apply(S1, l, e.operand());
-				// Construct reduce statement
-				e = new Expr.Box(rhs.second(), e.attributes());
-				// Done
-				return new Pair<>(rhs.first(), e);
-			}
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Variable e) {
-			return reduceVariable(S, e);
-		}
-
-		@Override
-		final public Pair<State, Expr> apply(State S, Lifetime l, Expr.Copy e) {
-			return reduceCopy(S, e.operand());
-		}
-
-		@Override
-		public Pair<State, Expr> apply(State S, Value.Integer v) {
-			return new Pair<>(S, v);
-		}
-
-		@Override
-		public Pair<State, Expr> apply(State S, Value.Location v) {
-			return new Pair<>(S, v);
-		}
-
-		/**
-		 * Return a new block with only a given number of its statements.
-		 *
-		 * @param b
-		 * @param n
-		 * @return
-		 */
-		private static Stmt[] slice(Stmt.Block b, int n) {
-			Stmt[] stmts = new Stmt[b.size() - n];
-			for(int i=n;i!=b.size();++i) {
-				stmts[i-n] = b.get(i);
-			}
-			return stmts;
-		}
+		return stmts;
 	}
 }

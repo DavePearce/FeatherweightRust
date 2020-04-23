@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
@@ -195,8 +195,7 @@ public class CoreRuntimeTests {
 
 
 	public static void check(String input, Integer output) throws IOException {
-		check(input,output,BIG_STEP);
-		check(input,output,SMALL_STEP);
+		check(input,output,SEMANTICS);
 	}
 
 	public static void check(String input, Integer output, OperationalSemantics semantics) throws IOException {
@@ -204,13 +203,13 @@ public class CoreRuntimeTests {
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
-			Stmt.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
+			Term.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
 			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
-			Pair<State, Stmt> state = new Pair<>(new State(),stmt);
+			Pair<State, Term> state = new Pair<>(new State(),stmt);
 			// Execute continually until all reductions complete
-			Stmt result;
+			Term result;
 			do {
 				state = semantics.apply(state.first(), globalLifetime, state.second());
 				result = state.second();
@@ -224,7 +223,7 @@ public class CoreRuntimeTests {
 		}
 	}
 
-	public static void check(Integer expected, Stmt actual) {
+	public static void check(Integer expected, Term actual) {
 		//
 		//
 		if(expected != null) {
@@ -241,6 +240,5 @@ public class CoreRuntimeTests {
 		fail("expected: " + expected + ", got: " + actual);
 	}
 
-	public static final OperationalSemantics BIG_STEP = new OperationalSemantics.BigStep();
-	public static final OperationalSemantics SMALL_STEP = new OperationalSemantics.SmallStep();
+	public static final OperationalSemantics SEMANTICS = new OperationalSemantics();
 }

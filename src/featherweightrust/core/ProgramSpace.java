@@ -20,9 +20,8 @@ package featherweightrust.core;
 import java.util.Arrays;
 
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.core.Syntax.Stmt.*;
-import featherweightrust.core.Syntax.Expr;
+import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Term.*;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Domains;
 import jmodelgen.core.Walker;
@@ -104,17 +103,17 @@ public class ProgramSpace {
 		this.maxBlockWidth = w;
 	}
 
-	public Domain.Big<Stmt.Block> domain() {
+	public Domain.Big<Term.Block> domain() {
 		Lifetime lifetime = ROOT.freshWithin();
 		// The specialised domain for creating statements
 		Domain.Small<String> variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, maxVariables));
 		// Construct domain of expressions over *declared* variables
-		Domain.Big<Expr> expressions = Expr.toBigDomain(1, ints, variables);
+		Domain.Big<Term> expressions = Syntax.toBigDomain(1, ints, variables);
 		// Construct domain of statements
-		Domain.Big<Stmt> stmts = Stmt.toBigDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables,
+		Domain.Big<Term> stmts = Syntax.toBigDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables,
 				variables);
 		// Construct outer block
-		return Stmt.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
+		return Term.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
 	}
 
 	/**
@@ -125,13 +124,13 @@ public class ProgramSpace {
 	 * @param maxBlocks Maximum number of blocks to permit
 	 * @return
 	 */
-	public Walker<Stmt.Block> definedVariableWalker(int maxBlocks) {
+	public Walker<Term.Block> definedVariableWalker(int maxBlocks) {
 		Lifetime lifetime = ROOT.freshWithin();
 		// Construct domain of expressions over *declared* variables
 		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables, lifetime,
 				ints, Domains.EMPTY);
 		// Construct outer block
-		return Stmt.Block.toWalker(lifetime, 1, maxBlockWidth, seed);
+		return Term.Block.toWalker(lifetime, 1, maxBlockWidth, seed);
 	}
 
 	@Override
@@ -140,7 +139,7 @@ public class ProgramSpace {
 		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "}";
 	}
 
-	private static class UseDefState implements Walker.State<Stmt> {
+	private static class UseDefState implements Walker.State<Term> {
 		private final int depth;
 		private final int blocks;
 		private final int width;
@@ -160,23 +159,23 @@ public class ProgramSpace {
 		}
 
 		@Override
-		public Walker<Stmt> construct() {
-			Domain.Big<Expr> expressions = Expr.toBigDomain(1, ints, declared);
+		public Walker<Term> construct() {
+			Domain.Big<Term> expressions = Syntax.toBigDomain(1, ints, declared);
 			Domain.Big<Let> lets;
 			int size = declared.bigSize().intValue();
 			if(size < vars) {
 				Domain.Small<String> canDeclare = Domains.Finite(VARIABLE_NAMES[size]);
 				// Let statements can only be constructed from undeclared variables
-				lets = Stmt.Let.toBigDomain(canDeclare, expressions);
+				lets = Term.Let.toBigDomain(canDeclare, expressions);
 			} else {
 				lets = Domains.EMPTY;
 			}
 			// Assignments can only use declared variables
-			Domain.Big<Assignment> assigns = Stmt.Assignment.toBigDomain(declared, expressions);
+			Domain.Big<Assignment> assigns = Term.Assignment.toBigDomain(declared, expressions);
 			// Indirect assignments can only use declared variables
-			Domain.Big<IndirectAssignment> indirects = Stmt.IndirectAssignment.toBigDomain(declared, expressions);
+			Domain.Big<IndirectAssignment> indirects = Term.IndirectAssignment.toBigDomain(declared, expressions);
 			// Create walker for unit statements
-			Walker<Stmt> units = Walkers.Adaptor(Domains.Union(lets, assigns, indirects));
+			Walker<Term> units = Walkers.Adaptor(Domains.Union(lets, assigns, indirects));
 			//
 			if (depth == 0 || blocks <= 0) {
 				return units;
@@ -192,12 +191,12 @@ public class ProgramSpace {
 		}
 
 		@Override
-		public State<Stmt> transfer(Stmt item) {
-			if (item instanceof Stmt.Let) {
+		public State<Term> transfer(Term item) {
+			if (item instanceof Term.Let) {
 				int size = declared.bigSize().intValue() + 1;
 				Domain.Small<String> d = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, size));
 				return new UseDefState(depth, blocks, width, vars, lifetime, ints, d);
-			} else if(item instanceof Stmt.Block) {
+			} else if(item instanceof Term.Block) {
 				int nblocks = blocks - count(item);
 				return new UseDefState(depth, nblocks, width, vars, lifetime, ints, declared);
 			} else {
@@ -205,10 +204,10 @@ public class ProgramSpace {
 			}
 		}
 
-		private static int count(Stmt stmt) {
-			if (stmt instanceof Stmt.Block) {
+		private static int count(Term stmt) {
+			if (stmt instanceof Term.Block) {
 				int count = 1;
-				Stmt.Block block = (Stmt.Block) stmt;
+				Term.Block block = (Term.Block) stmt;
 				for (int i = 0; i != block.size(); ++i) {
 					count += count(block.get(i));
 				}
@@ -220,14 +219,14 @@ public class ProgramSpace {
 	}
 
 	public static void count(ProgramSpace p) {
-		Domain.Big<Stmt.Block> domain = p.domain();
+		Domain.Big<Term.Block> domain = p.domain();
 		System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
 	}
 
 	public static void count(ProgramSpace p, int max) {
-		Walker<Stmt.Block> programs = p.definedVariableWalker(max);
+		Walker<Term.Block> programs = p.definedVariableWalker(max);
 		long count = 0;
-		for(Stmt.Block b : programs) {
+		for(Term.Block b : programs) {
 			count = count + 1;
 		}
 		System.out.println("|" + p + "_def(" + max + ")| = " + count);

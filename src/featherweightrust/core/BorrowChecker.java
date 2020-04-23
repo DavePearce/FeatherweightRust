@@ -22,10 +22,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import featherweightrust.core.Syntax.Expr;
-import featherweightrust.core.Syntax.Expr.Copy;
+import featherweightrust.core.Syntax.Term.Copy;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractTransformer;
@@ -41,7 +40,7 @@ import featherweightrust.util.SyntacticElement.Attribute;
  * @author David J. Pearce
  *
  */
-public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment, Type, Type> {
+public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment, Type> {
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
 	public final static String UNDECLARED_VARIABLE = "variable undeclared";
@@ -55,7 +54,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public final static String VARIABLE_BORROWED = "variable already borrowed";
 	public final static String VARIABLE_MUTABLY_BORROWED = "variable already mutably borrowed";
 
-
 	private final String sourcefile;
 
 	public BorrowChecker(String sourcefile) {
@@ -66,7 +64,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Declare
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.Let s) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Let s) {
 		// Sanity check variable not already declared
 		String x = s.variable().name();
 		Cell C1 = R1.get(x);
@@ -85,7 +83,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Assign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.Assignment s) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment s) {
 		String x = s.leftOperand().name();
 		// Extract variable's existing type
 		Cell Cx = R1.get(x);
@@ -112,7 +110,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-BorrowAssign and T-BoxAssign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.IndirectAssignment s) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.IndirectAssignment s) {
 		Environment R3;
 		String x = s.leftOperand().name();
 		// (1) Type operand
@@ -166,7 +164,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Block
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt.Block s) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Block s) {
 		Pair<Environment,Type> p = apply(R1,s.lifetime(),s.toArray());
 		Environment R2 = p.first();
 		// FIXME: need to add phi
@@ -179,7 +177,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	/**
 	 * T-Seq
 	 */
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Stmt... stmts) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term... stmts) {
 		Environment Rn = R1;
 		for (int i = 0; i != stmts.length; ++i) {
 			// Type statement
@@ -195,7 +193,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-BoxDeref & T-BorrowDeref
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Expr.Dereference e) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference e) {
 		String x = e.operand().name();
 		Cell Cx = R.get(x);
 		// Check variable is declared
@@ -229,7 +227,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-MoveVar
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Expr.Variable e) {
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Variable e) {
 		String x = e.name();
 		Cell Cx = R1.get(x);
 		// Check variable is declared
@@ -250,7 +248,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-CopyVar
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Expr.Copy e) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Copy e) {
 		String x = e.operand().name();
 		Cell Cx = R.get(x);
 		// Check variable is declared
@@ -271,7 +269,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-MutBorrow and T-ImmBorrow
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Expr.Borrow e) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Term.Borrow e) {
 		String x = e.operand().name();
 		Cell Cx = R.get(x);
 		// Check variable is declared
@@ -294,7 +292,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Box
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Expr.Box e) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Box e) {
 		// Type operand
 		Pair<Environment, Type> p = apply(R, l, e.operand());
 		Environment R2 = p.first();
@@ -326,7 +324,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public boolean copyable(Type t) {
 		// NOTE: checking whether the borrow is mutable is necessary to follow Rust
 		// semantics. However, in the calculus as presented we can actually allow
-		// mutable references to be copied within creating dangling references. Why is
+		// mutable references to be copied without creating dangling references. Why is
 		// that?
 		if(t instanceof Type.Borrow) {
 			Type.Borrow b = (Type.Borrow) t;

@@ -103,7 +103,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// lifetime check
 		check(within(R2,T2,m),NOTWITHIN_VARIABLE_ASSIGNMENT,t);
 		// Check compatibility
-		check(compatible(R2, T1, T2), INCOMPATIBLE_TYPE, t.rightOperand());
+		check(compatible(R2, T1, R2, T2), INCOMPATIBLE_TYPE, t.rightOperand());
 		// Update environment
 		Environment R3 = R2.put(x, T2, m);
 		// Check borrow status
@@ -143,7 +143,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// (4) Check lifetimes
 			check(within(R2,T1,m),NOTWITHIN_VARIABLE_ASSIGNMENT,t);
 			// (5) Check compatibility
-			check(compatible(R2, T2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
+			check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
 			// Update environment
 			R3 = R2.put(y, T1, m);
 		} else if(T0 instanceof Type.Box) {
@@ -153,7 +153,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// (3) Check lifetimes
 			check(within(R2,T1,m),NOTWITHIN_VARIABLE_ASSIGNMENT,t);
 			// (4) Check compatibility
-			check(compatible(R2, T2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
+			check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
 			// Update environment
 			R3 = R2.put(x, new Type.Box(T1), m);
 		} else {
@@ -371,19 +371,19 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param t2
 	 * @return
 	 */
-	public boolean compatible(Environment R, Type t1, Type t2) {
+	public boolean compatible(Environment R1, Type t1, Environment R2, Type t2) {
 		if (t1 instanceof Type.Int && t2 instanceof Type.Int) {
 			return true;
 		} else if (t1 instanceof Type.Borrow && t2 instanceof Type.Borrow) {
 			Type.Borrow b1 = (Type.Borrow) t1;
 			Type.Borrow b2 = (Type.Borrow) t2;
-			Cell c1 = R.get(b1.name());
-			Cell c2 = R.get(b2.name());
-			return b1.isMutable() == b2.isMutable() && compatible(R, c1.type(), c2.type());
+			Cell c1 = R1.get(b1.name());
+			Cell c2 = R2.get(b2.name());
+			return b1.isMutable() == b2.isMutable() && compatible(R1, c1.type(), R2, c2.type());
 		} else if (t1 instanceof Type.Box && t2 instanceof Type.Box) {
 			Type.Box b1 = (Type.Box) t1;
 			Type.Box b2 = (Type.Box) t2;
-			return compatible(R, b1.element(), b2.element());
+			return compatible(R1, b1.element(), R2, b2.element());
 		} else {
 			return false;
 		}

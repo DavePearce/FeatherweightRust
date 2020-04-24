@@ -477,6 +477,16 @@ public class Syntax {
 			}
 
 			@Override
+			public boolean equals(Object o) {
+				return o instanceof Type.Int;
+			}
+
+			@Override
+			public int hashCode() {
+				return 0;
+			}
+
+			@Override
 			public String toString() { return "int"; }
 		}
 
@@ -500,6 +510,20 @@ public class Syntax {
 			}
 
 			@Override
+			public boolean equals(Object o) {
+				if(o instanceof Borrow) {
+					Borrow b = (Borrow) o;
+					return mut == b.mut && name.equals(b.name);
+				}
+				return false;
+			}
+
+			@Override
+			public int hashCode() {
+				return name.hashCode() ^ Boolean.hashCode(mut);
+			}
+
+			@Override
 			public String toString() {
 				if (mut) {
 					return "&mut " + name;
@@ -520,6 +544,22 @@ public class Syntax {
 			public Type element() {
 				return element;
 			}
+
+
+			@Override
+			public boolean equals(Object o) {
+				if(o instanceof Box) {
+					Box b = (Box) o;
+					return element.equals(b.element);
+				}
+				return false;
+			}
+
+			@Override
+			public int hashCode() {
+				return 123 ^ element.hashCode();
+			}
+
 
 			@Override
 			public String toString() {

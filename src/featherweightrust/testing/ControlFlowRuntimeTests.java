@@ -11,7 +11,7 @@ public class ControlFlowRuntimeTests {
 	@Test
 	public void test_01() throws IOException {
 		String input = "{ let mut x = 1; if x == x { 1 } else { 2 } }";
-		check(input,123);
+		check(input,1);
 	}
 
 	@Test
@@ -24,6 +24,18 @@ public class ControlFlowRuntimeTests {
 	public void test_03() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 2; if x == y { 1 } else { 2 } }";
 		check(input,2);
+	}
+
+	@Test
+	public void test_04() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 1; let mut z = &y; if x == x { z = &x; } else { z = &x; } }";
+		check(input,null);
+	}
+
+	@Test
+	public void test_05() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 1; let mut z = &y; if x == x { z = &x; } else { } }";
+		check(input,null);
 	}
 
 	public static void check(String input, Integer output) throws IOException {

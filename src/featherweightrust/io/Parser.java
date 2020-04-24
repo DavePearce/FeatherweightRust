@@ -200,7 +200,7 @@ public class Parser {
 		// Parse false block
 		Term.Block falseBlock = parseStatementBlock(context,lifetime);
 		// Return extended term
-		return new ControlFlow.Syntax.IfElse(lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
+		return new ControlFlow.Syntax.IfElse(lhs,rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
 	}
 
 	public Term.Variable parseVariable(Context context, Lifetime lifetime) {

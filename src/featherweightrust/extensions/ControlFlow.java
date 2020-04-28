@@ -186,7 +186,7 @@ public class ControlFlow {
 			// Join environments
 			Environment env = join(lhs.first(),rhs.first(),e);
 			// Join result types
-			Type type = join(env, lhs.second(), env, rhs.second(), e);
+			Type type = lhs.second().join(rhs.second());
 			// Done
 			return new Pair<>(env,type);
 		}
@@ -205,7 +205,7 @@ public class ControlFlow {
 				// Check types are compatible
 				self.check(self.compatible(lhs, Cl.type(), rhs, Cr.type()), BorrowChecker.INCOMPATIBLE_TYPE, e);
 				// Determine joined type
-				Type type = join(lhs, Cl.type(), rhs, Cr.type(), e);
+				Type type = Cl.type().join(Cr.type());
 				// Determine joined effect
 				boolean moved = join(Cl.moved(),Cr.moved());
 				// Done
@@ -217,27 +217,6 @@ public class ControlFlow {
 				}
 			}
 			return lhs;
-		}
-
-		private Type join(Environment R1, Type lhs, Environment R2, Type rhs, SyntacticElement e) {
-			if (lhs instanceof Type.Int && rhs instanceof Type.Int) {
-				return lhs;
-			} else if (lhs instanceof Type.Borrow && rhs instanceof Type.Borrow) {
-				Type.Borrow b1 = (Type.Borrow) lhs;
-				Type.Borrow b2 = (Type.Borrow) rhs;
-				Cell c1 = R1.get(b1.name());
-				Cell c2 = R2.get(b2.name());
-				Type t = join(R1, c1.type(), R2, c2.type(), e);
-				boolean mut = b1.isMutable() || b2.isMutable();
-				self.check(b1.name().equals(b2.name()), "cannot join names!", e);
-				return new Type.Borrow(mut, b1.name());
-			} else if (lhs instanceof Type.Box && rhs instanceof Type.Box) {
-				Type.Box b1 = (Type.Box) lhs;
-				Type.Box b2 = (Type.Box) rhs;
-				return join(R1, b1.element(), R2, b2.element(), e);
-			} else {
-				throw new IllegalArgumentException("types are not compatible (" + lhs + " : " + rhs);
-			}
 		}
 
 		private boolean join(boolean lhs, boolean rhs) {

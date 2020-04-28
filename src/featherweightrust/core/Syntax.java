@@ -17,8 +17,10 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.util.Arrays;
 import java.util.List;
 
+import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Walker;
@@ -471,6 +473,46 @@ public class Syntax {
 	}
 
 	public interface Type {
+		/**
+		 * Join two types together.
+		 *
+		 * @param type
+		 * @return
+		 */
+		public Type join(Type type);
+
+		public static Type Void = new Void();
+
+		public class Void extends SyntacticElement.Impl implements Type {
+			public Void(Attribute... attributes) {
+				super(attributes);
+			}
+
+			@Override
+			public boolean equals(Object o) {
+				return o instanceof Type.Void;
+			}
+
+			@Override
+			public int hashCode() {
+				return 0;
+			}
+
+			@Override
+			public Type join(Type t) {
+				if (t instanceof Void) {
+					return this;
+				} else {
+					throw new IllegalArgumentException("invalid join");
+				}
+			}
+
+			@Override
+			public String toString() {
+				return "void";
+			}
+		}
+
 		public class Int extends SyntacticElement.Impl implements Type {
 			public Int(Attribute... attributes) {
 				super(attributes);
@@ -487,48 +529,113 @@ public class Syntax {
 			}
 
 			@Override
+			public Type join(Type t) {
+				if(t instanceof Int) {
+					return this;
+				} else {
+					throw new IllegalArgumentException("invalid join");
+				}
+			}
+
+			@Override
 			public String toString() { return "int"; }
 		}
 
 		public class Borrow extends SyntacticElement.Impl implements Type {
 
 			private final boolean mut;
-			private final String name;
+			private final String[] names;
 
 			public Borrow(boolean mut, String name, Attribute... attributes) {
+				// FIXME: this is a hack
+				this(mut,new String[] {name}, attributes);
+			}
+
+			public Borrow(boolean mut, String[] names, Attribute... attributes) {
 				super(attributes);
+				if(names.length == 0) {
+					throw new IllegalArgumentException("invalid names argumetn");
+				}
 				this.mut = mut;
-				this.name = name;
+				this.names = names;
+				// Ensure sorted invariant
+				Arrays.sort(names);
 			}
 
 			public boolean isMutable() {
 				return mut;
 			}
 
-			public String name() {
-				return name;
+			public boolean borrows(String var) {
+				for (int i = 0; i != names.length; ++i) {
+					if (names[i].equals(var)) {
+						return true;
+					}
+				}
+				return false;
+			}
+
+			@Override
+			public Type.Borrow join(Type t) {
+				if(t instanceof Borrow) {
+					Type.Borrow b = (Type.Borrow) t;
+					if(mut == b.mut) {
+						// Append both sets of names together
+						String[] rs = ArrayUtils.append(names, b.names);
+						// Remove any duplicates and ensure result is sorted
+						rs = ArrayUtils.sortAndRemoveDuplicates(rs);
+						// Done
+						return new Type.Borrow(mut, rs);
+					}
+				}
+				throw new IllegalArgumentException("invalid join");
+			}
+//			public String name() {
+//				if(names.length != 1) {
+//					throw new IllegalArgumentException("Multiple names borrowed");
+//				}
+//				return names[0];
+//			}
+
+			public String[] names() {
+				return names;
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if(o instanceof Borrow) {
 					Borrow b = (Borrow) o;
-					return mut == b.mut && name.equals(b.name);
+					return mut == b.mut && Arrays.equals(names, b.names);
 				}
 				return false;
 			}
 
 			@Override
 			public int hashCode() {
-				return name.hashCode() ^ Boolean.hashCode(mut);
+				return Boolean.hashCode(mut) ^ Arrays.hashCode(names);
 			}
 
 			@Override
 			public String toString() {
 				if (mut) {
-					return "&mut " + name;
+					return "&mut " + toString(names);
 				} else {
-					return "&" + name;
+					return "&" + toString(names);
+				}
+			}
+
+			private static String toString(String[]  names) {
+				if(names.length == 1) {
+					return names[0];
+				} else {
+					String r = "";
+					for(int i=0;i!=names.length;++i) {
+						if(i != 0) {
+							r = r + ",";
+						}
+						r = r + names[i];
+					}
+					return "(" + r + ")";
 				}
 			}
 		}
@@ -545,6 +652,14 @@ public class Syntax {
 				return element;
 			}
 
+			@Override
+			public Type join(Type t) {
+				if (t instanceof Type.Box) {
+					Type.Box b = (Type.Box) t;
+					return new Type.Box(element.join(t));
+				}
+				throw new IllegalArgumentException("invalid join");
+			}
 
 			@Override
 			public boolean equals(Object o) {

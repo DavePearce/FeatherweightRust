@@ -296,7 +296,7 @@ public abstract class AbstractMachine {
 		public Value read(Location location) {
 			Cell cell = cells[location.getAddress()];
 			if (cell == null) {
-				throw new IllegalArgumentException("invalid cell");
+				throw new IllegalArgumentException("invalid cell (" + location + ")");
 			}
 			return cell.contents();
 		}

@@ -8,6 +8,7 @@ import featherweightrust.core.OperationalSemantics;
 import featherweightrust.extensions.ControlFlow;
 
 public class ControlFlowRuntimeTests {
+
 	@Test
 	public void test_01() throws IOException {
 		String input = "{ let mut x = 1; if x == x { 1 } else { 2 } }";
@@ -36,6 +37,18 @@ public class ControlFlowRuntimeTests {
 	public void test_05() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 1; let mut z = &y; if x == x { z = &x; } else { } }";
 		check(input,null);
+	}
+
+	@Test
+	public void test_06() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 1; let mut z = &y; if x == x { z = &x; } else { } let mut w = *z; w }";
+		check(input,null);
+	}
+
+	@Test
+	public void test_07() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 1; let mut z = &mut x; let mut p = &mut z; *p = &mut y; x}";
+		check(input,1);
 	}
 
 	public static void check(String input, Integer output) throws IOException {

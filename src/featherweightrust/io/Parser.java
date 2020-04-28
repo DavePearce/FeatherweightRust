@@ -217,21 +217,17 @@ public class Parser {
 			matchKeyword("mut");
 			mutable = true;
 		}
-		Term operand = parseTerm(context, lifetime);
-		if (!(operand instanceof Term.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Term.Borrow((Term.Variable) operand, mutable, sourceAttr(start, index - 1));
+		Term.Variable operand = parseVariable(context, lifetime);
+		//
+		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
 
 	public Term.Dereference parseDereference(Context context, Lifetime lifetime) {
 		int start = index;
 		match("*");
-		Term operand = parseTerm(context, lifetime);
-		if (!(operand instanceof Term.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Term.Dereference((Term.Variable) operand, sourceAttr(start, index - 1));
+		Term.Variable operand = parseVariable(context, lifetime);
+		//
+		return new Term.Dereference(operand, sourceAttr(start, index - 1));
 	}
 
 	public Term.Copy parseCopy(Context context, Lifetime lifetime) {

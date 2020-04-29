@@ -23,6 +23,7 @@ import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
+import featherweightrust.extensions.Pairs;
 import featherweightrust.io.Lexer.*;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
@@ -84,34 +85,43 @@ public class Parser {
 		checkNotEof();
 		int start = index;
 		Token lookahead = tokens.get(index);
+		Term t;
 		//
 		if (lookahead.text.equals("let")) {
-			return parseVariableDeclaration(context, lifetime);
+			t = parseVariableDeclaration(context, lifetime);
 		} else if (lookahead.text.equals("if")) {
-			return parseIfElseStmt(context, lifetime);
+			t = parseIfElseStmt(context, lifetime);
 		} else if (lookahead instanceof LeftCurly) {
 			// nested block
-			return parseStatementBlock(context, lifetime);
+			t = parseStatementBlock(context, lifetime);
 		} else if (lookahead instanceof LeftBrace) {
-			match("(");
-			Term e = parseTerm(context, lifetime);
-			checkNotEof();
-			match(")");
-			return e;
+			t = parseBracketedExpression(context,lifetime);
 		} else if (lookahead instanceof Ampersand) {
-			return parseBorrow(context, lifetime);
+			t = parseBorrow(context, lifetime);
 		} else if (lookahead instanceof Shreak) {
-			return parseCopy(context, lifetime);
+			t = parseCopy(context, lifetime);
 		} else if (lookahead instanceof Int) {
 			int val = match(Int.class, "an integer").value;
-			return new Value.Integer(val, sourceAttr(start, index - 1));
+			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
-			return parseBox(context, lifetime);
+			t = parseBox(context, lifetime);
 		} else if (lookahead instanceof Star) {
-			return parseIndirectAssignmentOrDereference(context, lifetime);
+			t = parseIndirectAssignmentOrDereference(context, lifetime);
 		} else {
-			return parseAssignmentOrVariable(context, lifetime);
+			t = parseAssignmentOrVariable(context, lifetime);
 		}
+		// Check for postfix operators
+		if(index < tokens.size() && tokens.get(index) instanceof Dot) {
+			Token tok = tokens.get(index);
+			match(".");
+			int val = match(Int.class, "an integer").value;
+			if(val != 0 && val != 1) {
+				syntaxError("invalid tuple accessor", tok);
+			}
+			t = new Pairs.Syntax.PairAccess(t, val, sourceAttr(start, index - 1));
+		}
+		// Done
+		return t;
 	}
 
 	/**
@@ -203,6 +213,31 @@ public class Parser {
 		Term.Block falseBlock = parseStatementBlock(context,lifetime);
 		// Return extended term
 		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
+	}
+
+	public Term parseBracketedExpression(Context context, Lifetime lifetime) {
+		int start = index;
+		match("(");
+		ArrayList<Term> expressions = new ArrayList<>();
+		expressions.add(parseTerm(context, lifetime));
+		checkNotEof();
+		while(index < tokens.size() && tokens.get(index) instanceof Comma) {
+			match(",");
+			expressions.add(parseTerm(context, lifetime));
+		}
+		match(")");
+		switch(expressions.size()) {
+		case 0:
+			syntaxError("no support for empty tuples!", expressions.get(2));
+			return null;
+		case 1:
+			return expressions.get(0);
+		case 2:
+			return Pairs.Syntax.Pair(expressions.get(0), expressions.get(1), sourceAttr(start, index - 1));
+		default:
+			syntaxError("no support for arbitrary tuples yet!", expressions.get(2));
+			return null;
+		}
 	}
 
 	public Term.Variable parseVariable(Context context, Lifetime lifetime) {

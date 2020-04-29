@@ -187,7 +187,7 @@ public class ControlFlow {
 			// Type right-hand side
 			Type Ty = self.apply(R1, l, t.rightHandSide()).second();
 			// Check operands are compatible
-			self.check(self.compatible(R1, Tx, R1, Ty), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(Tx.compatible(R1, Ty, R1), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Type true and false blocks
 			Pair<Environment, Type> pTrue = self.apply(R1, l, t.trueBlock());
 			Pair<Environment, Type> pFalse = self.apply(R1, l, t.falseBlock());
@@ -197,7 +197,7 @@ public class ControlFlow {
 			Type T2 = pTrue.second();
 			Type T3 = pFalse.second();
 			// Check return types are compatible
-			self.check(self.compatible(R2, T2, R3, T3), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(T2.compatible(R2, T3, R3), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Join environment and types from both branches
 			return new Pair<>(join(R2, R3, t), T2.join(T3));
 		}
@@ -214,7 +214,7 @@ public class ControlFlow {
 				// Sanity check lifetimes match
 				self.check(Cl.lifetime().equals(Cr.lifetime()), INVALID_ENVIRONMENT_CELLS, e);
 				// Check types are compatible
-				self.check(self.compatible(lhs, Cl.type(), rhs, Cr.type()), BorrowChecker.INCOMPATIBLE_TYPE, e);
+				self.check(Cl.type().compatible(lhs, Cr.type(), rhs), BorrowChecker.INCOMPATIBLE_TYPE, e);
 				// Determine joined type
 				Type type = Cl.type().join(Cr.type());
 				// Determine joined effect

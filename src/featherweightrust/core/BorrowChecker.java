@@ -101,9 +101,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Environment R2 = p.first();
 		Type T2 = p.second();
 		// lifetime check
-		check(within(R2, T2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+		check(T2.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 		// Check compatibility
-		check(compatible(R2, T1, R2, T2), INCOMPATIBLE_TYPE, t.rightOperand());
+		check(T1.compatible(R2, T2, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 		// Update environment
 		Environment R3 = R2.put(x, T2, m);
 		// Check borrow status
@@ -146,9 +146,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				Type T2 = Cy.type();
 				Lifetime m = Cy.lifetime();
 				// (4) Check lifetimes
-				check(within(R2, T1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+				check(T1.within(this,R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 				// (5) Check compatibility
-				check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
+				check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 				// Weak update for environment
 				R3 = R3.put(y, T1.join(T2), m);
 			}
@@ -157,9 +157,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// T-BoxAssign
 			Type T2 = ((Type.Box) T0).element();
 			// (3) Check lifetimes
-			check(within(R2, T1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+			check(T1.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 			// (4) Check compatibility
-			check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
+			check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 			// Update environment
 			R3 = R2.put(x, new Type.Box(T1.join(T2)), m);
 		} else {
@@ -221,14 +221,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// T-BoxDeref
 			Type T = ((Type.Box) Cx.type()).element;
 			//
-			check(copyable(T), VARIABLE_NOT_COPY, t);
+			check(T.copyable(), VARIABLE_NOT_COPY, t);
 			//
 			return new Pair<>(R, T);
 		} else if (Cx.type() instanceof Type.Borrow) {
 			// T-BorrowDeref
 			Type T = join(R.get(((Type.Borrow) Cx.type()).names()));
 			//
-			check(copyable(T), VARIABLE_NOT_COPY, t);
+			check(T.copyable(), VARIABLE_NOT_COPY, t);
 			//
 			return new Pair<>(R, T);
 		} else {
@@ -272,7 +272,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Extract type from current environment
 		Type T = Cx.type();
 		// Check variable has copy type
-		check(copyable(T), VARIABLE_NOT_COPY, t.operand());
+		check(T.copyable(), VARIABLE_NOT_COPY, t.operand());
 		// Check variable not mutably borrowed
 		check(!mutBorrowed(R, x), VARIABLE_BORROWED, t);
 		//
@@ -336,85 +336,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	/**
-	 * Check whether a type exhibits copy or move semantics.
-	 *
-	 * @param t
-	 * @return
-	 */
-	public boolean copyable(Type t) {
-		// NOTE: checking whether the borrow is mutable is necessary to follow Rust
-		// semantics. However, in the calculus as presented we can actually allow
-		// mutable references to be copied without creating dangling references. Why is
-		// that?
-		if (t instanceof Type.Borrow) {
-			Type.Borrow b = (Type.Borrow) t;
-			// Don't allow copying mutable borrows
-			return !b.isMutable();
-		} else {
-			return (t instanceof Type.Int);
-		}
-	}
-
-	/**
-	 * Check whether a given lifetime is "within" a given type. That is, the
-	 * lifetime of any reachable object through this type does not outlive the
-	 * lifetime.
-	 *
-	 * @param T
-	 * @param m
-	 * @return
-	 */
-	public boolean within(Environment R, Type T, Lifetime l) {
-		if (T instanceof Type.Int) {
-			return true;
-		} else if (T instanceof Type.Borrow) {
-			Type.Borrow t = (Type.Borrow) T;
-			String[] borrows = t.names();
-			boolean r = true;
-			for (int i = 0; i != borrows.length; ++i) {
-				String ith = borrows[i];
-				check(R.get(ith) != null, UNDECLARED_VARIABLE, t);
-				Cell C = R.get(ith);
-				r &= C.lifetime().contains(l);
-			}
-			return r;
-		} else {
-			Type.Box t = (Type.Box) T;
-			return within(R, t.element(), l);
-		}
-	}
-
-	/**
-	 * Check two types are compatible.
-	 *
-	 * @param t1
-	 * @param t2
-	 * @return
-	 */
-	public boolean compatible(Environment R1, Type t1, Environment R2, Type t2) {
-		if (t1 instanceof Type.Int && t2 instanceof Type.Int) {
-			return true;
-		} else if (t1 instanceof Type.Void && t2 instanceof Type.Void) {
-			return true;
-		} else if (t1 instanceof Type.Borrow && t2 instanceof Type.Borrow) {
-			Type.Borrow b1 = (Type.Borrow) t1;
-			Type.Borrow b2 = (Type.Borrow) t2;
-			// NOTE: follow holds because all members of a single borrow must be compatible
-			// by construction.
-			Cell c1 = R1.get(b1.names()[0]);
-			Cell c2 = R2.get(b2.names()[0]);
-			//
-			return b1.isMutable() == b2.isMutable() && compatible(R1, c1.type(), R2, c2.type());
-		} else if (t1 instanceof Type.Box && t2 instanceof Type.Box) {
-			Type.Box b1 = (Type.Box) t1;
-			Type.Box b2 = (Type.Box) t2;
-			return compatible(R1, b1.element(), R2, b2.element());
-		} else {
-			return false;
-		}
-	}
-
-	/**
 	 * Check whether the location bound to a given variable is borrowed or not.
 	 *
 	 * @param env
@@ -425,7 +346,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Look through all types to whether for matching borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (borrowed(type, var, false)) {
+			if (type.borrowed(var, false)) {
 				return true;
 			}
 		}
@@ -444,22 +365,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Look through all types to whether for matching (mutable) borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (borrowed(type, var, true)) {
+			if (type.borrowed(var, true)) {
 				return true;
 			}
-		}
-		return false;
-	}
-
-	public boolean borrowed(Type type, String var, boolean mut) {
-		if (type instanceof Type.Borrow) {
-			Type.Borrow b = (Type.Borrow) type;
-			if (b.borrows(var) && (!mut || b.isMutable())) {
-				return true;
-			}
-		} else if (type instanceof Type.Box) {
-			Type.Box t = (Type.Box) type;
-			return borrowed(t.element, var, mut);
 		}
 		return false;
 	}

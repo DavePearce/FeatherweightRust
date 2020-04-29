@@ -143,7 +143,12 @@ public class Lexer {
 		} else if (c == '*') {
 			return new Star(pos++);
 		} else if (c == '!') {
-			return new Shreak(pos++);
+			if((pos+1) < input.length() && input.charAt(pos+1) == '=' ) {
+				pos = pos + 2;
+				return new NotEquals(pos-2);
+			} else {
+				return new Shreak(pos++);
+			}
 		}
 
 		syntaxError("unknown operator encountered: " + c);
@@ -325,6 +330,13 @@ public class Lexer {
 
 		public Equals(int pos) {
 			super("=", pos);
+		}
+	}
+
+	public static class NotEquals extends Token {
+
+		public NotEquals(int pos) {
+			super("!=", pos);
 		}
 	}
 

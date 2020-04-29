@@ -41,12 +41,18 @@ public class ControlFlowRuntimeTests {
 
 	@Test
 	public void test_06() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 1; let mut z = &y; if x == x { z = &x; } else { } let mut w = *z; w }";
-		check(input,null);
+		String input = "{ let mut x = 1; let mut y = 2; let mut z = &y; if x == x { z = &x; } else { } let mut w = *z; w }";
+		check(input,1);
 	}
 
 	@Test
 	public void test_07() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; let mut z = &y; if x != x { z = &x; } else { } let mut w = *z; w }";
+		check(input,2);
+	}
+
+	@Test
+	public void test_08() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 1; let mut z = &mut x; let mut p = &mut z; *p = &mut y; x}";
 		check(input,1);
 	}

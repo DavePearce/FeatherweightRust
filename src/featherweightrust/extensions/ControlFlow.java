@@ -57,13 +57,15 @@ public class ControlFlow {
 		 *
 		 */
 		public static class IfElse extends AbstractTerm {
+			private final boolean eq;
 			private final Term lhs;
 			private final Term rhs;
 			private final Term.Block trueBlock;
 			private final Term.Block falseBlock;
 
-			public IfElse(Term lhs, Term rhs, Term.Block trueBlock, Term.Block falseBlock, Attribute... attributes) {
+			public IfElse(boolean eq, Term lhs, Term rhs, Term.Block trueBlock, Term.Block falseBlock, Attribute... attributes) {
 				super(TERM_ifelse, attributes);
+				this.eq = eq;
 				this.lhs = lhs;
 				this.rhs = rhs;
 				this.trueBlock = trueBlock;
@@ -86,6 +88,16 @@ public class ControlFlow {
 			 */
 			public Term rightHandSide() {
 				return rhs;
+			}
+
+			/**
+			 * Determine whether condition is equality (<code>==</code>) or inequality
+			 * (<code>!=</code>).
+			 *
+			 * @return
+			 */
+			public boolean condition() {
+				return eq;
 			}
 
 			/**
@@ -129,8 +141,9 @@ public class ControlFlow {
 			Term rhs = t1.rightHandSide();
 			//
 			if (lhs instanceof Value && rhs instanceof Value) {
+				boolean eq = lhs.equals(rhs);
 				// Both lhs and rhs fully reduced
-				if (lhs.equals(rhs)) {
+				if (t1.condition() == eq) {
 					return new Pair<>(S, t1.trueBlock());
 				} else {
 					return new Pair<>(S, t1.falseBlock());
@@ -141,7 +154,7 @@ public class ControlFlow {
 				// Read lhs from store
 				Value v = S.read(S.locate(rv.name()));
 				// Read location from store
-				Term t2 = new Syntax.IfElse(lhs, v, t1.trueBlock(), t1.falseBlock(), t1.attributes());
+				Term t2 = new Syntax.IfElse(t1.eq, lhs, v, t1.trueBlock(), t1.falseBlock(), t1.attributes());
 				// Done
 				return new Pair<State, Term>(S, t2);
 			} else {
@@ -150,7 +163,7 @@ public class ControlFlow {
 				// Read lhs from store
 				Value v = S.read(S.locate(lv.name()));
 				// Construct reduced term
-				Term t2 = new Syntax.IfElse(v, rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
+				Term t2 = new Syntax.IfElse(t1.eq, v, rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
 				// Done
 				return new Pair<State, Term>(S, t2);
 			}

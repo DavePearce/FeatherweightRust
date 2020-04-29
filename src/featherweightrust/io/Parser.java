@@ -88,7 +88,7 @@ public class Parser {
 		if (lookahead.text.equals("let")) {
 			return parseVariableDeclaration(context, lifetime);
 		} else if (lookahead.text.equals("if")) {
-			return parseIfStmt(context, lifetime);
+			return parseIfElseStmt(context, lifetime);
 		} else if (lookahead instanceof LeftCurly) {
 			// nested block
 			return parseStatementBlock(context, lifetime);
@@ -183,13 +183,15 @@ public class Parser {
 		return new Term.Let(variable, initialiser, sourceAttr(start, index - 1));
 	}
 
-	public Term parseIfStmt(Context context, Lifetime lifetime) {
+	public Term parseIfElseStmt(Context context, Lifetime lifetime) {
 		int start = index;
 		matchKeyword("if");
 		// Match and declare lhs variable
 		Term.Variable lhs = parseVariable(context, lifetime);
 		context.declare(lhs.name());
-		match("==");
+		Token t = match("==","!=");
+		// Determine condition
+		boolean eq = t.text.equals("==");
 		// Match and declare rhs variable
 		Term.Variable rhs = parseVariable(context, lifetime);
 		context.declare(rhs.name());
@@ -200,7 +202,7 @@ public class Parser {
 		// Parse false block
 		Term.Block falseBlock = parseStatementBlock(context,lifetime);
 		// Return extended term
-		return new ControlFlow.Syntax.IfElse(lhs,rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
+		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
 	}
 
 	public Term.Variable parseVariable(Context context, Lifetime lifetime) {
@@ -263,6 +265,28 @@ public class Parser {
 		index = index + 1;
 		return t;
 	}
+
+	private Token match(String... options) {
+		checkNotEof();
+		Token t = tokens.get(index);
+		for(int i=0;i!=options.length;++i) {
+			if (t.text.equals(options[i])) {
+				index = index + 1;
+				return t;
+			}
+		}
+		String s = "";
+		for(int i=0;i!=options.length;++i) {
+			if(i != 0) {
+				s += " or ";
+			}
+			s += "'" + options[i] + "'";
+		}
+		syntaxError("expecting '" + s + "', found '" + t.text + "'", t);
+		return null;
+	}
+
+
 
 	@SuppressWarnings("unchecked")
 	private <T extends Token> T match(Class<T> c, String name) {

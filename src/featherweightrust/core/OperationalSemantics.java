@@ -183,10 +183,10 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 				// Replace with partially reduced statement
 				stmts[0] = s;
 				// Go around again
-				return new Pair<>(S1, new Term.Block(lifetime, stmts, b.attributes()));
+				return new Pair<>(S1, new Term.Block(b.lifetime(), stmts, b.attributes()));
 			} else {
 				// Slice off head
-				return new Pair<>(S1, new Term.Block(lifetime, slice(b, 1), b.attributes()));
+				return new Pair<>(S1, new Term.Block(b.lifetime(), slice(b, 1), b.attributes()));
 			}
 		}
 		// drop all bindings created within block

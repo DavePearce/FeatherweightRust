@@ -198,7 +198,10 @@ public class CoreRuntimeTests {
 	}
 
 	public static void check(String input, Integer output, OperationalSemantics semantics, BorrowChecker typing) throws IOException {
+		// Allocate the global lifetime. This is the lifetime where all heap allocated
+		// data will reside.
 		Lifetime globalLifetime = new Lifetime();
+		//
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block

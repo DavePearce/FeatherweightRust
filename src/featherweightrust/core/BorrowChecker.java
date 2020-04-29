@@ -135,6 +135,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// T-BorrowAssign
 			Type.Borrow b = (Type.Borrow) T0;
 			String[] ys = b.names();
+			// Prepare new environment
+			R3 = R2;
+			// Consider all targets
 			for(int i=0;i!=ys.length;++i) {
 				String y = ys[i];
 				// (2) Extract y's type
@@ -146,10 +149,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				check(within(R2, T1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 				// (5) Check compatibility
 				check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
+				// Weak update for environment
+				R3 = R3.put(y, T1.join(T2), m);
 			}
-//			// Strong update for environment
-//			R3 = R2.put(y, T1, m);
-			R3 = R2;
 		} else if (T0 instanceof Type.Box) {
 			Lifetime m = Cx.lifetime();
 			// T-BoxAssign

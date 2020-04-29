@@ -365,7 +365,7 @@ public abstract class AbstractMachine {
 		public Store drop(Value v) {
 			// Check whether we need to drop anything.
 			if (v instanceof Location) {
-				// Value overwritten pointed to something. Therefore, it that something was a
+				// Value overwritten pointed to something. Therefore, if that something was a
 				// heap location, we'll need to drop it.
 				Location location = (Location) v;
 				// Check whether reference location is heap (i.e. owned)

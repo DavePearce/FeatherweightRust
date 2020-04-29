@@ -19,10 +19,10 @@ package featherweightrust.io;
 
 import java.util.*;
 
-import featherweightrust.core.Syntax.Expr;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
+import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.extensions.ControlFlow;
 import featherweightrust.io.Lexer.*;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
@@ -48,20 +48,20 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Stmt.Block parseStatementBlock(Context context, Lifetime lifetime) {
+	public Term.Block parseStatementBlock(Context context, Lifetime lifetime) {
 		int start = index;
 
 		Lifetime myLifetime = lifetime.freshWithin();
 
 		match("{");
-		ArrayList<Stmt> stmts = new ArrayList<>();
+		ArrayList<Term> stmts = new ArrayList<>();
 		while (index < tokens.size() && !(tokens.get(index) instanceof RightCurly)) {
-			Stmt stmt = parseStatement(context, myLifetime);
+			Term stmt = parseTerm(context, myLifetime);
 			stmts.add(stmt);
 		}
 		match("}");
 
-		return new Stmt.Block(myLifetime, stmts.toArray(new Stmt[stmts.size()]), sourceAttr(start, index - 1));
+		return new Term.Block(myLifetime, stmts.toArray(new Term[stmts.size()]), sourceAttr(start, index - 1));
 	}
 
 	public static int lifetime = 0;
@@ -80,57 +80,80 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Stmt parseStatement(Context context, Lifetime lifetime) {
+	public Term parseTerm(Context context, Lifetime lifetime) {
 		checkNotEof();
+		int start = index;
 		Token lookahead = tokens.get(index);
 		//
 		if (lookahead.text.equals("let")) {
-			return parseVariableDeclaration(context);
-		} else if(lookahead instanceof LeftCurly) {
+			return parseVariableDeclaration(context, lifetime);
+		} else if (lookahead.text.equals("if")) {
+			return parseIfElseStmt(context, lifetime);
+		} else if (lookahead instanceof LeftCurly) {
 			// nested block
 			return parseStatementBlock(context, lifetime);
+		} else if (lookahead instanceof LeftBrace) {
+			match("(");
+			Term e = parseTerm(context, lifetime);
+			checkNotEof();
+			match(")");
+			return e;
+		} else if (lookahead instanceof Ampersand) {
+			return parseBorrow(context, lifetime);
+		} else if (lookahead instanceof Shreak) {
+			return parseCopy(context, lifetime);
+		} else if (lookahead instanceof Int) {
+			int val = match(Int.class, "an integer").value;
+			return new Value.Integer(val, sourceAttr(start, index - 1));
+		} else if (lookahead.text.equals("box")) {
+			return parseBox(context, lifetime);
+		} else if (lookahead instanceof Star) {
+			return parseIndirectAssignmentOrDereference(context, lifetime);
 		} else {
-			// assignment
-			return parseAssignStmtOrExpr(context);
+			return parseAssignmentOrVariable(context, lifetime);
 		}
 	}
 
 	/**
-	 * Parse an assignment statement of the form:
-	 *
-	 * <pre>
-	 * AssignStmt ::= LVal '=' Expr ';'
-	 *
-	 * LVal ::= Ident
-	 *       | LVal '.' Ident
-	 *       | LVal '[' Expr ']'
-	 * </pre>
+	 * Parse an indirect assignment or a dereference expression.
 	 *
 	 * @return
 	 */
-	public Stmt parseAssignStmtOrExpr(Context context) {
-		// standard assignment
+	public Term parseIndirectAssignmentOrDereference(Context context, Lifetime lifetime) {
 		int start = index;
-		Expr lhs = parseExpr(context);
-		if(index < tokens.size() && tokens.get(index) instanceof Equals) {
+		// Parse potential lhs
+		Term.Dereference lhs = parseDereference(context, lifetime);
+		//
+		if (index < tokens.size() && tokens.get(index) instanceof Equals && lhs.operand() instanceof Term.Variable) {
 			// This is an assignment statement
 			match("=");
-			Expr rhs = parseExpr(context);
+			Term rhs = parseTerm(context, lifetime);
 			match(";");
 			int end = index;
-			// Sanity check permitted lvals
-			if (lhs instanceof Expr.Variable) {
-				return new Stmt.Assignment((Expr.Variable) lhs, rhs, sourceAttr(start, end - 1));
-			} else if (lhs instanceof Expr.Dereference) {
-				Expr.Dereference e = (Expr.Dereference) lhs;
-				if (e.operand() instanceof Expr.Variable) {
-					return new Stmt.IndirectAssignment((Expr.Variable) e.operand(), rhs, sourceAttr(start, end - 1));
-				}
-			}
-			syntaxError("expecting lval, found " + lhs + ".", lhs);
-			return null; // deadcode
+			return new Term.IndirectAssignment((Term.Variable) lhs.operand(), rhs, sourceAttr(start, end - 1));
 		} else {
-			// This is an expression as a statement
+			return lhs;
+		}
+	}
+
+	/**
+	 * Parse an assignment or variable load expression.
+	 *
+	 * @return
+	 */
+	public Term parseAssignmentOrVariable(Context context, Lifetime lifetime) {
+		int start = index;
+		// Parse potential lhs
+		Term.Variable lhs = parseVariable(context, lifetime);
+		//
+		if (index < tokens.size() && tokens.get(index) instanceof Equals) {
+			// This is an assignment statement
+			match("=");
+			Term rhs = parseTerm(context, lifetime);
+			match(";");
+			int end = index;
+			return new Term.Assignment((Term.Variable) lhs, rhs, sourceAttr(start, end - 1));
+		} else {
 			return lhs;
 		}
 	}
@@ -144,59 +167,51 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Stmt.Let parseVariableDeclaration(Context context) {
+	public Term.Let parseVariableDeclaration(Context context, Lifetime lifetime) {
 		int start = index;
 		matchKeyword("let");
 		matchKeyword("mut");
 		// Match and declare variable name
-		Expr.Variable variable = parseVariable(context);
+		Term.Variable variable = parseVariable(context, lifetime);
 		context.declare(variable.name());
 		// A variable declaration may optionally be assigned an initialiser
 		// expression.
 		match("=");
-		Expr initialiser = parseExpr(context);
+		Term initialiser = parseTerm(context,lifetime);
 		match(";");
 		// Done.
-		return new Stmt.Let(variable, initialiser, sourceAttr(start, index - 1));
+		return new Term.Let(variable, initialiser, sourceAttr(start, index - 1));
 	}
 
-	public Expr parseExpr(Context context) {
-		checkNotEof();
-
+	public Term parseIfElseStmt(Context context, Lifetime lifetime) {
 		int start = index;
-		Token token = tokens.get(index);
-
-		if (token instanceof LeftBrace) {
-			match("(");
-			Expr e = parseExpr(context);
-			checkNotEof();
-			match(")");
-			return e;
-		} else if (token instanceof Ampersand) {
-			return parseBorrow(context);
-		} else if (token instanceof Star) {
-			return parseDereference(context);
-		} else if (token instanceof Shreak) {
-			return parseCopy(context);
-		} else if (token instanceof Identifier) {
-			return parseVariable(context);
-		} else if (token instanceof Int) {
-			int val = match(Int.class, "an integer").value;
-			return new Value.Integer(val, sourceAttr(start, index - 1));
-		} else if(token.text.equals("box")) {
-			return parseBox(context);
-		}
-		syntaxError("unrecognised term (\"" + token.text + "\")", token);
-		return null;
+		matchKeyword("if");
+		// Match and declare lhs variable
+		Term.Variable lhs = parseVariable(context, lifetime);
+		context.declare(lhs.name());
+		Token t = match("==","!=");
+		// Determine condition
+		boolean eq = t.text.equals("==");
+		// Match and declare rhs variable
+		Term.Variable rhs = parseVariable(context, lifetime);
+		context.declare(rhs.name());
+		// Parse true block
+		Term.Block trueBlock = parseStatementBlock(context,lifetime);
+		// Match else
+		matchKeyword("else");
+		// Parse false block
+		Term.Block falseBlock = parseStatementBlock(context,lifetime);
+		// Return extended term
+		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
 	}
 
-	public Expr.Variable parseVariable(Context context) {
+	public Term.Variable parseVariable(Context context, Lifetime lifetime) {
 		int start = index;
 		Identifier var = matchIdentifier();
-		return new Expr.Variable(var.text, sourceAttr(start, index - 1));
+		return new Term.Variable(var.text, sourceAttr(start, index - 1));
 	}
 
-	public Expr.Borrow parseBorrow(Context context) {
+	public Term.Borrow parseBorrow(Context context, Lifetime lifetime) {
 		int start = index;
 		boolean mutable = false;
 		match("&");
@@ -204,38 +219,34 @@ public class Parser {
 			matchKeyword("mut");
 			mutable = true;
 		}
-		Expr operand = parseExpr(context);
-		if (!(operand instanceof Expr.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Expr.Borrow((Expr.Variable) operand, mutable, sourceAttr(start, index - 1));
+		Term.Variable operand = parseVariable(context, lifetime);
+		//
+		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
 
-	public Expr.Dereference parseDereference(Context context) {
+	public Term.Dereference parseDereference(Context context, Lifetime lifetime) {
 		int start = index;
 		match("*");
-		Expr operand = parseExpr(context);
-		if (!(operand instanceof Expr.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Expr.Dereference((Expr.Variable) operand, sourceAttr(start, index - 1));
+		Term.Variable operand = parseVariable(context, lifetime);
+		//
+		return new Term.Dereference(operand, sourceAttr(start, index - 1));
 	}
 
-	public Expr.Copy parseCopy(Context context) {
+	public Term.Copy parseCopy(Context context, Lifetime lifetime) {
 		int start = index;
 		match("!");
-		Expr operand = parseExpr(context);
-		if (!(operand instanceof Expr.Variable)) {
+		Term operand = parseTerm(context, lifetime);
+		if (!(operand instanceof Term.Variable)) {
 			syntaxError("expecting variable, found " + operand + ".", operand);
 		}
-		return new Expr.Copy((Expr.Variable) operand, sourceAttr(start, index - 1));
+		return new Term.Copy((Term.Variable) operand, sourceAttr(start, index - 1));
 	}
 
-	public Expr.Box parseBox(Context context) {
+	public Term.Box parseBox(Context context, Lifetime lifetime) {
 		int start = index;
 		matchKeyword("box");
-		Expr operand = parseExpr(context);
-		return new Expr.Box(operand, sourceAttr(start, index - 1));
+		Term operand = parseTerm(context,lifetime);
+		return new Term.Box(operand, sourceAttr(start, index - 1));
 	}
 
 	private void checkNotEof() {
@@ -254,6 +265,28 @@ public class Parser {
 		index = index + 1;
 		return t;
 	}
+
+	private Token match(String... options) {
+		checkNotEof();
+		Token t = tokens.get(index);
+		for(int i=0;i!=options.length;++i) {
+			if (t.text.equals(options[i])) {
+				index = index + 1;
+				return t;
+			}
+		}
+		String s = "";
+		for(int i=0;i!=options.length;++i) {
+			if(i != 0) {
+				s += " or ";
+			}
+			s += "'" + options[i] + "'";
+		}
+		syntaxError("expecting '" + s + "', found '" + t.text + "'", t);
+		return null;
+	}
+
+
 
 	@SuppressWarnings("unchecked")
 	private <T extends Token> T match(Class<T> c, String name) {
@@ -297,7 +330,7 @@ public class Parser {
 		return new Attribute.Source(t1.start, t2.end());
 	}
 
-	private void syntaxError(String msg, Expr e) {
+	private void syntaxError(String msg, Term e) {
 		Attribute.Source loc = e.attribute(Attribute.Source.class);
 		throw new SyntaxError(msg, sourcefile, loc.start, loc.end);
 	}

@@ -30,8 +30,8 @@ import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Stmt;
-import featherweightrust.util.AbstractSemantics;
+import featherweightrust.core.Syntax.Term;
+import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
@@ -99,7 +99,7 @@ public class ModelCheckingExperiment {
 			VERBOSE = options.containsKey("verbose");
 			//
 			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
-			Iterator<Stmt.Block> iterator;
+			Iterator<Term.Block> iterator;
 			String label;
 			// Create iterator
 			if(c >= 0) {
@@ -107,7 +107,7 @@ public class ModelCheckingExperiment {
 				label = space.toString() + "{def," + c + "}";
 			} else {
 				// Get domain
-				Domain.Big<Stmt.Block> domain = space.domain();
+				Domain.Big<Term.Block> domain = space.domain();
 				// Determine expected size
 				expected = domain.bigSize().longValueExact();
 				// Get iterator
@@ -128,9 +128,9 @@ public class ModelCheckingExperiment {
 		System.exit(1);
 	}
 
-	public static void check(Iterator<Stmt.Block> iterator, long expected, String label) throws Exception {
+	public static void check(Iterator<Term.Block> iterator, long expected, String label) throws Exception {
 		// Construct temporary memory areas
-		Stmt.Block[][] arrays = new Stmt.Block[NTHREADS][BATCHSIZE];
+		Term.Block[][] arrays = new Term.Block[NTHREADS][BATCHSIZE];
 		Future<Stats>[] threads = new Future[NTHREADS];
 		//
 		Stats stats = new Stats(label);
@@ -142,7 +142,7 @@ public class ModelCheckingExperiment {
 			}
 			// Submit next batch for process
 			for (int i = 0; i != NTHREADS; ++i) {
-				final Stmt.Block[] batch = arrays[i];
+				final Term.Block[] batch = arrays[i];
 				threads[i] = executor.submit(() -> check(batch, ProgramSpace.ROOT));
 			}
 			// Join all back together
@@ -174,10 +174,10 @@ public class ModelCheckingExperiment {
 		}
 	}
 
-	public static Stats check(Stmt.Block[] batch, Lifetime lifetime) throws Exception {
+	public static Stats check(Term.Block[] batch, Lifetime lifetime) throws Exception {
 		Stats stats = new Stats(null);
 		for(int i=0;i!=batch.length;++i) {
-			Stmt.Block block = batch[i];
+			Term.Block block = batch[i];
 			if(block != null) {
 				check(block,lifetime,stats);
 			}
@@ -186,10 +186,10 @@ public class ModelCheckingExperiment {
 	}
 
 	// NOTE: must use BigStep semantics because its more efficient!
-	public static final OperationalSemantics semantics = new OperationalSemantics.BigStep();
+	public static final OperationalSemantics semantics = new OperationalSemantics();
 	public static final BorrowChecker checker = new BorrowChecker("");
 
-	public static void check(Stmt.Block stmt, Lifetime lifetime, Stats stats) {
+	public static void check(Term.Block stmt, Lifetime lifetime, Stats stats) {
 		boolean ran = false;
 		boolean checked = false;
 		Exception error = null;
@@ -203,7 +203,7 @@ public class ModelCheckingExperiment {
 		// See whether or not it executes
 		try {
 			// Execute block in outermost lifetime "*")
-			semantics.apply(AbstractSemantics.EMPTY_STATE, lifetime, stmt);
+			semantics.apply(AbstractMachine.EMPTY_STATE, lifetime, stmt);
 			ran = true;
 		} catch (Exception e) {
 			error = e;

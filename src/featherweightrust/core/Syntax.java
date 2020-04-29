@@ -20,6 +20,9 @@ package featherweightrust.core;
 import java.util.Arrays;
 import java.util.List;
 
+import featherweightrust.core.BorrowChecker.Cell;
+import featherweightrust.core.BorrowChecker.Environment;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
@@ -506,11 +509,44 @@ public class Syntax {
 		 */
 		public Type join(Type type);
 
+		/**
+		 * Check whether this type can safely live within a given lifetime. That is, the
+		 * lifetime of any reachable object through this type does not outlive the
+		 * lifetime.
+		 *
+		 * @param self
+		 * @param R
+		 * @param l
+		 * @return
+		 */
+		public boolean within(BorrowChecker self, Environment R, Lifetime l);
+
+		/**
+		 * Determine whether this type indicates that a given variable is already
+		 * borrowed (either mutably or not).
+		 *
+		 * @param var The variable being checked.
+		 * @param mut Flag indicating whether we're interested only mutable borrows, or
+		 *            any borrows.
+		 * @return
+		 */
+		public boolean borrowed(String var, boolean mut);
+
 		public static Type Void = new Void();
 
 		public class Void extends SyntacticElement.Impl implements Type {
 			public Void(Attribute... attributes) {
 				super(attributes);
+			}
+
+			@Override
+			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
+				return false;
+			}
+
+			@Override
+			public boolean borrowed(String var, boolean mut) {
+				return false;
 			}
 
 			@Override
@@ -541,6 +577,16 @@ public class Syntax {
 		public class Int extends SyntacticElement.Impl implements Type {
 			public Int(Attribute... attributes) {
 				super(attributes);
+			}
+
+			@Override
+			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
+				return true;
+			}
+
+			@Override
+			public boolean borrowed(String var, boolean mut) {
+				return false;
 			}
 
 			@Override
@@ -587,17 +633,32 @@ public class Syntax {
 				Arrays.sort(names);
 			}
 
+			@Override
+			public boolean borrowed(String var, boolean mut) {
+				if (!mut || isMutable()) {
+					for (int i = 0; i != names.length; ++i) {
+						if (names[i].equals(var)) {
+							return true;
+						}
+					}
+				}
+				return false;
+			}
+
 			public boolean isMutable() {
 				return mut;
 			}
 
-			public boolean borrows(String var) {
+			@Override
+			public boolean within(BorrowChecker checker, Environment R, Lifetime l) {
+				boolean r = true;
 				for (int i = 0; i != names.length; ++i) {
-					if (names[i].equals(var)) {
-						return true;
-					}
+					String ith = names[i];
+					checker.check(R.get(ith) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
+					Cell C = R.get(ith);
+					r &= C.lifetime().contains(l);
 				}
-				return false;
+				return r;
 			}
 
 			@Override
@@ -671,6 +732,16 @@ public class Syntax {
 			public Box(Type element, Attribute... attributes) {
 				super(attributes);
 				this.element = element;
+			}
+
+			@Override
+			public boolean within(BorrowChecker self, Environment R, Lifetime l) {
+				return element.within(self, R, l);
+			}
+
+			@Override
+			public boolean borrowed(String var, boolean mut) {
+				return element.borrowed(var,mut);
 			}
 
 			public Type element() {

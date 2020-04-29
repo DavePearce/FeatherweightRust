@@ -101,7 +101,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Environment R2 = p.first();
 		Type T2 = p.second();
 		// lifetime check
-		check(within(R2, T2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+		check(T2.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 		// Check compatibility
 		check(compatible(R2, T1, R2, T2), INCOMPATIBLE_TYPE, t.rightOperand());
 		// Update environment
@@ -146,7 +146,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				Type T2 = Cy.type();
 				Lifetime m = Cy.lifetime();
 				// (4) Check lifetimes
-				check(within(R2, T1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+				check(T1.within(this,R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 				// (5) Check compatibility
 				check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
 				// Weak update for environment
@@ -157,7 +157,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// T-BoxAssign
 			Type T2 = ((Type.Box) T0).element();
 			// (3) Check lifetimes
-			check(within(R2, T1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+			check(T1.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 			// (4) Check compatibility
 			check(compatible(R2, T2, R2, T1), INCOMPATIBLE_TYPE, t.rightOperand());
 			// Update environment
@@ -356,35 +356,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	/**
-	 * Check whether a given lifetime is "within" a given type. That is, the
-	 * lifetime of any reachable object through this type does not outlive the
-	 * lifetime.
-	 *
-	 * @param T
-	 * @param m
-	 * @return
-	 */
-	public boolean within(Environment R, Type T, Lifetime l) {
-		if (T instanceof Type.Int) {
-			return true;
-		} else if (T instanceof Type.Borrow) {
-			Type.Borrow t = (Type.Borrow) T;
-			String[] borrows = t.names();
-			boolean r = true;
-			for (int i = 0; i != borrows.length; ++i) {
-				String ith = borrows[i];
-				check(R.get(ith) != null, UNDECLARED_VARIABLE, t);
-				Cell C = R.get(ith);
-				r &= C.lifetime().contains(l);
-			}
-			return r;
-		} else {
-			Type.Box t = (Type.Box) T;
-			return within(R, t.element(), l);
-		}
-	}
-
-	/**
 	 * Check two types are compatible.
 	 *
 	 * @param t1
@@ -425,7 +396,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Look through all types to whether for matching borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (borrowed(type, var, false)) {
+			if (type.borrowed(var, false)) {
 				return true;
 			}
 		}
@@ -444,22 +415,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Look through all types to whether for matching (mutable) borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (borrowed(type, var, true)) {
+			if (type.borrowed(var, true)) {
 				return true;
 			}
-		}
-		return false;
-	}
-
-	public boolean borrowed(Type type, String var, boolean mut) {
-		if (type instanceof Type.Borrow) {
-			Type.Borrow b = (Type.Borrow) type;
-			if (b.borrows(var) && (!mut || b.isMutable())) {
-				return true;
-			}
-		} else if (type instanceof Type.Box) {
-			Type.Box t = (Type.Box) type;
-			return borrowed(t.element, var, mut);
 		}
 		return false;
 	}

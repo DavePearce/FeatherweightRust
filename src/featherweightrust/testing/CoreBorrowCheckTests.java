@@ -220,13 +220,17 @@ public class CoreBorrowCheckTests {
 	}
 
 	public static void checkInvalid(String input) throws IOException {
+		checkInvalid(input, new BorrowChecker(input));
+	}
+
+	public static void checkInvalid(String input, BorrowChecker typing) throws IOException {
 		Lifetime globalLifetime = new Lifetime();
 		try {
 			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
 			// Parse block
 			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			new BorrowChecker(input).apply(new BorrowChecker.Environment(), globalLifetime, stmt);
+			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
 			//
 			fail("test shouldn't have passed borrow checking");
 		} catch (SyntaxError e) {

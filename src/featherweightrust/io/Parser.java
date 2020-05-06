@@ -20,6 +20,7 @@ package featherweightrust.io;
 import java.util.*;
 
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
@@ -254,7 +255,7 @@ public class Parser {
 			matchKeyword("mut");
 			mutable = true;
 		}
-		Term.Variable operand = parseVariable(context, lifetime);
+		Path operand = parseVariable(context, lifetime);
 		//
 		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}

@@ -55,7 +55,6 @@ public class Syntax {
 
 		/**
 		 * An abstract term to be implemented by all other terms.
-		 *
 		 * @author David J. Pearce
 		 *
 		 */
@@ -268,7 +267,7 @@ public class Syntax {
 			}
 		}
 
-		public class Variable extends AbstractTerm implements Term {
+		public class Variable extends AbstractTerm implements Term, Path {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
@@ -281,8 +280,44 @@ public class Syntax {
 			}
 
 			@Override
+			public boolean equals(Object o) {
+				if(o instanceof Variable) {
+					Variable v = (Variable) o;
+					return name.equals(v.name);
+				} else {
+					return false;
+				}
+			}
+
+			@Override
+			public boolean conflicts(Path path) {
+				if(path instanceof Variable) {
+					Variable v = (Variable) path;
+					return name.equals(v.name);
+				} else {
+					// Need to implement this!
+					throw new IllegalArgumentException("implement me");
+				}
+			}
+
+			@Override
+			public int hashCode() {
+				return name.hashCode();
+			}
+			@Override
 			public String toString() {
 				return name;
+			}
+
+			@Override
+			public int compareTo(Path path) {
+				if(path instanceof Variable) {
+					Variable v = (Variable) path;
+					return name.compareTo(v.name);
+				} else {
+					// Need to implement this!
+					throw new IllegalArgumentException("implement me");
+				}
 			}
 
 			public static Term.Variable construct(String name) {
@@ -321,16 +356,16 @@ public class Syntax {
 		}
 
 		public class Borrow extends AbstractTerm implements Term {
-			private final Term.Variable operand;
+			private final Path operand;
 			private final boolean mutable;
 
-			public Borrow(Term.Variable operand, boolean mutable, Attribute... attributes) {
+			public Borrow(Path operand, boolean mutable, Attribute... attributes) {
 				super(TERM_borrow,attributes);
 				this.operand = operand;
 				this.mutable = mutable;
 			}
 
-			public Term.Variable operand() {
+			public Path operand() {
 				return operand;
 			}
 
@@ -341,14 +376,14 @@ public class Syntax {
 			@Override
 			public String toString() {
 				if (mutable) {
-					return "&mut " + operand.name;
+					return "&mut " + operand;
 				} else {
-					return "&" + operand.name;
+					return "&" + operand;
 				}
 			}
 
-			public static Term.Borrow construct(String name, Boolean mutable) {
-				return new Term.Borrow(new Term.Variable(name), mutable);
+			public static Term.Borrow construct(String path, Boolean mutable) {
+				return new Term.Borrow(new Term.Variable(path), mutable);
 			}
 
 			public static Domain.Big<Borrow> toBigDomain(Domain.Small<String> subdomain) {
@@ -543,15 +578,15 @@ public class Syntax {
 		public boolean compatible(Environment R1, Type t2, Environment R2);
 
 		/**
-		 * Determine whether this type indicates that a given variable is already
-		 * borrowed (either mutably or not).
+		 * Determine whether this type indicates that a given path is already borrowed
+		 * (either mutably or not).
 		 *
-		 * @param var The variable being checked.
+		 * @param path The path being checked (which e.g. could be a variable)
 		 * @param mut Flag indicating whether we're interested only mutable borrows, or
 		 *            any borrows.
 		 * @return
 		 */
-		public boolean borrowed(String var, boolean mut);
+		public boolean borrowed(Path path, boolean mut);
 
 		public static Type Void = new Void();
 
@@ -566,7 +601,7 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(String var, boolean mut) {
+			public boolean borrowed(Path path, boolean mut) {
 				return false;
 			}
 
@@ -616,7 +651,7 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(String var, boolean mut) {
+			public boolean borrowed(Path path, boolean mut) {
 				return false;
 			}
 
@@ -656,29 +691,29 @@ public class Syntax {
 		public class Borrow extends SyntacticElement.Impl implements Type {
 
 			private final boolean mut;
-			private final String[] names;
+			private final Path[] paths;
 
-			public Borrow(boolean mut, String name, Attribute... attributes) {
-				// FIXME: this is a hack
-				this(mut,new String[] {name}, attributes);
+			public Borrow(boolean mut, Path path, Attribute... attributes) {
+				this(mut,new Path[] {path}, attributes);
 			}
 
-			public Borrow(boolean mut, String[] names, Attribute... attributes) {
+			public Borrow(boolean mut, Path[] paths, Attribute... attributes) {
 				super(attributes);
-				if(names.length == 0) {
+				if(paths.length == 0) {
 					throw new IllegalArgumentException("invalid names argumetn");
 				}
 				this.mut = mut;
-				this.names = names;
+				this.paths = paths;
 				// Ensure sorted invariant
-				Arrays.sort(names);
+				Arrays.sort(paths);
 			}
 
 			@Override
-			public boolean borrowed(String var, boolean mut) {
+			public boolean borrowed(Path path, boolean mut) {
 				if (!mut || isMutable()) {
-					for (int i = 0; i != names.length; ++i) {
-						if (names[i].equals(var)) {
+					for (int i = 0; i != paths.length; ++i) {
+						// FIXME: this is broken!
+						if (paths[i].conflicts(path)) {
 							return true;
 						}
 					}
@@ -692,8 +727,8 @@ public class Syntax {
 					Type.Borrow b2 = (Type.Borrow) t2;
 					// NOTE: follow holds because all members of a single borrow must be compatible
 					// by construction.
-					Cell c1 = R1.get(names[0]);
-					Cell c2 = R2.get(b2.names()[0]);
+					Cell c1 = R1.get(paths[0]);
+					Cell c2 = R2.get(b2.paths()[0]);
 					//
 					return mut == b2.isMutable() && c1.type().compatible(R1, c2.type(), R2);
 				} else {
@@ -714,8 +749,8 @@ public class Syntax {
 			@Override
 			public boolean within(BorrowChecker checker, Environment R, Lifetime l) {
 				boolean r = true;
-				for (int i = 0; i != names.length; ++i) {
-					String ith = names[i];
+				for (int i = 0; i != paths.length; ++i) {
+					Path ith = paths[i];
 					checker.check(R.get(ith) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
 					Cell C = R.get(ith);
 					r &= C.lifetime().contains(l);
@@ -729,53 +764,53 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						String[] rs = ArrayUtils.append(names, b.names);
+						Path[] ps = ArrayUtils.append(paths, b.paths);
 						// Remove any duplicates and ensure result is sorted
-						rs = ArrayUtils.sortAndRemoveDuplicates(rs);
+						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
-						return new Type.Borrow(mut, rs);
+						return new Type.Borrow(mut, ps);
 					}
 				}
 				throw new IllegalArgumentException("invalid join");
 			}
 
-			public String[] names() {
-				return names;
+			public Path[] paths() {
+				return paths;
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if(o instanceof Borrow) {
 					Borrow b = (Borrow) o;
-					return mut == b.mut && Arrays.equals(names, b.names);
+					return mut == b.mut && Arrays.equals(paths, b.paths);
 				}
 				return false;
 			}
 
 			@Override
 			public int hashCode() {
-				return Boolean.hashCode(mut) ^ Arrays.hashCode(names);
+				return Boolean.hashCode(mut) ^ Arrays.hashCode(paths);
 			}
 
 			@Override
 			public String toString() {
 				if (mut) {
-					return "&mut " + toString(names);
+					return "&mut " + toString(paths);
 				} else {
-					return "&" + toString(names);
+					return "&" + toString(paths);
 				}
 			}
 
-			private static String toString(String[]  names) {
-				if(names.length == 1) {
-					return names[0];
+			private static String toString(Path[]  paths) {
+				if(paths.length == 1) {
+					return paths[0].toString();
 				} else {
 					String r = "";
-					for(int i=0;i!=names.length;++i) {
+					for(int i=0;i!=paths.length;++i) {
 						if(i != 0) {
 							r = r + ",";
 						}
-						r = r + names[i];
+						r = r + paths[i];
 					}
 					return "(" + r + ")";
 				}
@@ -796,8 +831,8 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(String var, boolean mut) {
-				return element.borrowed(var,mut);
+			public boolean borrowed(Path path, boolean mut) {
+				return element.borrowed(path,mut);
 			}
 
 			@Override
@@ -851,6 +886,26 @@ public class Syntax {
 		}
 	}
 
+	/**
+	 * Represents a path descriptor which describes a concrete location within a
+	 * variable (which e.g. may describe the entire variable itself).
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public interface Path extends Comparable<Path> {
+		/**
+		 * Determine whether two paths conflict. That is, rerepresent potentially
+		 * overlapping locations. For example, variables <code>x</code> and
+		 * <code>y</code> do not conflict. Likewise, tuple accesses <code>x.0</code> and
+		 * <code>x.1</code> don't conflict. However, <code>x</code> conflicts with
+		 * itself. Likewise, <code>x.1</code> conflicts with itself and <code>x</code>.
+		 *
+		 * @param p
+		 * @return
+		 */
+		public boolean conflicts(Path p);
+	}
 
 	/**
 	 * Construct a domain for statements with a maximum level of nesting.

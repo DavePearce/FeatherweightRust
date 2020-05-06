@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Term.Block;
@@ -117,7 +118,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Term> reduceBorrow(State S, Term.Variable x) {
+	public Pair<State, Term> reduceBorrow(State S, Path.Variable x) {
 		String name = x.name();
 		// Locate operand
 		Location lx = S.locate(x.name());

@@ -522,6 +522,27 @@ public class Syntax {
 		public boolean within(BorrowChecker self, Environment R, Lifetime l);
 
 		/**
+		 * Check whether a type exhibits copy or move semantics. In some cases, this may
+		 * depend on element types contained within.
+		 *
+		 * @param t
+		 * @return
+		 */
+		public boolean copyable();
+
+		/**
+		 * Check whether this type is "compatible" with another. That is, for a variable
+		 * declared with a given type, it can subsequently only be assigned values which
+		 * are compatible with its type.
+		 *
+		 * @param R1 --- the environment in which this type is defined.
+		 * @param t2 --- the other type being compared for compatibility.
+		 * @param R2 --- the environment in which the other type is defined.
+		 * @return
+		 */
+		public boolean compatible(Environment R1, Type t2, Environment R2);
+
+		/**
 		 * Determine whether this type indicates that a given variable is already
 		 * borrowed (either mutably or not).
 		 *
@@ -547,6 +568,16 @@ public class Syntax {
 			@Override
 			public boolean borrowed(String var, boolean mut) {
 				return false;
+			}
+
+			@Override
+			public boolean copyable() {
+				return true;
+			}
+
+			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				return t2 instanceof Type.Void;
 			}
 
 			@Override
@@ -587,6 +618,16 @@ public class Syntax {
 			@Override
 			public boolean borrowed(String var, boolean mut) {
 				return false;
+			}
+
+			@Override
+			public boolean copyable() {
+				return true;
+			}
+
+			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				return t2 instanceof Type.Int;
 			}
 
 			@Override
@@ -645,8 +686,29 @@ public class Syntax {
 				return false;
 			}
 
+			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				if (t2 instanceof Type.Borrow) {
+					Type.Borrow b2 = (Type.Borrow) t2;
+					// NOTE: follow holds because all members of a single borrow must be compatible
+					// by construction.
+					Cell c1 = R1.get(names[0]);
+					Cell c2 = R2.get(b2.names()[0]);
+					//
+					return mut == b2.isMutable() && c1.type().compatible(R1, c2.type(), R2);
+				} else {
+					return false;
+				}
+			}
+
 			public boolean isMutable() {
 				return mut;
+			}
+
+			@Override
+			public boolean copyable() {
+				// NOTE: mutable borrows have linear semantics.
+				return !mut;
 			}
 
 			@Override
@@ -676,12 +738,6 @@ public class Syntax {
 				}
 				throw new IllegalArgumentException("invalid join");
 			}
-//			public String name() {
-//				if(names.length != 1) {
-//					throw new IllegalArgumentException("Multiple names borrowed");
-//				}
-//				return names[0];
-//			}
 
 			public String[] names() {
 				return names;
@@ -742,6 +798,22 @@ public class Syntax {
 			@Override
 			public boolean borrowed(String var, boolean mut) {
 				return element.borrowed(var,mut);
+			}
+
+			@Override
+			public boolean copyable() {
+				// NOTE: boxes always exhibit linear semantics.
+				return false;
+			}
+
+			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				if (t2 instanceof Type.Box) {
+					Type.Box b2 = (Type.Box) t2;
+					return element.compatible(R1, b2.element, R2);
+				} else {
+					return false;
+				}
 			}
 
 			public Type element() {

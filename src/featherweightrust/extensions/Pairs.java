@@ -137,6 +137,21 @@ public class Pairs {
 			}
 
 			@Override
+			public boolean copyable() {
+				return first.copyable() && second.copyable();
+			}
+
+			@Override
+			public boolean compatible(Environment R1, Type T2, Environment R2) {
+				if(T2 instanceof TypePair) {
+					TypePair tp = (TypePair) T2;
+					return first.compatible(R1, tp.first, R2) && second.compatible(R1, tp.second, R2);
+				} else {
+					return false;
+				}
+			}
+
+			@Override
 			public Type join(Type type) {
 				if (type instanceof TypePair) {
 					TypePair p = (TypePair) type;

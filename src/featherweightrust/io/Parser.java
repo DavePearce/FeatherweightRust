@@ -20,6 +20,8 @@ package featherweightrust.io;
 import java.util.*;
 
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
@@ -254,7 +256,7 @@ public class Parser {
 			matchKeyword("mut");
 			mutable = true;
 		}
-		Term.Variable operand = parseVariable(context, lifetime);
+		Slice operand = parseSlice(context, lifetime);
 		//
 		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
@@ -284,6 +286,12 @@ public class Parser {
 		return new Term.Box(operand, sourceAttr(start, index - 1));
 	}
 
+	public Slice parseSlice(Context context, Lifetime lifetime) {
+		int start = index;
+		Identifier var = matchIdentifier();
+		return new Slice(var.text, Path.EMPTY, sourceAttr(start, index - 1));
+	}
+	
 	private void checkNotEof() {
 		if (index >= tokens.size()) {
 			throw new SyntaxError("unexpected end-of-file", sourcefile, index - 1, index - 1);

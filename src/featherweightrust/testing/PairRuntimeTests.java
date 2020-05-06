@@ -96,6 +96,58 @@ public class PairRuntimeTests {
 		check(input,PairOneTwo);
 	}
 
+	@Test
+	public void test_14() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; *y }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_15() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; *y }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_16() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; x }";
+		check(input,PairOneTwo);
+	}
+
+
+	@Test
+	public void test_17() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; x }";
+		check(input,PairOneTwo);
+	}
+
+
+	@Test
+	public void test_18() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &mut x.0; x.1 }";
+		check(input,PairOneTwo);
+	}
+
+
+	@Test
+	public void test_19() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &mut x.1; x.0 }";
+		check(input,PairOneTwo);
+	}
+
+
+	@Test
+	public void test_20() throws IOException {
+		String input = "{ let mut x = (0,2); { let mut y = &mut x.0; *y = 1; } x}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_21() throws IOException {
+		String input = "{ let mut x = (1,0); { let mut y = &mut x.1; *y = 2; } x}";
+		check(input,PairOneTwo);
+	}
+
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
 		CoreRuntimeTests.check(input, output, PAIRS_SEMANTICS, new BorrowChecker(input, PAIRS_TYPING));

@@ -66,6 +66,31 @@ public class PairBorrowCheckTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_18() throws IOException {
+		String input = "{ let mut x = (0,0); let mut y = &mut x.0; x}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_19() throws IOException {
+		String input = "{ let mut x = (0,0); let mut y = &mut x.1; x}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_20() throws IOException {
+		String input = "{ let mut x = (0,0); let mut y = &mut x.0; *y = 2; x}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_21() throws IOException {
+		String input = "{ let mut x = (0,0); let mut y = &mut x.1; *y = 2; x}";
+		checkInvalid(input);
+	}
+
+
 	public static void checkInvalid(String input) throws IOException {
 		CoreBorrowCheckTests.checkInvalid(input, new BorrowChecker(input, PAIR_TYPING));
 	}

@@ -460,7 +460,7 @@ public class Syntax {
 			public Atom(int opcode, Attribute... attributes) {
 				super(opcode, attributes);
 			}
-			
+
 			@Override
 			public Value read(Path path) {
 				if(path.size() != 0) {
@@ -474,7 +474,7 @@ public class Syntax {
 				if(path.size() != 0) {
 					throw new IllegalArgumentException("invalid path");
 				}
-				return this;
+				return value;
 			}
 		}
 
@@ -981,9 +981,9 @@ public class Syntax {
 		}
 
 		public boolean conflicts(Slice s) {
-			return name.equals(s.name) && path.conflicts(s.path); 
+			return name.equals(s.name) && path.conflicts(s.path);
 		}
-		
+
 		@Override
 		public boolean equals(Object o) {
 			if(o instanceof Slice) {
@@ -1024,7 +1024,13 @@ public class Syntax {
 		/**
 		 * A constant representing the empty path.
 		 */
-		public final static Path EMPTY = new Path();
+		public final static Path EMPTY = new Path() {
+			@Override
+			public Path append(Path p) {
+				// Appending path to empty path returns path
+				return p;
+			}
+		};
 
 		/**
 		 * The sequence of elements making up this path
@@ -1060,7 +1066,18 @@ public class Syntax {
 		 * @return
 		 */
 		public boolean conflicts(Path p) {
-			throw new IllegalArgumentException("GOT HERE");
+			// Determine smallest path length
+			final int n = Math.min(elements.length, p.elements.length);
+			// Iterate elements looking for something which doesn't conflict.
+			for(int i=0;i<n;++i) {
+				Element ith = elements[i];
+				Element pith = p.elements[i];
+				if(!ith.conflicts(pith)) {
+					return false;
+				}
+			}
+			// Done
+			return true;
 		}
 
 		public Path append(Path p) {
@@ -1107,7 +1124,13 @@ public class Syntax {
 		}
 
 		public interface Element extends Comparable<Element> {
-
+			/**
+			 * Determine whether a given path element conflicts with another path element.
+			 *
+			 * @param e
+			 * @return
+			 */
+			public boolean conflicts(Element e);
 		}
 	}
 

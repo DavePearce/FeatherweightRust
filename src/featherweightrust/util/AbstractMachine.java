@@ -27,6 +27,7 @@ import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 
@@ -297,10 +298,11 @@ public abstract class AbstractMachine {
 			int address = location.getAddress();
 			Path path = location.getPath();
 			Cell cell = cells[address];
-			if (cell == null) {
-				throw new IllegalArgumentException("invalid cell (" + address + ")");
-			}
-			return cell.contents().read(location.getPath());
+			System.out.println("CELL: " + cell);
+			// Read value at location
+			Value contents = cell.contents();
+			// Extract path (if applicable)
+			return (path == Path.EMPTY) ? contents : contents.read(path);
 		}
 
 		/**
@@ -312,12 +314,11 @@ public abstract class AbstractMachine {
 		 */
 		public Store write(Location location, Value value) {
 			int address = location.getAddress();
+			Path path = location.getPath();
+			// Read cell from given base address
 			Cell cell = cells[address];
-			if (cell == null) {
-				throw new IllegalArgumentException("invalid cell");
-			}
 			// Construct new value
-			Value nv = cell.value.write(location.getPath(), value);
+			Value nv = (path == Path.EMPTY) ? value: cell.value.write(path, value);
 			// Copy cells ahead of write
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
 			// Perform actual write

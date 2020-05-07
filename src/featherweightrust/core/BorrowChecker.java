@@ -25,6 +25,7 @@ import java.util.Set;
 import featherweightrust.core.OperationalSemantics.Extension;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
@@ -74,14 +75,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Let t) {
 		// Sanity check variable not already declared
 		Term.Variable x = t.variable();
-		Cell C1 = R1.get(x);
+		Cell C1 = R1.get(x.name());
 		check(C1 == null, VARIABLE_ALREADY_DECLARED, t.variable());
 		// Type operand
 		Pair<Environment, Type> p = apply(R1, l, t.initialiser());
 		Environment R2 = p.first();
 		Type T = p.second();
 		// Update environment and discard type (as unused for statements)
-		Environment R3 = R2.put(x, T, l);
+		Environment R3 = R2.put(x.name(), T, l);
 		// Done
 		return new Pair<>(R3, Type.Void);
 	}
@@ -93,7 +94,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
 		Term.Variable x = t.leftOperand();
 		// Extract variable's existing type
-		Cell Cx = R1.get(x);
+		Cell Cx = R1.get(x.name());
 		check(Cx != null, UNDECLARED_VARIABLE, t.leftOperand());
 		Type T1 = Cx.type();
 		Lifetime m = Cx.lifetime();
@@ -106,7 +107,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Check compatibility
 		check(T1.compatible(R2, T2, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 		// Update environment
-		Environment R3 = R2.put(x, T2, m);
+		Environment R3 = R2.put(x.name(), T2, m);
 		// Check borrow status
 		check(!borrowed(R3, x), BORROWED_VARIABLE_ASSIGNMENT, t.leftOperand());
 		//
@@ -119,13 +120,13 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.IndirectAssignment t) {
 		Environment R3;
-		String x = t.leftOperand().name();
+		Term.Variable x = t.leftOperand();
 		// (1) Type operand
 		Pair<Environment, Type> p = apply(R1, l, t.rightOperand());
 		Environment R2 = p.first();
 		Type T1 = p.second();
 		// (2) Extract x's type info
-		Cell Cx = R2.get(x);
+		Cell Cx = R2.get(x.name());
 		// Check variable is declared
 		check(Cx != null, UNDECLARED_VARIABLE, t.leftOperand());
 		// Check variable not moved
@@ -135,23 +136,25 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		if (T0 instanceof Type.Borrow && ((Type.Borrow) T0).isMutable()) {
 			// T-BorrowAssign
 			Type.Borrow b = (Type.Borrow) T0;
-			String[] ys = b.paths();
+			Slice[] ys = b.paths();
 			// Prepare new environment
 			R3 = R2;
 			// Consider all targets
 			for(int i=0;i!=ys.length;++i) {
-				String y = ys[i];
+				Path y = ys[i];
 				// (2) Extract y's type
-				Cell Cy = R2.get(y);
+				Cell Cy = R2.get(y.getBase().name());
 				check(Cy != null, UNDECLARED_VARIABLE, b);
-				Type T2 = Cy.type();
+				Type Ty = Cy.type();
 				Lifetime m = Cy.lifetime();
+				// Extract type of borrowed location
+				Type T2 = Ty.extract
 				// (4) Check lifetimes
 				check(T1.within(this,R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 				// (5) Check compatibility
 				check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 				// Weak update for environment
-				R3 = R3.put(y, T1.join(T2), m);
+				R3 = R3.put(y, , m);
 			}
 		} else if (T0 instanceof Type.Box) {
 			Lifetime m = Cx.lifetime();
@@ -162,7 +165,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// (4) Check compatibility
 			check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 			// Update environment
-			R3 = R2.put(x, new Type.Box(T1.join(T2)), m);
+			R3 = R2.put(x.name(), new Type.Box(T1.join(T2)), m);
 		} else {
 			syntaxError("expected mutable reference", t.leftOperand());
 			return null; // deadcode
@@ -209,8 +212,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
-		String x = t.operand().name();
-		Cell Cx = R.get(x);
+		Term.Variable x = t.operand();
+		Cell Cx = R.get(x.name());
 		// Check variable is declared
 		check(Cx != null, UNDECLARED_VARIABLE, t);
 		// Check variable not moved
@@ -226,8 +229,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			//
 			return new Pair<>(R, T);
 		} else if (Cx.type() instanceof Type.Borrow) {
+			Type.Borrow Cx_type = (Type.Borrow) Cx.type();
 			// T-BorrowDeref
-			Type T = join(R.get(((Type.Borrow) Cx.type()).paths()));
+			Type T = join(R.read(Cx_type.paths()));
 			//
 			check(T.copyable(), VARIABLE_NOT_COPY, t);
 			//
@@ -242,19 +246,18 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-MoveVar
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Variable t) {
-		String x = t.name();
-		Cell Cx = R1.get(x);
+	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Variable x) {
+		Cell Cx = R1.get(x.name());
 		// Check variable is declared
-		check(Cx != null, UNDECLARED_VARIABLE, t);
+		check(Cx != null, UNDECLARED_VARIABLE, x);
 		// Check variable not moved
-		check(!Cx.moved(), VARIABLE_MOVED, t);
+		check(!Cx.moved(), VARIABLE_MOVED, x);
 		// Extract type from current environment
 		Type T = Cx.type();
 		// Check variable not borrowed
-		check(!borrowed(R1, x), VARIABLE_BORROWED, t);
+		check(!borrowed(R1, x), VARIABLE_BORROWED, x);
 		// Implement destructive update
-		Environment R2 = R1.move(x);
+		Environment R2 = R1.move(x.name());
 		//
 		return new Pair<>(R2, T);
 	}
@@ -264,8 +267,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Copy t) {
-		String x = t.operand().name();
-		Cell Cx = R.get(x);
+		Term.Variable x = t.operand();
+		Cell Cx = R.get(x.name());
 		// Check variable is declared
 		check(Cx != null, UNDECLARED_VARIABLE, t);
 		// Check variable not moved
@@ -285,8 +288,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Term.Borrow t) {
-		Path.Variable p = t.operand();
-		Cell Cx = R.get(p);
+		Path p = t.operand();
+		Cell Cx = R.read(p);
 		// Check variable is declared
 		check(Cx != null, UNDECLARED_VARIABLE, t);
 		// Check variable not moved
@@ -447,27 +450,33 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 
 		/**
+		 * Extract cell associated with given path.
+		 * @param p
+		 * @return
+		 */
+		public Cell read(Path p) {
+			// Extract enclosing cell
+			Cell c = get(p.getBase().name());
+		}
+
+		/**
+		 * Extract cell(s) associated with a given set of path(s).
+		 *
+		 * @param name
+		 * @return
+		 */
+		public Cell[] read(Path... paths) {
+
+		}
+
+		/**
 		 * Get the cell associated with a given path
 		 *
 		 * @param name
 		 * @return
 		 */
-		public Cell get(Term.Variable path) {
-			return mapping.get(path.name());
-		}
-
-		/**
-		 * Get the cells associated with a given set of variable names
-		 *
-		 * @param name
-		 * @return
-		 */
-		public Cell[] get(String[] names) {
-			Cell[] cs = new Cell[names.length];
-			for (int i = 0; i != cs.length; ++i) {
-				cs[i] = mapping.get(names[i]);
-			}
-			return cs;
+		public Cell get(String name) {
+			return mapping.get(name);
 		}
 
 		/**
@@ -477,9 +486,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		 * @param type
 		 * @return
 		 */
-		public Environment put(Term.Variable path, Type type, Lifetime lifetime) {
+		public Environment put(String name, Type type, Lifetime lifetime) {
 			Environment nenv = new Environment(mapping);
-			nenv.mapping.put(path.name(), new Cell(type, lifetime, true));
+			nenv.mapping.put(name, new Cell(type, lifetime, true));
 			return nenv;
 		}
 

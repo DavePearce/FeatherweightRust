@@ -20,8 +20,11 @@ package featherweightrust.core;
 import java.util.Arrays;
 import java.util.List;
 
+import javax.lang.model.element.Element;
+
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
+import featherweightrust.core.Syntax.Term.Variable;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.SyntacticElement;
@@ -267,7 +270,7 @@ public class Syntax {
 			}
 		}
 
-		public class Variable extends AbstractTerm implements Term, Path {
+		public class Variable extends AbstractTerm implements Term {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
@@ -290,34 +293,12 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean conflicts(Path path) {
-				if(path instanceof Variable) {
-					Variable v = (Variable) path;
-					return name.equals(v.name);
-				} else {
-					// Need to implement this!
-					throw new IllegalArgumentException("implement me");
-				}
-			}
-
-			@Override
 			public int hashCode() {
 				return name.hashCode();
 			}
 			@Override
 			public String toString() {
 				return name;
-			}
-
-			@Override
-			public int compareTo(Path path) {
-				if(path instanceof Variable) {
-					Variable v = (Variable) path;
-					return name.compareTo(v.name);
-				} else {
-					// Need to implement this!
-					throw new IllegalArgumentException("implement me");
-				}
 			}
 
 			public static Term.Variable construct(String name) {
@@ -356,16 +337,16 @@ public class Syntax {
 		}
 
 		public class Borrow extends AbstractTerm implements Term {
-			private final Path operand;
+			private final Slice operand;
 			private final boolean mutable;
 
-			public Borrow(Path operand, boolean mutable, Attribute... attributes) {
+			public Borrow(Slice operand, boolean mutable, Attribute... attributes) {
 				super(TERM_borrow,attributes);
 				this.operand = operand;
 				this.mutable = mutable;
 			}
 
-			public Path operand() {
+			public Slice operand() {
 				return operand;
 			}
 
@@ -383,7 +364,8 @@ public class Syntax {
 			}
 
 			public static Term.Borrow construct(String path, Boolean mutable) {
-				return new Term.Borrow(new Term.Variable(path), mutable);
+				//return new Term.Borrow(new Term.Variable(path), mutable);
+				throw new RuntimeException("fix me");
 			}
 
 			public static Domain.Big<Borrow> toBigDomain(Domain.Small<String> subdomain) {
@@ -444,10 +426,57 @@ public class Syntax {
 
 		public static Unit Unit = new Unit();
 
-		public class Unit extends AbstractTerm implements Value {
+		/**
+		 * Read the value at a given path within this value. If path is empty, then that
+		 * identifies this value to be returned. For example, given a tuple
+		 * <code>(1,2)</code>, reading the value at path <code>1</code> gives
+		 * <code>2</code>.
+		 *
+		 * @param path
+		 * @return
+		 */
+		public Value read(Path path);
+
+		/**
+		 * Write a give value into this value at a given path, returned the updated
+		 * value.
+		 *
+		 * @param path
+		 * @param value
+		 * @return
+		 */
+		public Value write(Path path, Value value);
+
+		/**
+		 * An indivisible value which can be stored in exactly one location. For
+		 * example, a compound value such as an array or tuple might require more than
+		 * one location to store. In all cases, <code>size() == 1</code> should hold for
+		 * an atom.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public interface Atom extends Value {
+
+		}
+
+		public class Unit extends AbstractTerm implements Atom {
 
 			public Unit(Attribute... attributes) {
 				super(TERM_unit,attributes);
+			}
+
+			@Override
+			public Value read(Path path) {
+				if(path.size() != 0) {
+					throw new IllegalArgumentException("invalid path");
+				}
+				return this;
+			}
+
+			@Override
+			public Value write(Path path, Value value) {
+				throw new IllegalArgumentException();
 			}
 
 			@Override
@@ -466,7 +495,7 @@ public class Syntax {
 			}
 		}
 
-		public class Integer extends AbstractTerm implements Value {
+		public class Integer extends AbstractTerm implements Atom {
 			private final int value;
 
 			public Integer(int value, Attribute... attributes) {
@@ -476,6 +505,19 @@ public class Syntax {
 
 			public int value() {
 				return value;
+			}
+
+			@Override
+			public Value read(Path path) {
+				if(path.size() != 0) {
+					throw new IllegalArgumentException("invalid path");
+				}
+				return this;
+			}
+
+			@Override
+			public Value write(Path path, Value value) {
+				throw new IllegalArgumentException();
 			}
 
 			@Override
@@ -502,16 +544,53 @@ public class Syntax {
 			}
 		}
 
-		public class Location extends AbstractTerm implements Value {
+		public class Location extends AbstractTerm implements Atom {
 			private final int address;
+			private final Path path;
 
-			public Location(int value, Attribute... attributes) {
-				super(TERM_location, attributes);
-				this.address = value;
+			public Location(int address, Attribute... attributes) {
+				this(address,Path.EMPTY,attributes);
 			}
 
+			public Location(int address, Path path, Attribute... attributes) {
+				super(TERM_location, attributes);
+				this.address = address;
+				this.path = path;
+			}
+
+			@Override
+			public Value read(Path path) {
+				if(path.size() != 0) {
+					throw new IllegalArgumentException("invalid path");
+				}
+				return this;
+			}
+
+			@Override
+			public Value write(Path path, Value value) {
+				throw new IllegalArgumentException();
+			}
+
+			/**
+			 * Get the base address of the allocation unit this location refers to.
+			 *
+			 * @return
+			 */
 			public int getAddress() {
 				return address;
+			}
+
+			/**
+			 * Get the path within the allocation unit this location refers to.
+			 *
+			 * @return
+			 */
+			public Path getPath() {
+				return path;
+			}
+
+			public Location append(Path p) {
+				return new Location(address, path.append(p), attributes());
 			}
 
 			@Override
@@ -523,14 +602,14 @@ public class Syntax {
 			public boolean equals(Object o) {
 				if (o instanceof Location) {
 					Location l = ((Location) o);
-					return l.address == address;
+					return l.address == address && path.equals(l.path);
 				}
 				return false;
 			}
 
 			@Override
 			public String toString() {
-				return "&" + address;
+				return "&" + address + path;
 			}
 		}
 	}
@@ -588,16 +667,35 @@ public class Syntax {
 		 */
 		public boolean borrowed(Path path, boolean mut);
 
+		/**
+		 * Extract the (sub)type to which a given path corresponds.
+		 *
+		 * @param path
+		 * @return
+		 */
+		public Type read(Path path);
+
+		/**
+		 * Write a given type to a given path within this type. For example, writing
+		 * <code>int</code> into <code>(bool,bool)</code> at position <code>1</code>
+		 * gives <code>(int,bool)</code>.
+		 *
+		 * @param path
+		 * @param type
+		 * @return
+		 */
+		public Type write(Path path, Type type);
+
 		public static Type Void = new Void();
 
-		public class Void extends SyntacticElement.Impl implements Type {
-			public Void(Attribute... attributes) {
+		public static abstract class AbstractAtom extends SyntacticElement.Impl implements Type {
+			public AbstractAtom(Attribute... attributes) {
 				super(attributes);
 			}
 
 			@Override
 			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
-				return false;
+				return true;
 			}
 
 			@Override
@@ -608,6 +706,39 @@ public class Syntax {
 			@Override
 			public boolean copyable() {
 				return true;
+			}
+
+			@Override
+			public Type join(Type t) {
+				if(equals(t)) {
+					return this;
+				} else {
+					throw new IllegalArgumentException("invalid join");
+				}
+			}
+
+			@Override
+			public Type read(Path p) {
+				if(p.size() == 0) {
+					return this;
+				} else {
+					throw new IllegalArgumentException("invalid position");
+				}
+			}
+
+			@Override
+			public Type write(Path p, Type t) {
+				if (p.size() == 0) {
+					return t;
+				} else {
+					throw new IllegalArgumentException("invalid position");
+				}
+			}
+		}
+
+		public class Void extends AbstractAtom implements Type {
+			public Void(Attribute... attributes) {
+				super(attributes);
 			}
 
 			@Override
@@ -626,38 +757,14 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
-				if (t instanceof Void) {
-					return this;
-				} else {
-					throw new IllegalArgumentException("invalid join");
-				}
-			}
-
-			@Override
 			public String toString() {
 				return "void";
 			}
 		}
 
-		public class Int extends SyntacticElement.Impl implements Type {
+		public class Int extends AbstractAtom implements Type {
 			public Int(Attribute... attributes) {
 				super(attributes);
-			}
-
-			@Override
-			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
-				return true;
-			}
-
-			@Override
-			public boolean borrowed(Path path, boolean mut) {
-				return false;
-			}
-
-			@Override
-			public boolean copyable() {
-				return true;
 			}
 
 			@Override
@@ -676,34 +783,24 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
-				if(t instanceof Int) {
-					return this;
-				} else {
-					throw new IllegalArgumentException("invalid join");
-				}
-			}
-
-			@Override
 			public String toString() { return "int"; }
 		}
 
-		public class Borrow extends SyntacticElement.Impl implements Type {
-
+		public class Borrow extends AbstractAtom implements Type {
 			private final boolean mut;
-			private final Path[] paths;
+			private final Slice[] items;
 
-			public Borrow(boolean mut, Path path, Attribute... attributes) {
-				this(mut,new Path[] {path}, attributes);
+			public Borrow(boolean mut, Slice item, Attribute... attributes) {
+				this(mut,new Slice[] {item}, attributes);
 			}
 
-			public Borrow(boolean mut, Path[] paths, Attribute... attributes) {
+			public Borrow(boolean mut, Slice[] paths, Attribute... attributes) {
 				super(attributes);
 				if(paths.length == 0) {
 					throw new IllegalArgumentException("invalid names argumetn");
 				}
 				this.mut = mut;
-				this.paths = paths;
+				this.items = paths;
 				// Ensure sorted invariant
 				Arrays.sort(paths);
 			}
@@ -711,29 +808,14 @@ public class Syntax {
 			@Override
 			public boolean borrowed(Path path, boolean mut) {
 				if (!mut || isMutable()) {
-					for (int i = 0; i != paths.length; ++i) {
+					for (int i = 0; i != items.length; ++i) {
 						// FIXME: this is broken!
-						if (paths[i].conflicts(path)) {
+						if (items[i].conflicts(path)) {
 							return true;
 						}
 					}
 				}
 				return false;
-			}
-
-			@Override
-			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				if (t2 instanceof Type.Borrow) {
-					Type.Borrow b2 = (Type.Borrow) t2;
-					// NOTE: follow holds because all members of a single borrow must be compatible
-					// by construction.
-					Cell c1 = R1.get(paths[0]);
-					Cell c2 = R2.get(b2.paths()[0]);
-					//
-					return mut == b2.isMutable() && c1.type().compatible(R1, c2.type(), R2);
-				} else {
-					return false;
-				}
 			}
 
 			public boolean isMutable() {
@@ -747,10 +829,25 @@ public class Syntax {
 			}
 
 			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				if (t2 instanceof Type.Borrow) {
+					Type.Borrow b2 = (Type.Borrow) t2;
+					// NOTE: follow holds because all members of a single borrow must be compatible
+					// by construction.
+					Cell c1 = R1.get(items[0]);
+					Cell c2 = R2.get(b2.paths()[0]);
+					//
+					return mut == b2.isMutable() && c1.type().compatible(R1, c2.type(), R2);
+				} else {
+					return false;
+				}
+			}
+
+			@Override
 			public boolean within(BorrowChecker checker, Environment R, Lifetime l) {
 				boolean r = true;
-				for (int i = 0; i != paths.length; ++i) {
-					Path ith = paths[i];
+				for (int i = 0; i != items.length; ++i) {
+					Slice ith = items[i];
 					checker.check(R.get(ith) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
 					Cell C = R.get(ith);
 					r &= C.lifetime().contains(l);
@@ -764,7 +861,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						Path[] ps = ArrayUtils.append(paths, b.paths);
+						Slice[] ps = ArrayUtils.append(items, b.items);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -774,50 +871,50 @@ public class Syntax {
 				throw new IllegalArgumentException("invalid join");
 			}
 
-			public Path[] paths() {
-				return paths;
+			public Slice[] paths() {
+				return items;
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if(o instanceof Borrow) {
 					Borrow b = (Borrow) o;
-					return mut == b.mut && Arrays.equals(paths, b.paths);
+					return mut == b.mut && Arrays.equals(items, b.items);
 				}
 				return false;
 			}
 
 			@Override
 			public int hashCode() {
-				return Boolean.hashCode(mut) ^ Arrays.hashCode(paths);
+				return Boolean.hashCode(mut) ^ Arrays.hashCode(items);
 			}
 
 			@Override
 			public String toString() {
 				if (mut) {
-					return "&mut " + toString(paths);
+					return "&mut " + toString(items);
 				} else {
-					return "&" + toString(paths);
+					return "&" + toString(items);
 				}
 			}
 
-			private static String toString(Path[]  paths) {
-				if(paths.length == 1) {
-					return paths[0].toString();
+			private static String toString(Slice[]  slices) {
+				if(slices.length == 1) {
+					return slices[0].toString();
 				} else {
 					String r = "";
-					for(int i=0;i!=paths.length;++i) {
+					for(int i=0;i!=slices.length;++i) {
 						if(i != 0) {
 							r = r + ",";
 						}
-						r = r + paths[i];
+						r = r + slices[i];
 					}
 					return "(" + r + ")";
 				}
 			}
 		}
 
-		public class Box extends SyntacticElement.Impl implements Type {
+		public class Box extends AbstractAtom implements Type {
 			protected final Type element;
 
 			public Box(Type element, Attribute... attributes) {
@@ -886,16 +983,91 @@ public class Syntax {
 		}
 	}
 
+	public static class Slice extends SyntacticElement.Impl implements Comparable<Slice> {
+		private final String name;
+		private final Path path;
+
+		public Slice(String name, Path path, Attribute... attributes) {
+			super(attributes);
+			this.name = name;
+			this.path = path;
+		}
+
+		public String name() {
+			return name;
+		}
+
+		public Path path() {
+			return path;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if(o instanceof Slice) {
+				Slice s = (Slice) o;
+				return name.equals(s.name) && path.equals(s.path);
+			}
+			return false;
+		}
+
+		@Override
+		public int hashCode() {
+			return name.hashCode() ^ path.hashCode();
+		}
+
+		@Override
+		public int compareTo(Slice s) {
+			int c = name.compareTo(s.name);
+			if(c == 0) {
+				c = path.compareTo(s.path);
+			}
+			return c;
+		}
+
+		@Override
+		public String toString() {
+			return name + path;
+		}
+	}
+
 	/**
-	 * Represents a path descriptor which describes a concrete location within a
-	 * variable (which e.g. may describe the entire variable itself).
+	 * A path is a sequence of path elements which describe positions within a value
+	 * or type.
 	 *
 	 * @author David J. Pearce
 	 *
 	 */
-	public interface Path extends Comparable<Path> {
+	public static class Path extends SyntacticElement.Impl implements Comparable<Path> {
 		/**
-		 * Determine whether two paths conflict. That is, rerepresent potentially
+		 * A constant representing the empty path.
+		 */
+		public final static Path EMPTY = new Path();
+
+		/**
+		 * The sequence of elements making up this path
+		 */
+		private final Element[] elements;
+
+		public Path(Attribute... attributes) {
+			this(new Element[0],attributes);
+		}
+
+		public Path(Element[] elements, Attribute... attributes) {
+			super(attributes);
+			this.elements = elements;
+		}
+
+		/**
+		 * Identifiers how many elements in this path.
+		 *
+		 * @return
+		 */
+		public int size() {
+			return elements.length;
+		}
+
+		/**
+		 * Determine whether two paths conflict. That is, represent potentially
 		 * overlapping locations. For example, variables <code>x</code> and
 		 * <code>y</code> do not conflict. Likewise, tuple accesses <code>x.0</code> and
 		 * <code>x.1</code> don't conflict. However, <code>x</code> conflicts with
@@ -904,7 +1076,56 @@ public class Syntax {
 		 * @param p
 		 * @return
 		 */
-		public boolean conflicts(Path p);
+		public boolean conflicts(Path p) {
+			throw new IllegalArgumentException("GOT HERE");
+		}
+
+		public Path append(Path p) {
+			throw new IllegalArgumentException("implement me");
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if(o instanceof Path) {
+				Path p = (Path) o;
+				return Arrays.deepEquals(elements, p.elements);
+			}
+			return false;
+		}
+
+		@Override
+		public int hashCode() {
+			return Arrays.hashCode(elements);
+		}
+
+		@Override
+		public int compareTo(Path p) {
+			if (elements.length < p.elements.length) {
+				return -1;
+			} else if (elements.length > p.elements.length) {
+				return 1;
+			}
+			for (int i = 0; i != elements.length; ++i) {
+				int c = elements[i].compareTo(p.elements[i]);
+				if (c != 0) {
+					return c;
+				}
+			}
+			return 0;
+		}
+
+		@Override
+		public String toString() {
+			String p = "";
+			for(int i=0;i!=elements.length;++i) {
+				p += "." + elements[i];
+			}
+			return p;
+		}
+
+		public interface Element extends Comparable<Element> {
+
+		}
 	}
 
 	/**

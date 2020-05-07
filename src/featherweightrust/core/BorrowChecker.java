@@ -136,25 +136,25 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		if (T0 instanceof Type.Borrow && ((Type.Borrow) T0).isMutable()) {
 			// T-BorrowAssign
 			Type.Borrow b = (Type.Borrow) T0;
-			Slice[] ys = b.paths();
+			Slice[] ys = b.slices();
 			// Prepare new environment
 			R3 = R2;
 			// Consider all targets
-			for(int i=0;i!=ys.length;++i) {
-				Path y = ys[i];
+			for (int i = 0; i != ys.length; ++i) {
+				Slice y = ys[i];
 				// (2) Extract y's type
-				Cell Cy = R2.get(y.getBase().name());
+				Cell Cy = R2.get(y.name());
 				check(Cy != null, UNDECLARED_VARIABLE, b);
 				Type Ty = Cy.type();
 				Lifetime m = Cy.lifetime();
 				// Extract type of borrowed location
-				Type T2 = Ty.extract
+				Type T2 = Ty.read(y.path());
 				// (4) Check lifetimes
-				check(T1.within(this,R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
+				check(T1.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 				// (5) Check compatibility
 				check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 				// Weak update for environment
-				R3 = R3.put(y, , m);
+				R3 = R3.put(y.name(), Cy.write(y.path(), T1.join(T2)));
 			}
 		} else if (T0 instanceof Type.Box) {
 			Lifetime m = Cx.lifetime();
@@ -231,7 +231,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		} else if (Cx.type() instanceof Type.Borrow) {
 			Type.Borrow Cx_type = (Type.Borrow) Cx.type();
 			// T-BorrowDeref
-			Type T = join(R.read(Cx_type.paths()));
+			Type T = R.typeOf(Cx_type.slices());
 			//
 			check(T.copyable(), VARIABLE_NOT_COPY, t);
 			//
@@ -288,22 +288,24 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Term.Borrow t) {
-		Path p = t.operand();
-		Cell Cx = R.read(p);
+		Slice s = t.operand();
+		Cell Cx = R.get(s.name());
 		// Check variable is declared
+		// FIXME: doesn't ensure borrowed variable has appropriate structure.
 		check(Cx != null, UNDECLARED_VARIABLE, t);
 		// Check variable not moved
+		// FIXME: this is broken.
 		check(!Cx.moved(), VARIABLE_MOVED, t);
 		//
 		if (t.isMutable()) {
 			// T-MutBorrow
-			check(!borrowed(R, p), VARIABLE_BORROWED, t.operand());
+			check(!borrowed(R, s), VARIABLE_BORROWED, t.operand());
 		} else {
 			// T-ImmBorrow
-			check(!mutBorrowed(R, p), VARIABLE_MUTABLY_BORROWED, t.operand());
+			check(!mutBorrowed(R, s), VARIABLE_MUTABLY_BORROWED, t.operand());
 		}
 		//
-		return new Pair<>(R, new Type.Borrow(t.isMutable(), p));
+		return new Pair<>(R, new Type.Borrow(t.isMutable(), s));
 	}
 
 	/**
@@ -346,15 +348,19 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param var
 	 * @return
 	 */
-	public boolean borrowed(Environment env, Path path) {
+	public boolean borrowed(Environment env, Slice slice) {
 		// Look through all types to whether for matching borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (type.borrowed(path, false)) {
+			if (type.borrowed(slice, false)) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	public boolean borrowed(Environment env, Term.Variable var) {
+		return borrowed(env, new Slice(var.name(), Path.EMPTY));
 	}
 
 	/**
@@ -365,15 +371,19 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param var
 	 * @return
 	 */
-	public boolean mutBorrowed(Environment env, Path path) {
+	public boolean mutBorrowed(Environment env, Slice slice) {
 		// Look through all types to whether for matching (mutable) borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (type.borrowed(path, true)) {
+			if (type.borrowed(slice, true)) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	public boolean mutBorrowed(Environment env, Term.Variable var) {
+		return mutBorrowed(env, new Slice(var.name(), Path.EMPTY));
 	}
 
 	/**
@@ -391,20 +401,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			}
 		}
 		return env;
-	}
-
-	/**
-	 * Join the types associated with a given (non-empty) set of cells.
-	 *
-	 * @param cells
-	 * @return
-	 */
-	public Type join(Cell[] cells) {
-		Type t = cells[0].type();
-		for (int i = 1; i != cells.length; ++i) {
-			t = t.join(cells[i].type());
-		}
-		return t;
 	}
 
 	/**
@@ -450,26 +446,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 
 		/**
-		 * Extract cell associated with given path.
-		 * @param p
-		 * @return
-		 */
-		public Cell read(Path p) {
-			// Extract enclosing cell
-			Cell c = get(p.getBase().name());
-		}
-
-		/**
-		 * Extract cell(s) associated with a given set of path(s).
-		 *
-		 * @param name
-		 * @return
-		 */
-		public Cell[] read(Path... paths) {
-
-		}
-
-		/**
 		 * Get the cell associated with a given path
 		 *
 		 * @param name
@@ -480,15 +456,52 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 
 		/**
-		 * Update the type associated with a given variable name
+		 * Get the type that a given slice corresponds to. This might be the type of a
+		 * given cell, or some port of it.
+		 * 
+		 * @param slice
+		 * @return
+		 */
+		public Type typeOf(Slice slice) {
+			Cell c = mapping.get(slice.name());
+			return c.type().read(slice.path());
+		}
+		
+		/**
+		 * Determine a representative type for a sequence of one or more slices.
+		 * 
+		 * @param slices
+		 * @return
+		 */
+		public Type typeOf(Slice... slices) {
+			Type type = typeOf(slices[0]);
+			for (int i = 1; i != slices.length; ++i) {
+				type = type.join(typeOf(slices[i]));
+			}
+			return type;
+		}
+		
+		/**
+		 * Update the cell associated with a given variable name
 		 *
 		 * @param name
 		 * @param type
 		 * @return
 		 */
 		public Environment put(String name, Type type, Lifetime lifetime) {
+			return put(name, new Cell(type, lifetime, true));
+		}
+
+		/**
+		 * Update the cell associated with a given variable name
+		 *
+		 * @param name
+		 * @param type
+		 * @return
+		 */
+		public Environment put(String name, Cell cell) {
 			Environment nenv = new Environment(mapping);
-			nenv.mapping.put(name, new Cell(type, lifetime, true));
+			nenv.mapping.put(name, cell);
 			return nenv;
 		}
 
@@ -573,6 +586,12 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 		public Lifetime lifetime() {
 			return lifetime;
+		}
+
+		public Cell write(Path path, Type t) {
+			t = type.write(path, t);
+			// FIXME: valid is wrong
+			return new Cell(t, lifetime, valid);
 		}
 
 		@Override

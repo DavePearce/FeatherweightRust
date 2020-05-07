@@ -456,16 +456,11 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public interface Atom extends Value {
-
-		}
-
-		public class Unit extends AbstractTerm implements Atom {
-
-			public Unit(Attribute... attributes) {
-				super(TERM_unit,attributes);
+		public class Atom extends AbstractTerm implements Value {
+			public Atom(int opcode, Attribute... attributes) {
+				super(opcode, attributes);
 			}
-
+			
 			@Override
 			public Value read(Path path) {
 				if(path.size() != 0) {
@@ -476,7 +471,17 @@ public class Syntax {
 
 			@Override
 			public Value write(Path path, Value value) {
-				throw new IllegalArgumentException();
+				if(path.size() != 0) {
+					throw new IllegalArgumentException("invalid path");
+				}
+				return this;
+			}
+		}
+
+		public class Unit extends Atom {
+
+			public Unit(Attribute... attributes) {
+				super(TERM_unit,attributes);
 			}
 
 			@Override
@@ -495,7 +500,7 @@ public class Syntax {
 			}
 		}
 
-		public class Integer extends AbstractTerm implements Atom {
+		public class Integer extends Atom {
 			private final int value;
 
 			public Integer(int value, Attribute... attributes) {
@@ -505,19 +510,6 @@ public class Syntax {
 
 			public int value() {
 				return value;
-			}
-
-			@Override
-			public Value read(Path path) {
-				if(path.size() != 0) {
-					throw new IllegalArgumentException("invalid path");
-				}
-				return this;
-			}
-
-			@Override
-			public Value write(Path path, Value value) {
-				throw new IllegalArgumentException();
 			}
 
 			@Override
@@ -544,7 +536,7 @@ public class Syntax {
 			}
 		}
 
-		public class Location extends AbstractTerm implements Atom {
+		public class Location extends Atom {
 			private final int address;
 			private final Path path;
 
@@ -556,19 +548,6 @@ public class Syntax {
 				super(TERM_location, attributes);
 				this.address = address;
 				this.path = path;
-			}
-
-			@Override
-			public Value read(Path path) {
-				if(path.size() != 0) {
-					throw new IllegalArgumentException("invalid path");
-				}
-				return this;
-			}
-
-			@Override
-			public Value write(Path path, Value value) {
-				throw new IllegalArgumentException();
 			}
 
 			/**
@@ -665,7 +644,7 @@ public class Syntax {
 		 *            any borrows.
 		 * @return
 		 */
-		public boolean borrowed(Path path, boolean mut);
+		public boolean borrowed(Slice slice, boolean mut);
 
 		/**
 		 * Extract the (sub)type to which a given path corresponds.
@@ -699,7 +678,7 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(Path path, boolean mut) {
+			public boolean borrowed(Slice slice, boolean mut) {
 				return false;
 			}
 
@@ -806,11 +785,11 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(Path path, boolean mut) {
+			public boolean borrowed(Slice slice, boolean mut) {
 				if (!mut || isMutable()) {
 					for (int i = 0; i != items.length; ++i) {
 						// FIXME: this is broken!
-						if (items[i].conflicts(path)) {
+						if (items[i].conflicts(slice)) {
 							return true;
 						}
 					}
@@ -834,10 +813,10 @@ public class Syntax {
 					Type.Borrow b2 = (Type.Borrow) t2;
 					// NOTE: follow holds because all members of a single borrow must be compatible
 					// by construction.
-					Cell c1 = R1.get(items[0]);
-					Cell c2 = R2.get(b2.paths()[0]);
+					Type ti = R1.typeOf(items[0]);
+					Type tj = R2.typeOf(b2.slices()[0]);
 					//
-					return mut == b2.isMutable() && c1.type().compatible(R1, c2.type(), R2);
+					return mut == b2.isMutable() && ti.compatible(R1, tj, R2);
 				} else {
 					return false;
 				}
@@ -848,8 +827,8 @@ public class Syntax {
 				boolean r = true;
 				for (int i = 0; i != items.length; ++i) {
 					Slice ith = items[i];
-					checker.check(R.get(ith) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
-					Cell C = R.get(ith);
+					checker.check(R.get(ith.name()) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
+					Cell C = R.get(ith.name());
 					r &= C.lifetime().contains(l);
 				}
 				return r;
@@ -871,7 +850,7 @@ public class Syntax {
 				throw new IllegalArgumentException("invalid join");
 			}
 
-			public Slice[] paths() {
+			public Slice[] slices() {
 				return items;
 			}
 
@@ -928,8 +907,8 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(Path path, boolean mut) {
-				return element.borrowed(path,mut);
+			public boolean borrowed(Slice slice, boolean mut) {
+				return element.borrowed(slice, mut);
 			}
 
 			@Override
@@ -1001,6 +980,10 @@ public class Syntax {
 			return path;
 		}
 
+		public boolean conflicts(Slice s) {
+			return name.equals(s.name) && path.conflicts(s.path); 
+		}
+		
 		@Override
 		public boolean equals(Object o) {
 			if(o instanceof Slice) {

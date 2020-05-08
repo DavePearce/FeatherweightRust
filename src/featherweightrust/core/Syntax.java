@@ -597,12 +597,20 @@ public class Syntax {
 
 	public interface Type {
 		/**
-		 * Join two types together.
+		 * Join two types together from different execution paths.
 		 *
 		 * @param type
 		 * @return
 		 */
-		public Type join(Type type);
+		public Type union(Type type);
+
+		/**
+		 * Join two types together on the same execution path.
+		 *
+		 * @param type
+		 * @return
+		 */
+		public Type intersect(Type type);
 
 		/**
 		 * Check whether this type can safely live within a given lifetime. That is, the
@@ -617,8 +625,18 @@ public class Syntax {
 		public boolean within(BorrowChecker self, Environment R, Lifetime l);
 
 		/**
-		 * Check whether a type exhibits copy or move semantics. In some cases, this may
-		 * depend on element types contained within.
+		 * Check whether a can be moved or not. Most types can be moved (e.g. both
+		 * primitive integers and mutable references) can be moved; however, types with
+		 * certain effects (e.g. shadow effect) cannot.
+		 *
+		 * @param t
+		 * @return
+		 */
+		public boolean moveable();
+
+		/**
+		 * Check whether this type can be copied or not. Some types (e.g. primitive
+		 * integers) can be copied whilst others (e.g. mutable references) cannot.
 		 *
 		 * @param t
 		 * @return
@@ -649,6 +667,13 @@ public class Syntax {
 		public boolean borrowed(String name, Path path, boolean mut);
 
 		/**
+		 * Apply a move effect to this type, producing a "shadow type"
+		 *
+		 * @return
+		 */
+		public Type move();
+
+		/**
 		 * Extract the (sub)type to which a given path corresponds.
 		 *
 		 * @param index Position in path being read
@@ -671,7 +696,25 @@ public class Syntax {
 
 		public static Type Void = new Void();
 
-		public static abstract class AbstractAtom extends SyntacticElement.Impl implements Type {
+		public static abstract class AbstractType extends SyntacticElement.Impl implements Type {
+			public AbstractType(Attribute... attributes) {
+				super(attributes);
+			}
+
+			@Override
+			public Type move() {
+				// FIXME: need to decide what effect!
+				return new Shadow(this);
+			}
+
+			@Override
+			public boolean moveable() {
+				// Default is for a type to be moveable.
+				return true;
+			}
+		}
+
+		public static abstract class AbstractAtom extends AbstractType {
 			public AbstractAtom(Attribute... attributes) {
 				super(attributes);
 			}
@@ -692,11 +735,24 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
-				if(equals(t)) {
+			public Type union(Type t) {
+				if(t instanceof Shadow) {
+					return t.union(this);
+				} else if(equals(t)) {
 					return this;
 				} else {
-					throw new IllegalArgumentException("invalid join");
+					throw new IllegalArgumentException("invalid union");
+				}
+			}
+
+			@Override
+			public Type intersect(Type t) {
+				if(t instanceof Shadow) {
+					return t.intersect(this);
+				} else if(equals(t)) {
+					return this;
+				} else {
+					throw new IllegalArgumentException("invalid intersect");
 				}
 			}
 
@@ -719,13 +775,16 @@ public class Syntax {
 			}
 		}
 
-		public class Void extends AbstractAtom implements Type {
+		public static class Void extends AbstractAtom {
 			public Void(Attribute... attributes) {
 				super(attributes);
 			}
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				return t2 instanceof Type.Void;
 			}
 
@@ -745,13 +804,16 @@ public class Syntax {
 			}
 		}
 
-		public class Int extends AbstractAtom implements Type {
+		public static class Int extends AbstractAtom {
 			public Int(Attribute... attributes) {
 				super(attributes);
 			}
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				return t2 instanceof Type.Int;
 			}
 
@@ -769,7 +831,7 @@ public class Syntax {
 			public String toString() { return "int"; }
 		}
 
-		public class Borrow extends AbstractAtom implements Type {
+		public static class Borrow extends AbstractAtom {
 			private final boolean mut;
 			private final Slice[] items;
 
@@ -814,6 +876,9 @@ public class Syntax {
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				if (t2 instanceof Type.Borrow) {
 					Type.Borrow b2 = (Type.Borrow) t2;
 					// NOTE: follow holds because all members of a single borrow must be compatible
@@ -840,8 +905,10 @@ public class Syntax {
 			}
 
 			@Override
-			public Type.Borrow join(Type t) {
-				if(t instanceof Borrow) {
+			public Type union(Type t) {
+				if(t instanceof Shadow) {
+					return t.union(this);
+				} else if(t instanceof Borrow) {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
@@ -852,7 +919,26 @@ public class Syntax {
 						return new Type.Borrow(mut, ps);
 					}
 				}
-				throw new IllegalArgumentException("invalid join");
+				throw new IllegalArgumentException("invalid union");
+			}
+
+
+			@Override
+			public Type intersect(Type t) {
+				if(t instanceof Shadow) {
+					return t.intersect(this);
+				} else if(t instanceof Borrow) {
+					Type.Borrow b = (Type.Borrow) t;
+					if(mut == b.mut) {
+						// Append both sets of names together
+						Slice[] ps = ArrayUtils.append(items, b.items);
+						// Remove any duplicates and ensure result is sorted
+						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
+						// Done
+						return new Type.Borrow(mut, ps);
+					}
+				}
+				throw new IllegalArgumentException("invalid intersect");
 			}
 
 			public Slice[] slices() {
@@ -898,7 +984,7 @@ public class Syntax {
 			}
 		}
 
-		public class Box extends AbstractAtom implements Type {
+		public static class Box extends AbstractAtom {
 			protected final Type element;
 
 			public Box(Type element, Attribute... attributes) {
@@ -924,6 +1010,9 @@ public class Syntax {
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				if (t2 instanceof Type.Box) {
 					Type.Box b2 = (Type.Box) t2;
 					return element.compatible(R1, b2.element, R2);
@@ -937,10 +1026,12 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
-				if (t instanceof Type.Box) {
+			public Type union(Type t) {
+				if(t instanceof Shadow) {
+					return t.union(this);
+				} else if (t instanceof Type.Box) {
 					Type.Box b = (Type.Box) t;
-					return new Type.Box(element.join(t));
+					return new Type.Box(element.union(b.element));
 				}
 				throw new IllegalArgumentException("invalid join");
 			}
@@ -962,7 +1053,119 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return "[]" + element;
+				return "\u2610" + element;
+			}
+		}
+
+		/**
+		 * Represents an effect applied to a given type. For example, the <i>shadow
+		 * effect</i> represents a type which has been moved (and hence cannot be used
+		 * further) but for which we wish to retain its "shape".
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public static class Shadow extends AbstractType {
+			private final Type type;
+
+			public Shadow(Type type, Attribute... attributes) {
+				super(attributes);
+				if(type instanceof Shadow) {
+					throw new IllegalArgumentException("should be impossible");
+				}
+				this.type = type;
+			}
+
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public Type move() {
+				throw new IllegalArgumentException("cannot move effect");
+			}
+
+			@Override
+			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
+				// Should never be able to assign an effected type
+				throw new IllegalArgumentException("deadcode reached");
+			}
+
+			@Override
+			public boolean borrowed(String name, Path path, boolean mut) {
+				// NOTE: shadow types do not correspond with actual values and, instead, are
+				// used purely to retain knowledge of the "structure".
+				return false;
+			}
+
+			@Override
+			public boolean moveable() {
+				return false;
+			}
+
+			@Override
+			public boolean copyable() {
+				return false;
+			}
+
+			@Override
+			public Type union(Type t) {
+				// Strip effect for joining
+				t = (t instanceof Shadow) ? ((Type.Shadow) t).type : t;
+				//
+				return new Type.Shadow(type.union(t));
+			}
+
+
+			@Override
+			public Type intersect(Type t) {
+				return t;
+			}
+
+			@Override
+			public Type read(int index, Path p) {
+				if(index == p.size()) {
+					return this;
+				} else {
+					// NOTE: don't decrement index here because this effect is somehow "transparent"
+					throw new IllegalArgumentException("cannot read from moved location");
+				}
+			}
+
+			@Override
+			public Type write(int index, Path p, Type t) {
+				if(index == p.size()) {
+					return t;
+				} else {
+					throw new IllegalArgumentException("cannot write to moved location");
+				}
+			}
+
+			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
+				return type.compatible(R1, t2, R2);
+			}
+
+			@Override
+			public boolean equals(Object o) {
+				if(o instanceof Shadow) {
+					Shadow e = (Shadow) o;
+					return type.equals(e.type);
+				}
+				return false;
+			}
+
+			@Override
+			public int hashCode() {
+				return type.hashCode();
+			}
+
+			@Override
+			public String toString() {
+				return "/" + type + "/";
 			}
 		}
 	}

@@ -199,7 +199,7 @@ public class ControlFlow {
 			// Check return types are compatible
 			self.check(T2.compatible(R2, T3, R3), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Join environment and types from both branches
-			return new Pair<>(join(R2, R3, t), T2.join(T3));
+			return new Pair<>(join(R2, R3, t), T2.union(T3));
 		}
 
 		private Environment join(Environment lhs, Environment rhs, SyntacticElement e) {
@@ -216,22 +216,11 @@ public class ControlFlow {
 				// Check types are compatible
 				self.check(Cl.type().compatible(lhs, Cr.type(), rhs), BorrowChecker.INCOMPATIBLE_TYPE, e);
 				// Determine joined type
-				Type type = Cl.type().join(Cr.type());
-				// Determine joined effect
-				boolean moved = join(Cl.moved(),Cr.moved());
+				Type type = Cl.type().union(Cr.type());
 				// Done
 				lhs = lhs.put(key, type, Cl.lifetime());
-				//
-				if(moved) {
-					// FIXME: this is ugly
-					lhs = lhs.move(key);
-				}
 			}
 			return lhs;
-		}
-
-		private boolean join(boolean lhs, boolean rhs) {
-			return lhs || rhs;
 		}
 	}
 }

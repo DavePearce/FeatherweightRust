@@ -185,6 +185,28 @@ public class CoreRuntimeTests {
 		check(input, OneTwoThree);
 	}
 
+	@Test
+	public void test_62() throws IOException {
+		// FIXME: support moving out of boxes
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *z }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_63() throws IOException {
+		// NOTE: this test case appears to be something of an issue. It conflicts with
+		// core invalid #59 and the issue of strong updaes for boxes.
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *y = z; let mut w = *y; *w }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_64() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; *z }";
+		check(input, OneTwoThree);
+	}
+
 	// ==============================================================
 	// Helpers
 	// ==============================================================

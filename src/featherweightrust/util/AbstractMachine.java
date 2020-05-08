@@ -298,11 +298,10 @@ public abstract class AbstractMachine {
 			int address = location.getAddress();
 			Path path = location.getPath();
 			Cell cell = cells[address];
-			System.out.println("CELL: " + cell);
 			// Read value at location
 			Value contents = cell.contents();
 			// Extract path (if applicable)
-			return (path == Path.EMPTY) ? contents : contents.read(path);
+			return (path == Path.EMPTY) ? contents : contents.read(0, path);
 		}
 
 		/**
@@ -317,8 +316,10 @@ public abstract class AbstractMachine {
 			Path path = location.getPath();
 			// Read cell from given base address
 			Cell cell = cells[address];
+			// Read value at location
+			Value n = cell.contents();
 			// Construct new value
-			Value nv = (path == Path.EMPTY) ? value: cell.value.write(path, value);
+			Value nv = (path == Path.EMPTY) ? value : n.write(0, path, value);
 			// Copy cells ahead of write
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
 			// Perform actual write

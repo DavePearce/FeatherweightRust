@@ -1,13 +1,19 @@
 package featherweightrust.extensions;
 
 import featherweightrust.core.BorrowChecker;
+import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
+import static featherweightrust.core.BorrowChecker.mutBorrowed;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Path.Element;
+import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.extensions.ControlFlow.Syntax;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement.Attribute;
@@ -43,40 +49,40 @@ public class Pairs {
 		 *
 		 */
 		public static class TermPair<T extends Term> extends AbstractTerm {
-			private final T first;
-			private final T second;
+			protected final T one;
+			protected final T two;
 
 			private TermPair(T first, T second, Attribute... attributes) {
 				super(TERM_pair, attributes);
-				this.first = first;
-				this.second = second;
+				this.one = first;
+				this.two = second;
 			}
 
 			public T first() {
-				return first;
+				return one;
 			}
 
 			public T second() {
-				return second;
+				return two;
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if(o instanceof TermPair) {
 					TermPair<?> p = (TermPair<?>) o;
-					return first.equals(p.first()) && second.equals(p.second());
+					return one.equals(p.first()) && two.equals(p.second());
 				}
 				return false;
 			}
 
 			@Override
 			public int hashCode() {
-				return first.hashCode() ^ second.hashCode();
+				return one.hashCode() ^ two.hashCode();
 			}
 
 			@Override
 			public String toString() {
-				return "(" + first + "," + second + ")";
+				return "(" + one + "," + two + ")";
 			}
 		}
 
@@ -90,24 +96,62 @@ public class Pairs {
 			private ValuePair(Value first, Value second, Attribute... attributes) {
 				super(first,second,attributes);
 			}
+
+			@Override
+			public Value read(int index, Path path) {
+				// Corresponding element should be an index
+				if(index == path.size()) {
+					return this;
+				} else {
+					// Extract element index being read
+					int i = ((Index) path.get(index)).index;
+					// Select element
+					Value t = (i == 0) ? one : two;
+					// Read element
+					return t.read(index + 1, path);
+				}
+			}
+
+			@Override
+			public Value write(int index, Path path, Value value) {
+				if (index == path.size()) {
+					return value;
+				} else {
+					// Extract element index being written
+					int i = ((Index) path.get(index)).index;
+					// Select element
+					if (i == 0) {
+						Value n1 = (one == null) ? value : one.write(index + 1, path, value);
+						return new ValuePair(n1, two);
+					} else {
+						Value n2 = (two == null) ? value : two.write(index + 1, path, value);
+						return new ValuePair(one, n2);
+					}
+				}
+			}
 		}
 
 		public static class PairAccess extends AbstractTerm {
 			private final Term source;
-			private final int index;
+			private final Path path;
 
-			public PairAccess(Term source, int index, Attribute... attributes) {
+			public PairAccess(Term source, Path path, Attribute... attributes) {
 				super(TERM_pairaccess,attributes);
 				this.source = source;
-				this.index = index;
+				this.path = path;
 			}
 
 			public Term source() {
 				return source;
 			}
 
-			public int index() {
-				return index;
+			public Path path() {
+				return path;
+			}
+
+			@Override
+			public String toString() {
+				return source.toString() + path;
 			}
 		}
 
@@ -132,8 +176,41 @@ public class Pairs {
 			}
 
 			@Override
-			public boolean borrowed(String var, boolean mut) {
-				return first.borrowed(var, mut) || second.borrowed(var, mut);
+			public boolean borrowed(String name, Path path, boolean mut) {
+				return first.borrowed(name, path, mut) || second.borrowed(name, path, mut);
+			}
+
+			@Override
+			public Type read(int index, Path path) {
+				// Corresponding element should be an index
+				if(index == path.size()) {
+					return this;
+				} else {
+					// Extract element index being read
+					int i = ((Index) path.get(index)).index;
+					// Select element
+					Type t = (i == 0) ? first : second;
+					// Read element
+					return t.read(index + 1, path);
+				}
+			}
+
+			@Override
+			public Type write(int index, Path path, Type type) {
+				if (index == path.size()) {
+					return type;
+				} else {
+					// Extract element index being written
+					int i = ((Index) path.get(index)).index;
+					// Select element
+					if(i == 0) {
+						Type nfirst = first.write(index + 1, path, type);
+						return new TypePair(nfirst,second);
+					} else {
+						Type nsecond = second.write(index + 1, path, type);
+						return new TypePair(first,nsecond);
+					}
+				}
 			}
 
 			@Override
@@ -162,12 +239,58 @@ public class Pairs {
 				}
 			}
 
-			public featherweightrust.core.Syntax.Type first() {
+			public Type first() {
 				return first;
 			}
 
-			public featherweightrust.core.Syntax.Type second() {
+			public Type second() {
 				return second;
+			}
+
+			@Override
+			public String toString() {
+				return "(" + first + "," + second + ")";
+			}
+
+		}
+
+		/**
+		 * A path element appropriate for pair types. Specifically, this is an integer
+		 * index into the pair.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public static class Index implements featherweightrust.core.Syntax.Path.Element {
+			private final int index;
+
+			public Index(int index) {
+				this.index = index;
+			}
+
+			@Override
+			public int compareTo(Element e) {
+				if(e instanceof Index) {
+					Index i = (Index) e;
+					return Integer.compare(index, i.index);
+				} else {
+					throw new IllegalArgumentException("cannot compare path elements!");
+				}
+			}
+
+			@Override
+			public boolean conflicts(Element e) {
+				if(e instanceof Index) {
+					Index i = (Index) e;
+					return index == i.index;
+				} else {
+					throw new IllegalArgumentException("cannot compare path elements!");
+				}
+			}
+
+			@Override
+			public String toString() {
+				return Integer.toString(index);
 			}
 		}
 	}
@@ -207,20 +330,18 @@ public class Pairs {
 
 		private Pair<State, Term> apply(State S, Lifetime l, Syntax.PairAccess t) {
 			Term src = t.source;
+			//
 			if (src instanceof Value) {
 				Syntax.ValuePair v = (Syntax.ValuePair) src;
-				switch (t.index) {
-				case 0:
-					return new Pair<>(S, v.first());
-				case 1:
-					return new Pair<>(S, v.second());
-				default:
-					throw new RuntimeException("invalid pair access");
-				}
+				return new Pair<>(S, v.read(0, t.path));
 			} else {
-				// continue reducing operand.
-				Pair<State, Term> p = self.apply(S, l, src);
-				return new Pair<>(p.first(), new Syntax.PairAccess(p.second(), t.index));
+				Term.Variable x = (Term.Variable) src;
+				// Continue reducing operand.
+				Location lx = S.locate(x.name());
+				// Read value held by x
+				Value v = S.read(lx);
+				// Done
+				return new Pair<>(S, new Syntax.PairAccess(v, t.path));
 			}
 		}
 	}
@@ -251,28 +372,27 @@ public class Pairs {
 			return new Pair<>(R3, new Syntax.TypePair(T1,T2));
 		}
 
-		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.PairAccess _t) {
-			Term t = _t.source();
-			// Type source expression
-			Pair<Environment, Type> p = self.apply(R1, l, t);
-			Environment R2 = p.first();
-			Type T1 = p.second();
+		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.PairAccess t) {
+			// Descructure term
+			Term.Variable x = (Term.Variable) t.source();
+			Path p = t.path();
 			//
-			if (T1 instanceof Syntax.TypePair) {
-				Syntax.TypePair T2 = (Syntax.TypePair) T1;
-				switch (_t.index) {
-				case 0:
-					return new Pair<>(R2, T2.first());
-				case 1:
-					return new Pair<>(R2, T2.second());
-				default:
-					self.syntaxError(INVALID_PAIR_ACCESS, _t);
-					return null;
-				}
-			} else {
-				self.syntaxError(EXPECTED_PAIR, t);
-				return null;
-			}
+			Cell Cx = R1.get(x.name());
+			// Check variable is declared
+			self.check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, t);
+			// Check variable not moved
+			// FIXME: doesn't make sense
+			self.check(!Cx.moved(), BorrowChecker.VARIABLE_MOVED, t);
+			// Extract type from current environment
+			Type T = Cx.type();
+			// Check source is pair
+			self.check(T instanceof Syntax.TypePair, EXPECTED_PAIR, t);
+			// Check slice not mutably borrowed
+			self.check(!mutBorrowed(R1, x.name(), p), BorrowChecker.VARIABLE_BORROWED, t);
+			// FIXME: structure not guaranteed?
+			Type T2 = T.read(0, p);
+			// Done
+			return new Pair<>(R1, T2);
 		}
 	}
 

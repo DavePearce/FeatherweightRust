@@ -148,7 +148,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				Type Ty = Cy.type();
 				Lifetime m = Cy.lifetime();
 				// Extract type of borrowed location
-				Type T2 = Ty.read(y.path());
+				Type T2 = Ty.read(0, y.path());
 				// (4) Check lifetimes
 				check(T1.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 				// (5) Check compatibility
@@ -348,19 +348,23 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param var
 	 * @return
 	 */
-	public boolean borrowed(Environment env, Slice slice) {
+	public static boolean borrowed(Environment env, String name, Path path) {
 		// Look through all types to whether for matching borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (type.borrowed(slice, false)) {
+			if (type.borrowed(name, path, false)) {
 				return true;
 			}
 		}
 		return false;
 	}
 
-	public boolean borrowed(Environment env, Term.Variable var) {
-		return borrowed(env, new Slice(var.name(), Path.EMPTY));
+	public static boolean borrowed(Environment env, Term.Variable x) {
+		return borrowed(env,x.name(),Path.EMPTY);
+	}
+
+	public static boolean borrowed(Environment env, Slice s) {
+		return borrowed(env,s.name(),s.path());
 	}
 
 	/**
@@ -371,19 +375,23 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param var
 	 * @return
 	 */
-	public boolean mutBorrowed(Environment env, Slice slice) {
+	public static boolean mutBorrowed(Environment env, String name, Path path) {
 		// Look through all types to whether for matching (mutable) borrow
 		for (Cell cell : env.cells()) {
 			Type type = cell.type();
-			if (type.borrowed(slice, true)) {
+			if (type.borrowed(name, path, true)) {
 				return true;
 			}
 		}
 		return false;
 	}
 
-	public boolean mutBorrowed(Environment env, Term.Variable var) {
-		return mutBorrowed(env, new Slice(var.name(), Path.EMPTY));
+	public static boolean mutBorrowed(Environment env, Term.Variable x) {
+		return mutBorrowed(env, x.name(), Path.EMPTY);
+	}
+
+	public static boolean mutBorrowed(Environment env, Slice s) {
+		return mutBorrowed(env, s.name(), s.path());
 	}
 
 	/**
@@ -458,18 +466,18 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		/**
 		 * Get the type that a given slice corresponds to. This might be the type of a
 		 * given cell, or some port of it.
-		 * 
+		 *
 		 * @param slice
 		 * @return
 		 */
 		public Type typeOf(Slice slice) {
 			Cell c = mapping.get(slice.name());
-			return c.type().read(slice.path());
+			return c.type().read(0, slice.path());
 		}
-		
+
 		/**
 		 * Determine a representative type for a sequence of one or more slices.
-		 * 
+		 *
 		 * @param slices
 		 * @return
 		 */
@@ -480,7 +488,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			}
 			return type;
 		}
-		
+
 		/**
 		 * Update the cell associated with a given variable name
 		 *
@@ -589,7 +597,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 
 		public Cell write(Path path, Type t) {
-			t = type.write(path, t);
+			t = type.write(0, path, t);
 			// FIXME: valid is wrong
 			return new Cell(t, lifetime, valid);
 		}

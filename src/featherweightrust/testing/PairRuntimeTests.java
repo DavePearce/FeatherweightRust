@@ -110,14 +110,14 @@ public class PairRuntimeTests {
 
 	@Test
 	public void test_16() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.0; x }";
+		String input = "{ let mut x = (1,2); let mut y = &x.0; !x }";
 		check(input,PairOneTwo);
 	}
 
 
 	@Test
 	public void test_17() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; x }";
+		String input = "{ let mut x = (1,2); let mut y = &x.1; !x }";
 		check(input,PairOneTwo);
 	}
 
@@ -125,14 +125,14 @@ public class PairRuntimeTests {
 	@Test
 	public void test_18() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.0; x.1 }";
-		check(input,PairOneTwo);
+		check(input,Two);
 	}
 
 
 	@Test
 	public void test_19() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.1; x.0 }";
-		check(input,PairOneTwo);
+		check(input,One);
 	}
 
 
@@ -147,6 +147,32 @@ public class PairRuntimeTests {
 		String input = "{ let mut x = (1,0); { let mut y = &mut x.1; *y = 2; } x}";
 		check(input,PairOneTwo);
 	}
+
+	@Test
+	public void test_22() throws IOException {
+		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.1; *y }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_23() throws IOException {
+		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.1; *z }";
+		check(input,Two);
+	}
+
+
+	@Test
+	public void test_24() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *w }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_25() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *z }";
+		check(input,One);
+	}
+
 
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility

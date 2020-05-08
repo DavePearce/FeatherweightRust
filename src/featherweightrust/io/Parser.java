@@ -112,16 +112,6 @@ public class Parser {
 		} else {
 			t = parseAssignmentOrVariable(context, lifetime);
 		}
-		// Check for postfix operators
-		if(index < tokens.size() && tokens.get(index) instanceof Dot) {
-			Token tok = tokens.get(index);
-			match(".");
-			int val = match(Int.class, "an integer").value;
-			if(val != 0 && val != 1) {
-				syntaxError("invalid tuple accessor", tok);
-			}
-			t = new Pairs.Syntax.PairAccess(t, val, sourceAttr(start, index - 1));
-		}
 		// Done
 		return t;
 	}
@@ -165,6 +155,11 @@ public class Parser {
 			match(";");
 			int end = index;
 			return new Term.Assignment((Term.Variable) lhs, rhs, sourceAttr(start, end - 1));
+		} else if (index < tokens.size() && tokens.get(index) instanceof Dot) {
+			// Parse path
+			Path path = parsePath(context, lifetime);
+			// Done
+			return new Pairs.Syntax.PairAccess(lhs, path, sourceAttr(start, index - 1));
 		} else {
 			return lhs;
 		}
@@ -288,10 +283,32 @@ public class Parser {
 
 	public Slice parseSlice(Context context, Lifetime lifetime) {
 		int start = index;
+		// Parse variable identifier
 		Identifier var = matchIdentifier();
-		return new Slice(var.text, Path.EMPTY, sourceAttr(start, index - 1));
+		// Path path
+		Path path = parsePath(context, lifetime);
+		// Done
+		return new Slice(var.text, path, sourceAttr(start, index - 1));
 	}
-	
+
+	public Path parsePath(Context context, Lifetime lifetime) {
+		// Parse access path (if applicable)
+		if (index < tokens.size() && tokens.get(index) instanceof Dot) {
+			int start = index;
+			ArrayList<Path.Element> elements = new ArrayList<>();
+			do {
+				match(".");
+				int index = match(Int.class, "an integer").value;
+				elements.add(new Pairs.Syntax.Index(index));
+			} while (index < tokens.size() && tokens.get(index) instanceof Dot);
+			Path.Element[] es = elements.toArray(new Path.Element[elements.size()]);
+			return new Path(es, sourceAttr(start, index - 1));
+		} else {
+			// Common case
+			return Path.EMPTY;
+		}
+	}
+
 	private void checkNotEof() {
 		if (index >= tokens.size()) {
 			throw new SyntaxError("unexpected end-of-file", sourcefile, index - 1, index - 1);

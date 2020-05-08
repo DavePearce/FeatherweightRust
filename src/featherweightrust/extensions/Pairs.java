@@ -13,6 +13,7 @@ import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.extensions.ControlFlow.Syntax;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement.Attribute;
@@ -146,6 +147,11 @@ public class Pairs {
 
 			public Path path() {
 				return path;
+			}
+
+			@Override
+			public String toString() {
+				return source.toString() + path;
 			}
 		}
 
@@ -324,13 +330,18 @@ public class Pairs {
 
 		private Pair<State, Term> apply(State S, Lifetime l, Syntax.PairAccess t) {
 			Term src = t.source;
+			//
 			if (src instanceof Value) {
 				Syntax.ValuePair v = (Syntax.ValuePair) src;
 				return new Pair<>(S, v.read(0, t.path));
 			} else {
-				// continue reducing operand.
-				Pair<State, Term> p = self.apply(S, l, src);
-				return new Pair<>(p.first(), new Syntax.PairAccess(p.second(), t.path));
+				Term.Variable x = (Term.Variable) src;
+				// Continue reducing operand.
+				Location lx = S.locate(x.name());
+				// Read value held by x
+				Value v = S.read(lx);
+				// Done
+				return new Pair<>(S, new Syntax.PairAccess(v, t.path));
 			}
 		}
 	}

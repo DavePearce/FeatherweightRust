@@ -148,6 +148,32 @@ public class PairRuntimeTests {
 		check(input,PairOneTwo);
 	}
 
+	@Test
+	public void test_22() throws IOException {
+		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.1; *y }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_23() throws IOException {
+		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.1; *z }";
+		check(input,Two);
+	}
+
+
+	@Test
+	public void test_24() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *w }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_25() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *z }";
+		check(input,One);
+	}
+
+
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
 		CoreRuntimeTests.check(input, output, PAIRS_SEMANTICS, new BorrowChecker(input, PAIRS_TYPING));

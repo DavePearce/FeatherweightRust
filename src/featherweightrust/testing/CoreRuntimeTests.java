@@ -185,6 +185,12 @@ public class CoreRuntimeTests {
 		check(input, OneTwoThree);
 	}
 
+	@Test
+	public void test_62() throws IOException {
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *z }";
+		check(input, OneTwoThree);
+	}
+
 	// ==============================================================
 	// Helpers
 	// ==============================================================

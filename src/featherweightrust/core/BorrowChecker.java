@@ -576,16 +576,10 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public static class Cell {
 		public final Type type;
 		public final Lifetime lifetime;
-		public final boolean valid;
 
-		public Cell(Type f, Lifetime s, boolean valid) {
+		public Cell(Type f, Lifetime s) {
 			this.type = f;
 			this.lifetime = s;
-			this.valid = valid;
-		}
-
-		public boolean moved() {
-			return !valid;
 		}
 
 		public Type type() {
@@ -598,15 +592,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 		public Cell write(Path path, Type t) {
 			t = type.write(0, path, t);
-			// FIXME: valid is wrong
-			return new Cell(t, lifetime, valid);
+			return new Cell(t, lifetime);
 		}
 
 		@Override
 		public boolean equals(Object o) {
 			if (o instanceof Cell) {
 				Cell c = (Cell) o;
-				return type.equals(c.type) && lifetime.equals(c.lifetime) && valid == c.valid;
+				return type.equals(c.type) && lifetime.equals(c.lifetime);
 			}
 			return false;
 		}
@@ -618,8 +611,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 		@Override
 		public String toString() {
-			String v = valid ? "" : "!";
-			return "<" + v + type + ", " + lifetime + ">";
+			return "<" + type + ", " + lifetime + ">";
 		}
 	}
 

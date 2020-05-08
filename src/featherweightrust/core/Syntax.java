@@ -719,7 +719,7 @@ public class Syntax {
 			}
 		}
 
-		public class Void extends AbstractAtom implements Type {
+		public static class Void extends AbstractAtom implements Type {
 			public Void(Attribute... attributes) {
 				super(attributes);
 			}
@@ -745,7 +745,7 @@ public class Syntax {
 			}
 		}
 
-		public class Int extends AbstractAtom implements Type {
+		public static class Int extends AbstractAtom implements Type {
 			public Int(Attribute... attributes) {
 				super(attributes);
 			}
@@ -769,7 +769,7 @@ public class Syntax {
 			public String toString() { return "int"; }
 		}
 
-		public class Borrow extends AbstractAtom implements Type {
+		public static class Borrow extends AbstractAtom implements Type {
 			private final boolean mut;
 			private final Slice[] items;
 
@@ -898,7 +898,7 @@ public class Syntax {
 			}
 		}
 
-		public class Box extends AbstractAtom implements Type {
+		public static class Box extends AbstractAtom implements Type {
 			protected final Type element;
 
 			public Box(Type element, Attribute... attributes) {
@@ -963,6 +963,64 @@ public class Syntax {
 			@Override
 			public String toString() {
 				return "[]" + element;
+			}
+		}
+
+		public static class Effect extends SyntacticElement.Impl implements Type {
+			private static final int MOVED = 0;
+			private static final int REBORROWED = 1;
+			//
+			private final int effect;
+			private final Type type;
+
+			public Effect(int effect, Type type, Attribute... attributes) {
+				super(attributes);
+				if(type instanceof Effect) {
+					throw new IllegalArgumentException("should be impossible");
+				}
+				this.effect = effect;
+				this.type = type;
+			}
+
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
+				// Should never be able to assign an effected type
+				throw new IllegalArgumentException("deadcode reached");
+			}
+
+			@Override
+			public boolean borrowed(String name, Path path, boolean mut) {
+				// FIXME: unsure what the right semantic is?
+				throw new IllegalArgumentException("deadcode reached");
+			}
+
+			@Override
+			public boolean copyable() {
+				return type.copyable();
+			}
+
+			@Override
+			public Type join(Type t) {
+				throw new IllegalArgumentException("deadcode reached");
+			}
+
+			@Override
+			public Type read(int index, Path p) {
+				throw new IllegalArgumentException("deadcode reached");
+			}
+
+			@Override
+			public Type write(int index, Path p, Type t) {
+				throw new IllegalArgumentException("deadcode reached");
+			}
+
+			@Override
+			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				throw new IllegalArgumentException("deadcode reached");
 			}
 		}
 	}

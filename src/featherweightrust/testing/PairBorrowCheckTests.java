@@ -126,6 +126,14 @@ public class PairBorrowCheckTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_28() throws IOException {
+		// This tests a "copymove" operation.
+		String input = "{ let mut x = 1; let mut y = (&mut x,2); let mut z = y; y.1 }";
+		checkInvalid(input);
+	}
+
+
 	public static void checkInvalid(String input) throws IOException {
 		CoreBorrowCheckTests.checkInvalid(input, new BorrowChecker(input, PAIR_TYPING));
 	}

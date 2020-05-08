@@ -432,20 +432,22 @@ public class Syntax {
 		 * <code>(1,2)</code>, reading the value at path <code>1</code> gives
 		 * <code>2</code>.
 		 *
+		 * @param index Position in path being read
 		 * @param path
 		 * @return
 		 */
-		public Value read(Path path);
+		public Value read(int index, Path path);
 
 		/**
 		 * Write a give value into this value at a given path, returned the updated
 		 * value.
 		 *
+		 * @param index Position in path being written
 		 * @param path
 		 * @param value
 		 * @return
 		 */
-		public Value write(Path path, Value value);
+		public Value write(int index, Path path, Value value);
 
 		/**
 		 * An indivisible value which can be stored in exactly one location. For
@@ -462,16 +464,16 @@ public class Syntax {
 			}
 
 			@Override
-			public Value read(Path path) {
-				if(path.size() != 0) {
+			public Value read(int index, Path path) {
+				if(index != path.size()) {
 					throw new IllegalArgumentException("invalid path");
 				}
 				return this;
 			}
 
 			@Override
-			public Value write(Path path, Value value) {
-				if(path.size() != 0) {
+			public Value write(int index, Path path, Value value) {
+				if(index != path.size()) {
 					throw new IllegalArgumentException("invalid path");
 				}
 				return value;
@@ -636,7 +638,7 @@ public class Syntax {
 		public boolean compatible(Environment R1, Type t2, Environment R2);
 
 		/**
-		 * Determine whether this type indicates that a given path is already borrowed
+		 * Determine whether this type indicates that a given slice is already borrowed
 		 * (either mutably or not).
 		 *
 		 * @param path The path being checked (which e.g. could be a variable)
@@ -644,26 +646,28 @@ public class Syntax {
 		 *            any borrows.
 		 * @return
 		 */
-		public boolean borrowed(Slice slice, boolean mut);
+		public boolean borrowed(String name, Path path, boolean mut);
 
 		/**
 		 * Extract the (sub)type to which a given path corresponds.
 		 *
+		 * @param index Position in path being read
 		 * @param path
 		 * @return
 		 */
-		public Type read(Path path);
+		public Type read(int index, Path path);
 
 		/**
 		 * Write a given type to a given path within this type. For example, writing
 		 * <code>int</code> into <code>(bool,bool)</code> at position <code>1</code>
 		 * gives <code>(int,bool)</code>.
 		 *
+		 * @param index Position in path being written
 		 * @param path
 		 * @param type
 		 * @return
 		 */
-		public Type write(Path path, Type type);
+		public Type write(int index, Path path, Type type);
 
 		public static Type Void = new Void();
 
@@ -678,7 +682,7 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(Slice slice, boolean mut) {
+			public boolean borrowed(String name, Path path, boolean mut) {
 				return false;
 			}
 
@@ -697,8 +701,8 @@ public class Syntax {
 			}
 
 			@Override
-			public Type read(Path p) {
-				if(p.size() == 0) {
+			public Type read(int index, Path p) {
+				if(index == p.size()) {
 					return this;
 				} else {
 					throw new IllegalArgumentException("invalid position");
@@ -706,8 +710,8 @@ public class Syntax {
 			}
 
 			@Override
-			public Type write(Path p, Type t) {
-				if (p.size() == 0) {
+			public Type write(int index, Path p, Type t) {
+				if (index == p.size()) {
 					return t;
 				} else {
 					throw new IllegalArgumentException("invalid position");
@@ -785,11 +789,12 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(Slice slice, boolean mut) {
+			public boolean borrowed(String name, Path path, boolean mut) {
 				if (!mut || isMutable()) {
 					for (int i = 0; i != items.length; ++i) {
+						Slice ith = items[i];
 						// FIXME: this is broken!
-						if (items[i].conflicts(slice)) {
+						if (ith.name().equals(name) && ith.path().conflicts(path)) {
 							return true;
 						}
 					}
@@ -907,8 +912,8 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(Slice slice, boolean mut) {
-				return element.borrowed(slice, mut);
+			public boolean borrowed(String name, Path path, boolean mut) {
+				return element.borrowed(name, path, mut);
 			}
 
 			@Override
@@ -980,10 +985,6 @@ public class Syntax {
 			return path;
 		}
 
-		public boolean conflicts(Slice s) {
-			return name.equals(s.name) && path.conflicts(s.path);
-		}
-
 		@Override
 		public boolean equals(Object o) {
 			if(o instanceof Slice) {
@@ -1053,6 +1054,16 @@ public class Syntax {
 		 */
 		public int size() {
 			return elements.length;
+		}
+
+		/**
+		 * Read a particular element from this path.
+		 *
+		 * @param index
+		 * @return
+		 */
+		public Path.Element get(int index) {
+			return elements[index];
 		}
 
 		/**

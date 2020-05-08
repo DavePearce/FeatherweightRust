@@ -110,14 +110,14 @@ public class PairRuntimeTests {
 
 	@Test
 	public void test_16() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.0; x }";
+		String input = "{ let mut x = (1,2); let mut y = &x.0; !x }";
 		check(input,PairOneTwo);
 	}
 
 
 	@Test
 	public void test_17() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; x }";
+		String input = "{ let mut x = (1,2); let mut y = &x.1; !x }";
 		check(input,PairOneTwo);
 	}
 
@@ -125,14 +125,14 @@ public class PairRuntimeTests {
 	@Test
 	public void test_18() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.0; x.1 }";
-		check(input,PairOneTwo);
+		check(input,Two);
 	}
 
 
 	@Test
 	public void test_19() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.1; x.0 }";
-		check(input,PairOneTwo);
+		check(input,One);
 	}
 
 

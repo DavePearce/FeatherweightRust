@@ -214,24 +214,16 @@ public class ControlFlow {
 				// Sanity check lifetimes match
 				self.check(Cl.lifetime().equals(Cr.lifetime()), INVALID_ENVIRONMENT_CELLS, e);
 				// Check types are compatible
+
+				System.out.println("GOT: " + key + " : " + Cl.type() + " ~~ " + Cr.type());
+
 				self.check(Cl.type().compatible(lhs, Cr.type(), rhs), BorrowChecker.INCOMPATIBLE_TYPE, e);
 				// Determine joined type
 				Type type = Cl.type().join(Cr.type());
-				// Determine joined effect
-				boolean moved = join(Cl.moved(),Cr.moved());
 				// Done
 				lhs = lhs.put(key, type, Cl.lifetime());
-				//
-				if(moved) {
-					// FIXME: this is ugly
-					lhs = lhs.move(key);
-				}
 			}
 			return lhs;
-		}
-
-		private boolean join(boolean lhs, boolean rhs) {
-			return lhs || rhs;
 		}
 	}
 }

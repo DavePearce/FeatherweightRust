@@ -617,8 +617,18 @@ public class Syntax {
 		public boolean within(BorrowChecker self, Environment R, Lifetime l);
 
 		/**
-		 * Check whether a type exhibits copy or move semantics. In some cases, this may
-		 * depend on element types contained within.
+		 * Check whether a can be moved or not. Most types can be moved (e.g. both
+		 * primitive integers and mutable references) can be moved; however, types with
+		 * certain effects (e.g. shadow effect) cannot.
+		 *
+		 * @param t
+		 * @return
+		 */
+		public boolean moveable();
+
+		/**
+		 * Check whether this type can be copied or not. Some types (e.g. primitive
+		 * integers) can be copied whilst others (e.g. mutable references) cannot.
 		 *
 		 * @param t
 		 * @return
@@ -649,6 +659,13 @@ public class Syntax {
 		public boolean borrowed(String name, Path path, boolean mut);
 
 		/**
+		 * Apply a move effect to this type, producing a "shadow type"
+		 *
+		 * @return
+		 */
+		public Type move();
+
+		/**
 		 * Extract the (sub)type to which a given path corresponds.
 		 *
 		 * @param index Position in path being read
@@ -671,7 +688,25 @@ public class Syntax {
 
 		public static Type Void = new Void();
 
-		public static abstract class AbstractAtom extends SyntacticElement.Impl implements Type {
+		public static abstract class AbstractType extends SyntacticElement.Impl implements Type {
+			public AbstractType(Attribute... attributes) {
+				super(attributes);
+			}
+
+			@Override
+			public Type move() {
+				// FIXME: need to decide what effect!
+				return new Shadow(this);
+			}
+
+			@Override
+			public boolean moveable() {
+				// Default is for a type to be moveable.
+				return true;
+			}
+		}
+
+		public static abstract class AbstractAtom extends AbstractType {
 			public AbstractAtom(Attribute... attributes) {
 				super(attributes);
 			}
@@ -693,7 +728,9 @@ public class Syntax {
 
 			@Override
 			public Type join(Type t) {
-				if(equals(t)) {
+				if(t instanceof Shadow) {
+					return t.join(this);
+				} else if(equals(t)) {
 					return this;
 				} else {
 					throw new IllegalArgumentException("invalid join");
@@ -719,13 +756,16 @@ public class Syntax {
 			}
 		}
 
-		public static class Void extends AbstractAtom implements Type {
+		public static class Void extends AbstractAtom {
 			public Void(Attribute... attributes) {
 				super(attributes);
 			}
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				return t2 instanceof Type.Void;
 			}
 
@@ -745,13 +785,16 @@ public class Syntax {
 			}
 		}
 
-		public static class Int extends AbstractAtom implements Type {
+		public static class Int extends AbstractAtom {
 			public Int(Attribute... attributes) {
 				super(attributes);
 			}
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				return t2 instanceof Type.Int;
 			}
 
@@ -769,7 +812,7 @@ public class Syntax {
 			public String toString() { return "int"; }
 		}
 
-		public static class Borrow extends AbstractAtom implements Type {
+		public static class Borrow extends AbstractAtom {
 			private final boolean mut;
 			private final Slice[] items;
 
@@ -814,6 +857,9 @@ public class Syntax {
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				if (t2 instanceof Type.Borrow) {
 					Type.Borrow b2 = (Type.Borrow) t2;
 					// NOTE: follow holds because all members of a single borrow must be compatible
@@ -840,8 +886,10 @@ public class Syntax {
 			}
 
 			@Override
-			public Type.Borrow join(Type t) {
-				if(t instanceof Borrow) {
+			public Type join(Type t) {
+				if(t instanceof Shadow) {
+					return t.join(this);
+				} else if(t instanceof Borrow) {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
@@ -898,7 +946,7 @@ public class Syntax {
 			}
 		}
 
-		public static class Box extends AbstractAtom implements Type {
+		public static class Box extends AbstractAtom {
 			protected final Type element;
 
 			public Box(Type element, Attribute... attributes) {
@@ -924,6 +972,9 @@ public class Syntax {
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
 				if (t2 instanceof Type.Box) {
 					Type.Box b2 = (Type.Box) t2;
 					return element.compatible(R1, b2.element, R2);
@@ -938,9 +989,11 @@ public class Syntax {
 
 			@Override
 			public Type join(Type t) {
-				if (t instanceof Type.Box) {
+				if(t instanceof Shadow) {
+					return t.join(this);
+				} else if (t instanceof Type.Box) {
 					Type.Box b = (Type.Box) t;
-					return new Type.Box(element.join(t));
+					return new Type.Box(element.join(b.element));
 				}
 				throw new IllegalArgumentException("invalid join");
 			}
@@ -962,28 +1015,36 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return "[]" + element;
+				return "\u2610" + element;
 			}
 		}
 
-		public static class Effect extends SyntacticElement.Impl implements Type {
-			private static final int MOVED = 0;
-			private static final int REBORROWED = 1;
-			//
-			private final int effect;
+		/**
+		 * Represents an effect applied to a given type. For example, the <i>shadow
+		 * effect</i> represents a type which has been moved (and hence cannot be used
+		 * further) but for which we wish to retain its "shape".
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public static class Shadow extends AbstractType {
 			private final Type type;
 
-			public Effect(int effect, Type type, Attribute... attributes) {
+			public Shadow(Type type, Attribute... attributes) {
 				super(attributes);
-				if(type instanceof Effect) {
+				if(type instanceof Shadow) {
 					throw new IllegalArgumentException("should be impossible");
 				}
-				this.effect = effect;
 				this.type = type;
 			}
 
 			public Type getType() {
 				return type;
+			}
+
+			@Override
+			public Type move() {
+				throw new IllegalArgumentException("cannot move effect");
 			}
 
 			@Override
@@ -994,33 +1055,65 @@ public class Syntax {
 
 			@Override
 			public boolean borrowed(String name, Path path, boolean mut) {
-				// FIXME: unsure what the right semantic is?
-				throw new IllegalArgumentException("deadcode reached");
+				// NOTE: shadow types do not correspond with actual values and, instead, are
+				// used purely to retain knowledge of the "structure".
+				return false;
+			}
+
+			@Override
+			public boolean moveable() {
+				return false;
 			}
 
 			@Override
 			public boolean copyable() {
-				return type.copyable();
+				return false;
 			}
 
 			@Override
 			public Type join(Type t) {
-				throw new IllegalArgumentException("deadcode reached");
+				// Strip effect for joining
+				t = (t instanceof Shadow) ? ((Type.Shadow) t).type : t;
+				//
+				return new Type.Shadow(type.join(t));
 			}
 
 			@Override
 			public Type read(int index, Path p) {
-				throw new IllegalArgumentException("deadcode reached");
+				throw new IllegalArgumentException("cannot read from moved location");
 			}
 
 			@Override
 			public Type write(int index, Path p, Type t) {
-				throw new IllegalArgumentException("deadcode reached");
+				// FIXME: I believe you could do this safely if p is empty.
+				throw new IllegalArgumentException("cannot read from write to moved location?");
 			}
 
 			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				throw new IllegalArgumentException("deadcode reached");
+				// Effects ignored for compatibility
+				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
+				//
+				return type.compatible(R1, t2, R2);
+			}
+
+			@Override
+			public boolean equals(Object o) {
+				if(o instanceof Shadow) {
+					Shadow e = (Shadow) o;
+					return type.equals(e.type);
+				}
+				return false;
+			}
+
+			@Override
+			public int hashCode() {
+				return type.hashCode();
+			}
+
+			@Override
+			public String toString() {
+				return "/" + type + "/";
 			}
 		}
 	}

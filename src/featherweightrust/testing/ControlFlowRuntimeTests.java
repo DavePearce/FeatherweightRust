@@ -60,6 +60,12 @@ public class ControlFlowRuntimeTests {
 		check(input, Unit);
 	}
 
+	@Test
+	public void test_17() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { let mut p = y; } else { let mut q = y; } *y = 1; }";
+		check(input, Unit);
+	}
+
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
 		CoreRuntimeTests.check(input, output, CFLOW_SEMANTICS, new BorrowChecker(input, CFLOW_TYPING));

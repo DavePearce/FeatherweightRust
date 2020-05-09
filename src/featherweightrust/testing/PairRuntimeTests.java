@@ -173,6 +173,17 @@ public class PairRuntimeTests {
 		check(input,One);
 	}
 
+	@Test
+	public void test_26() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = y.0; y.1 }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_27() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (2, &mut x); let mut z = y.1; y.0 }";
+		check(input,Two);
+	}
 
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility

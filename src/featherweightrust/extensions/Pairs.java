@@ -161,11 +161,12 @@ public class Pairs {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class TypePair implements Type {
+		public static class TypePair extends Type.AbstractType {
 			private final Type first;
 			private final Type second;
 
-			public TypePair(Type first, Type second) {
+			public TypePair(Type first, Type second, Attribute...attributes) {
+				super(attributes);
 				this.first = first;
 				this.second = second;
 			}
@@ -251,7 +252,6 @@ public class Pairs {
 			public String toString() {
 				return "(" + first + "," + second + ")";
 			}
-
 		}
 
 		/**
@@ -380,17 +380,16 @@ public class Pairs {
 			Cell Cx = R1.get(x.name());
 			// Check variable is declared
 			self.check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, t);
+			// Destructure cell
+			Type Tx = Cx.type();
 			// Check variable not moved
-			// FIXME: doesn't make sense
-			self.check(!Cx.moved(), BorrowChecker.VARIABLE_MOVED, t);
-			// Extract type from current environment
-			Type T = Cx.type();
+			self.check(Tx.moveable(), BorrowChecker.VARIABLE_MOVED, t);
 			// Check source is pair
-			self.check(T instanceof Syntax.TypePair, EXPECTED_PAIR, t);
+			self.check(Tx instanceof Syntax.TypePair, EXPECTED_PAIR, t);
 			// Check slice not mutably borrowed
 			self.check(!mutBorrowed(R1, x.name(), p), BorrowChecker.VARIABLE_BORROWED, t);
 			// FIXME: structure not guaranteed?
-			Type T2 = T.read(0, p);
+			Type T2 = Tx.read(0, p);
 			// Done
 			return new Pair<>(R1, T2);
 		}

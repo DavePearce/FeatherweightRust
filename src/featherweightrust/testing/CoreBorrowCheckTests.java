@@ -233,6 +233,20 @@ public class CoreBorrowCheckTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_60() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_61() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; *y }";
+		checkInvalid(input);
+	}
+
 	public static void checkInvalid(String input) throws IOException {
 		checkInvalid(input, new BorrowChecker(input));
 	}

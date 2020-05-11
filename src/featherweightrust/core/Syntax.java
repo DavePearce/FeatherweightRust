@@ -597,12 +597,20 @@ public class Syntax {
 
 	public interface Type {
 		/**
-		 * Join two types together.
+		 * Join two types together from different execution paths.
 		 *
 		 * @param type
 		 * @return
 		 */
-		public Type join(Type type);
+		public Type union(Type type);
+
+		/**
+		 * Join two types together on the same execution path.
+		 *
+		 * @param type
+		 * @return
+		 */
+		public Type intersect(Type type);
 
 		/**
 		 * Check whether this type can safely live within a given lifetime. That is, the
@@ -727,13 +735,24 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
+			public Type union(Type t) {
 				if(t instanceof Shadow) {
-					return t.join(this);
+					return t.union(this);
 				} else if(equals(t)) {
 					return this;
 				} else {
-					throw new IllegalArgumentException("invalid join");
+					throw new IllegalArgumentException("invalid union");
+				}
+			}
+
+			@Override
+			public Type intersect(Type t) {
+				if(t instanceof Shadow) {
+					return t.intersect(this);
+				} else if(equals(t)) {
+					return this;
+				} else {
+					throw new IllegalArgumentException("invalid intersect");
 				}
 			}
 
@@ -886,9 +905,9 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
+			public Type union(Type t) {
 				if(t instanceof Shadow) {
-					return t.join(this);
+					return t.union(this);
 				} else if(t instanceof Borrow) {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
@@ -900,7 +919,26 @@ public class Syntax {
 						return new Type.Borrow(mut, ps);
 					}
 				}
-				throw new IllegalArgumentException("invalid join");
+				throw new IllegalArgumentException("invalid union");
+			}
+
+
+			@Override
+			public Type intersect(Type t) {
+				if(t instanceof Shadow) {
+					return t.intersect(this);
+				} else if(t instanceof Borrow) {
+					Type.Borrow b = (Type.Borrow) t;
+					if(mut == b.mut) {
+						// Append both sets of names together
+						Slice[] ps = ArrayUtils.append(items, b.items);
+						// Remove any duplicates and ensure result is sorted
+						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
+						// Done
+						return new Type.Borrow(mut, ps);
+					}
+				}
+				throw new IllegalArgumentException("invalid intersect");
 			}
 
 			public Slice[] slices() {
@@ -988,12 +1026,12 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
+			public Type union(Type t) {
 				if(t instanceof Shadow) {
-					return t.join(this);
+					return t.union(this);
 				} else if (t instanceof Type.Box) {
 					Type.Box b = (Type.Box) t;
-					return new Type.Box(element.join(b.element));
+					return new Type.Box(element.union(b.element));
 				}
 				throw new IllegalArgumentException("invalid join");
 			}
@@ -1071,22 +1109,36 @@ public class Syntax {
 			}
 
 			@Override
-			public Type join(Type t) {
+			public Type union(Type t) {
 				// Strip effect for joining
 				t = (t instanceof Shadow) ? ((Type.Shadow) t).type : t;
 				//
-				return new Type.Shadow(type.join(t));
+				return new Type.Shadow(type.union(t));
+			}
+
+
+			@Override
+			public Type intersect(Type t) {
+				return t;
 			}
 
 			@Override
 			public Type read(int index, Path p) {
-				throw new IllegalArgumentException("cannot read from moved location");
+				if(index == p.size()) {
+					return this;
+				} else {
+					// NOTE: don't decrement index here because this effect is somehow "transparent"
+					throw new IllegalArgumentException("cannot read from moved location");
+				}
 			}
 
 			@Override
 			public Type write(int index, Path p, Type t) {
-				// FIXME: I believe you could do this safely if p is empty.
-				throw new IllegalArgumentException("cannot read from write to moved location?");
+				if(index == p.size()) {
+					return t;
+				} else {
+					throw new IllegalArgumentException("cannot write to moved location");
+				}
 			}
 
 			@Override

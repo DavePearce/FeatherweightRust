@@ -230,11 +230,26 @@ public class Pairs {
 			}
 
 			@Override
-			public Type join(Type type) {
-				if (type instanceof TypePair) {
+			public Type union(Type type) {
+				if(type instanceof Type.Shadow) {
+					return type.union(this);
+				} else if (type instanceof TypePair) {
 					TypePair p = (TypePair) type;
 					// Recursively join components.
-					return new TypePair(first.join(p.first()), second.join(p.second()));
+					return new TypePair(first.union(p.first()), second.union(p.second()));
+				} else {
+					throw new IllegalArgumentException("invalid join");
+				}
+			}
+
+			@Override
+			public Type intersect(Type type) {
+				if (type instanceof Type.Shadow) {
+					return type.intersect(this);
+				} else if (type instanceof TypePair) {
+					TypePair p = (TypePair) type;
+					// Recursively join components.
+					return new TypePair(first.intersect(p.first()), second.intersect(p.second()));
 				} else {
 					throw new IllegalArgumentException("invalid join");
 				}
@@ -386,12 +401,16 @@ public class Pairs {
 			self.check(Tx.moveable(), BorrowChecker.VARIABLE_MOVED, t);
 			// Check source is pair
 			self.check(Tx instanceof Syntax.TypePair, EXPECTED_PAIR, t);
+			// Check path not moved
+			Type T2 = Tx.read(0, p);
+			self.check(T2.moveable(), BorrowChecker.VARIABLE_MOVED, t);
 			// Check slice not mutably borrowed
 			self.check(!mutBorrowed(R1, x.name(), p), BorrowChecker.VARIABLE_BORROWED, t);
-			// FIXME: structure not guaranteed?
-			Type T2 = Tx.read(0, p);
+			// FIXME: problem with syntax for copy versus move
+			// Implement destructive update
+			Environment R2 = R1.put(x.name(), Tx.write(0, p, T2.move()), Cx.lifetime());
 			// Done
-			return new Pair<>(R1, T2);
+			return new Pair<>(R2, T2);
 		}
 	}
 

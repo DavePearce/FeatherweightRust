@@ -185,6 +185,13 @@ public class PairRuntimeTests {
 		check(input,Two);
 	}
 
+	@Test
+	public void test_28() throws IOException {
+		// Need to implement copy syntax for accesses here
+		String input = "{ let mut x = (1, 2); let mut y = !x.0; x.0 }";
+		check(input,Two);
+	}
+
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
 		CoreRuntimeTests.check(input, output, PAIRS_SEMANTICS, new BorrowChecker(input, PAIRS_TYPING));

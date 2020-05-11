@@ -157,11 +157,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				// (5) Check compatibility
 				check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 				// Weak update for environment
-				R3 = R3.put(y.name(), Cy.write(y.path(), T1.join(T2)));
+				R3 = R3.put(y.name(), Cy.write(y.path(), T1.union(T2)));
 			}
 		} else if (T0 instanceof Type.Box) {
-			System.out.println("GOT: " + Tx + " *= " + T1);
-
 			Lifetime m = Cx.lifetime();
 			// T-BoxAssign
 			Type T2 = ((Type.Box) T0).element();
@@ -170,10 +168,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// (4) Check compatibility
 			check(T2.compatible(R2, T1, R2), INCOMPATIBLE_TYPE, t.rightOperand());
 			// Update environment
-			System.out.println("MERGING: " + T1 + " + " + T2);
-			//
 
-			R3 = R2.put(x.name(), new Type.Box(T1.join(T2)), m);
+			// FIXME: is this the right thing to do?
+			R3 = R2.put(x.name(), new Type.Box(T1.intersect(T2)), m);
 		} else {
 			syntaxError("expected mutable reference", t.leftOperand());
 			return null; // deadcode
@@ -503,7 +500,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		public Type typeOf(Slice... slices) {
 			Type type = typeOf(slices[0]);
 			for (int i = 1; i != slices.length; ++i) {
-				type = type.join(typeOf(slices[i]));
+				type = type.union(typeOf(slices[i]));
 			}
 			return type;
 		}

@@ -100,8 +100,6 @@ public class Parser {
 			t = parseBracketedExpression(context,lifetime);
 		} else if (lookahead instanceof Ampersand) {
 			t = parseBorrow(context, lifetime);
-		} else if (lookahead instanceof Shreak) {
-			t = parseCopy(context, lifetime);
 		} else if (lookahead instanceof Int) {
 			int val = match(Int.class, "an integer").value;
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
@@ -262,16 +260,6 @@ public class Parser {
 		Term.Variable operand = parseVariable(context, lifetime);
 		//
 		return new Term.Dereference(operand, sourceAttr(start, index - 1));
-	}
-
-	public Term.Copy parseCopy(Context context, Lifetime lifetime) {
-		int start = index;
-		match("!");
-		Term operand = parseTerm(context, lifetime);
-		if (!(operand instanceof Term.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Term.Copy((Term.Variable) operand, sourceAttr(start, index - 1));
 	}
 
 	public Term.Box parseBox(Context context, Lifetime lifetime) {

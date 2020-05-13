@@ -258,7 +258,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	/**
-	 * T-MoveVar
+	 * T-MoveVar and T-CopyVar
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Variable x) {
@@ -267,35 +267,22 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(Cx != null, UNDECLARED_VARIABLE, x);
 		// Destructure cell
 		Type Tx = Cx.type();
-		// Check variable not moved
+		// Check variable not already moved
 		check(Tx.moveable(), VARIABLE_MOVED, x);
-		// Check variable not borrowed
-		check(!borrowed(R1, x), VARIABLE_BORROWED, x);
-		// Implement destructive update
-		Environment R2 = R1.put(x.name(),Tx.move(),Cx.lifetime());
-		//
-		return new Pair<>(R2, Tx);
-	}
-
-	/**
-	 * T-CopyVar
-	 */
-	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Copy t) {
-		Term.Variable x = t.operand();
-		Cell Cx = R.get(x.name());
-		// Check variable is declared
-		check(Cx != null, UNDECLARED_VARIABLE, t);
-		// Destructure cell
-		Type Tx = Cx.type();
-		// Check variable not moved
-		check(Tx.moveable(), VARIABLE_MOVED, t);
-		// Check variable has copy type
-		check(Tx.copyable(), VARIABLE_NOT_COPY, t.operand());
-		// Check variable not mutably borrowed
-		check(!mutBorrowed(R, x), VARIABLE_BORROWED, t);
-		//
-		return new Pair<>(R, Tx);
+		// Decide if copy or move
+		if(Tx.copyable()) {
+			// Check variable not mutably borrowed
+			check(!mutBorrowed(R1, x), VARIABLE_BORROWED, x);
+			// Done
+			return new Pair<>(R1, Tx);
+		} else {
+			// Check variable not borrowed
+			check(!borrowed(R1, x), VARIABLE_BORROWED, x);
+			// Apply destructive update
+			Environment R2 = R1.put(x.name(),Tx.move(),Cx.lifetime());
+			// Done
+			return new Pair<>(R2, Tx);
+		}
 	}
 
 	/**

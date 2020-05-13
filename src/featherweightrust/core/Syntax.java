@@ -38,8 +38,7 @@ public class Syntax {
 	public final static int TERM_assignment = 1;
 	public final static int TERM_indirectassignment = 2;
 	public final static int TERM_block = 3;
-	public final static int TERM_move = 4;
-	public final static int TERM_copy = 5;
+	public final static int TERM_var = 4;
 	public final static int TERM_borrow = 6;
 	public final static int TERM_dereference = 7;
 	public final static int TERM_box = 8;
@@ -274,7 +273,7 @@ public class Syntax {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
-				super(TERM_move, attributes);
+				super(TERM_var, attributes);
 				this.name = name;
 			}
 
@@ -396,28 +395,6 @@ public class Syntax {
 
 			public static Domain.Big<Box> toBigDomain(Domain.Big<Term> subdomain) {
 				return Domains.Adaptor(subdomain, Box::construct);
-			}
-		}
-
-		public class Copy extends AbstractTerm implements Term {
-			private final Term.Variable operand;
-
-			public Copy(Term.Variable operand, Attribute... attributes) {
-				super(TERM_copy, attributes);
-				this.operand = operand;
-			}
-
-			public Term.Variable operand() {
-				return operand;
-			}
-
-			@Override
-			public String toString() {
-				return "!" + operand.toString();
-			}
-
-			public static Domain.Big<Copy> toBigDomain(Domain.Big<Term.Variable> subdomain) {
-				return Domains.Adaptor(subdomain, (e) -> new Copy(e));
 			}
 		}
 	}
@@ -1390,16 +1367,15 @@ public class Syntax {
 
 	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> names) {
 		Domain.Big<Value.Integer> integers = Value.Integer.toBigDomain(ints);
-		Domain.Big<Term.Variable> moves = Term.Variable.toBigDomain(names);
-		Domain.Big<Term.Copy> copys = Term.Copy.toBigDomain(moves);
+		Domain.Big<Term.Variable> vars = Term.Variable.toBigDomain(names);
 		Domain.Big<Term.Borrow> borrows = Term.Borrow.toBigDomain(names);
 		Domain.Big<Term.Dereference> derefs = Term.Dereference.toBigDomain(names);
 		if (depth == 0) {
-			return Domains.Union(integers, moves, copys, borrows, derefs);
+			return Domains.Union(integers, vars, borrows, derefs);
 		} else {
 			Domain.Big<Term> subdomain = toBigDomain(depth - 1, ints, names);
 			Domain.Big<Term.Box> boxes = Term.Box.toBigDomain(subdomain);
-			return Domains.Union(integers, moves, copys, borrows, derefs, boxes);
+			return Domains.Union(integers, vars, borrows, derefs, boxes);
 		}
 	}
 

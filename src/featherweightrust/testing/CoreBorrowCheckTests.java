@@ -161,7 +161,7 @@ public class CoreBorrowCheckTests {
 	@Test
 	public void test_37() throws IOException {
 		// [E0503]: cannot use `x` because it was mutably borrowed
-		String input = "{ let mut x = 0; { let mut y = &mut x; *y = !x; } }";
+		String input = "{ let mut x = 0; { let mut y = &mut x; *y = x; } }";
 		checkInvalid(input);
 	}
 	// ==============================================================

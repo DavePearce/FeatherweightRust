@@ -143,27 +143,13 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-CopyVar.
+	 * Rule R-Var.
 	 */
-	public Pair<State, Term> reduceCopy(State S, Term.Variable x) {
+	public Pair<State, Term> reduceVariable(State S, Term.Variable x) {
 		// Determine location bound by variable
 		Location lx = S.locate(x.name());
 		// Read location from store
 		return new Pair<>(S, S.read(lx));
-	}
-
-	/**
-	 * Rule R-MoveVar.
-	 */
-	public Pair<State, Term> reduceVariable(State S1, Term.Variable x) {
-		// Determine location bound by variable
-		Location lx = S1.locate(x.name());
-		// Read value held by x
-		Value v = S1.read(lx);
-		// Render location unusable
-		State S2 = S1.write(lx, null);
-		// Read location from store
-		return new Pair<>(S2, v);
 	}
 
 	@Override
@@ -275,11 +261,6 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	@Override
 	final public Pair<State, Term> apply(State S, Lifetime l, Term.Variable e) {
 		return reduceVariable(S, e);
-	}
-
-	@Override
-	final public Pair<State, Term> apply(State S, Lifetime l, Term.Copy e) {
-		return reduceCopy(S, e.operand());
 	}
 
 	@Override

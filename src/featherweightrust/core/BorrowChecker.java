@@ -55,6 +55,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public final static String INCOMPATIBLE_TYPE = "incompatible type";
 	public final static String VARIABLE_NOT_COPY = "variable's type cannot be copied";
 	public final static String EXPECTED_REFERENCE = "expected reference type";
+	public final static String EXPECTED_MUTABLE_BORROW = "expected mutable borrow";
 	public final static String VARIABLE_BORROWED = "variable already borrowed";
 	public final static String VARIABLE_MUTABLY_BORROWED = "variable already mutably borrowed";
 
@@ -132,13 +133,10 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(Cx != null, UNDECLARED_VARIABLE, t.leftOperand());
 		// Destructure cell
 		Type Tx = Cx.type();
-		// Check variable not moved
-		check(Tx.moveable(), VARIABLE_MOVED, t.leftOperand());
-		Type T0 = Cx.type();
 		//
-		if (T0 instanceof Type.Borrow && ((Type.Borrow) T0).isMutable()) {
+		if (Tx instanceof Type.Borrow && ((Type.Borrow) Tx).isMutable()) {
 			// T-BorrowAssign
-			Type.Borrow b = (Type.Borrow) T0;
+			Type.Borrow b = (Type.Borrow) Tx;
 			Slice[] ys = b.slices();
 			// Prepare new environment
 			R3 = R2;
@@ -159,10 +157,10 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				// Weak update for environment
 				R3 = R3.put(y.name(), Cy.write(y.path(), T1.union(T2)));
 			}
-		} else if (T0 instanceof Type.Box) {
+		} else if (Tx instanceof Type.Box) {
 			Lifetime m = Cx.lifetime();
 			// T-BoxAssign
-			Type T2 = ((Type.Box) T0).element();
+			Type T2 = ((Type.Box) Tx).element();
 			// (3) Check lifetimes
 			check(T1.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, t);
 			// (4) Check compatibility
@@ -171,8 +169,12 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 			// FIXME: is this the right thing to do?
 			R3 = R2.put(x.name(), new Type.Box(T1.intersect(T2)), m);
+		} else if(Tx instanceof Type.Shadow) {
+			syntaxError(VARIABLE_MOVED, t.leftOperand());
+			return null; // deadcode
 		} else {
-			syntaxError("expected mutable reference", t.leftOperand());
+			// Must be immutable borrow.
+			syntaxError(EXPECTED_MUTABLE_BORROW, t.leftOperand());
 			return null; // deadcode
 		}
 		//
@@ -258,7 +260,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	/**
-	 * T-MoveVar
+	 * T-MoveVar and T-CopyVar
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Variable x) {
@@ -267,35 +269,22 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(Cx != null, UNDECLARED_VARIABLE, x);
 		// Destructure cell
 		Type Tx = Cx.type();
-		// Check variable not moved
+		// Check variable not already moved
 		check(Tx.moveable(), VARIABLE_MOVED, x);
-		// Check variable not borrowed
-		check(!borrowed(R1, x), VARIABLE_BORROWED, x);
-		// Implement destructive update
-		Environment R2 = R1.put(x.name(),Tx.move(),Cx.lifetime());
-		//
-		return new Pair<>(R2, Tx);
-	}
-
-	/**
-	 * T-CopyVar
-	 */
-	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Copy t) {
-		Term.Variable x = t.operand();
-		Cell Cx = R.get(x.name());
-		// Check variable is declared
-		check(Cx != null, UNDECLARED_VARIABLE, t);
-		// Destructure cell
-		Type Tx = Cx.type();
-		// Check variable not moved
-		check(Tx.moveable(), VARIABLE_MOVED, t);
-		// Check variable has copy type
-		check(Tx.copyable(), VARIABLE_NOT_COPY, t.operand());
-		// Check variable not mutably borrowed
-		check(!mutBorrowed(R, x), VARIABLE_BORROWED, t);
-		//
-		return new Pair<>(R, Tx);
+		// Decide if copy or move
+		if(Tx.copyable()) {
+			// Check variable not mutably borrowed
+			check(!mutBorrowed(R1, x), VARIABLE_BORROWED, x);
+			// Done
+			return new Pair<>(R1, Tx);
+		} else {
+			// Check variable not borrowed
+			check(!borrowed(R1, x), VARIABLE_BORROWED, x);
+			// Apply destructive update
+			Environment R2 = R1.put(x.name(),Tx.move(),Cx.lifetime());
+			// Done
+			return new Pair<>(R2, Tx);
+		}
 	}
 
 	/**
@@ -306,7 +295,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Slice s = t.operand();
 		Cell Cx = R.get(s.name());
 		// Check variable is declared
-		// FIXME: doesn't ensure borrowed variable has appropriate structure.
 		check(Cx != null, UNDECLARED_VARIABLE, t);
 		// Destructure cell
 		Type Tx = Cx.type();
@@ -538,6 +526,20 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		public Environment remove(String name) {
 			Environment nenv = new Environment(mapping);
 			nenv.mapping.remove(name);
+			return nenv;
+		}
+
+		/**
+		 * Remove a given variable mapping.
+		 *
+		 * @param name
+		 * @return
+		 */
+		public Environment remove(String... names) {
+			Environment nenv = new Environment(mapping);
+			for(int i=0;i!=names.length;++i) {
+				nenv.mapping.remove(names[i]);
+			}
 			return nenv;
 		}
 

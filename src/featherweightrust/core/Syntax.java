@@ -20,12 +20,9 @@ package featherweightrust.core;
 import java.util.Arrays;
 import java.util.List;
 
-import javax.lang.model.element.Element;
 
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
-import featherweightrust.core.Syntax.Term.Variable;
-import featherweightrust.core.Syntax.Type;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
@@ -38,8 +35,7 @@ public class Syntax {
 	public final static int TERM_assignment = 1;
 	public final static int TERM_indirectassignment = 2;
 	public final static int TERM_block = 3;
-	public final static int TERM_move = 4;
-	public final static int TERM_copy = 5;
+	public final static int TERM_var = 4;
 	public final static int TERM_borrow = 6;
 	public final static int TERM_dereference = 7;
 	public final static int TERM_box = 8;
@@ -274,7 +270,7 @@ public class Syntax {
 			private final String name;
 
 			public Variable(String name, Attribute... attributes) {
-				super(TERM_move, attributes);
+				super(TERM_var, attributes);
 				this.name = name;
 			}
 
@@ -396,28 +392,6 @@ public class Syntax {
 
 			public static Domain.Big<Box> toBigDomain(Domain.Big<Term> subdomain) {
 				return Domains.Adaptor(subdomain, Box::construct);
-			}
-		}
-
-		public class Copy extends AbstractTerm implements Term {
-			private final Term.Variable operand;
-
-			public Copy(Term.Variable operand, Attribute... attributes) {
-				super(TERM_copy, attributes);
-				this.operand = operand;
-			}
-
-			public Term.Variable operand() {
-				return operand;
-			}
-
-			@Override
-			public String toString() {
-				return "!" + operand.toString();
-			}
-
-			public static Domain.Big<Copy> toBigDomain(Domain.Big<Term.Variable> subdomain) {
-				return Domains.Adaptor(subdomain, (e) -> new Copy(e));
 			}
 		}
 	}
@@ -625,7 +599,7 @@ public class Syntax {
 		public boolean within(BorrowChecker self, Environment R, Lifetime l);
 
 		/**
-		 * Check whether a can be moved or not. Most types can be moved (e.g. both
+		 * Check whether a type can be moved or not. Most types can be moved (e.g. both
 		 * primitive integers and mutable references) can be moved; however, types with
 		 * certain effects (e.g. shadow effect) cannot.
 		 *
@@ -703,13 +677,11 @@ public class Syntax {
 
 			@Override
 			public Type move() {
-				// FIXME: need to decide what effect!
 				return new Shadow(this);
 			}
 
 			@Override
 			public boolean moveable() {
-				// Default is for a type to be moveable.
 				return true;
 			}
 		}
@@ -1009,6 +981,11 @@ public class Syntax {
 			}
 
 			@Override
+			public boolean moveable() {
+				return element.moveable();
+			}
+
+			@Override
 			public boolean compatible(Environment R1, Type t2, Environment R2) {
 				// Effects ignored for compatibility
 				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
@@ -1127,8 +1104,7 @@ public class Syntax {
 				if(index == p.size()) {
 					return this;
 				} else {
-					// NOTE: don't decrement index here because this effect is somehow "transparent"
-					throw new IllegalArgumentException("cannot read from moved location");
+					return null;
 				}
 			}
 
@@ -1390,16 +1366,15 @@ public class Syntax {
 
 	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> names) {
 		Domain.Big<Value.Integer> integers = Value.Integer.toBigDomain(ints);
-		Domain.Big<Term.Variable> moves = Term.Variable.toBigDomain(names);
-		Domain.Big<Term.Copy> copys = Term.Copy.toBigDomain(moves);
+		Domain.Big<Term.Variable> vars = Term.Variable.toBigDomain(names);
 		Domain.Big<Term.Borrow> borrows = Term.Borrow.toBigDomain(names);
 		Domain.Big<Term.Dereference> derefs = Term.Dereference.toBigDomain(names);
 		if (depth == 0) {
-			return Domains.Union(integers, moves, copys, borrows, derefs);
+			return Domains.Union(integers, vars, borrows, derefs);
 		} else {
 			Domain.Big<Term> subdomain = toBigDomain(depth - 1, ints, names);
 			Domain.Big<Term.Box> boxes = Term.Box.toBigDomain(subdomain);
-			return Domains.Union(integers, moves, copys, borrows, derefs, boxes);
+			return Domains.Union(integers, vars, borrows, derefs, boxes);
 		}
 	}
 

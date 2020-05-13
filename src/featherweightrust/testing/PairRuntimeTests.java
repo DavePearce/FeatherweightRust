@@ -7,16 +7,16 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
-import featherweightrust.extensions.Pairs;
-import featherweightrust.extensions.Pairs.Syntax;
+import featherweightrust.extensions.Tuples;
+import featherweightrust.extensions.Tuples.Syntax;
 
 import static featherweightrust.core.Syntax.Value.Unit;
 
 public class PairRuntimeTests {
 	private static Value.Integer One = new Value.Integer(1);
 	private static Value.Integer Two = new Value.Integer(2);
-	private static Value PairOneOne = (Value) Syntax.Pair(One,One);
-	private static Value PairOneTwo = (Value) Syntax.Pair(One,Two);
+	private static Value PairOneOne = new Syntax.TupleValue(One,One);
+	private static Value PairOneTwo = new Syntax.TupleValue(One,Two);
 
 	@Test
 	public void test_01() throws IOException {
@@ -110,14 +110,14 @@ public class PairRuntimeTests {
 
 	@Test
 	public void test_16() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.0; !x }";
+		String input = "{ let mut x = (1,2); let mut y = &x.0; x }";
 		check(input,PairOneTwo);
 	}
 
 
 	@Test
 	public void test_17() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; !x }";
+		String input = "{ let mut x = (1,2); let mut y = &x.1; x }";
 		check(input,PairOneTwo);
 	}
 
@@ -187,8 +187,19 @@ public class PairRuntimeTests {
 
 	@Test
 	public void test_28() throws IOException {
-		// Need to implement copy syntax for accesses here
-		String input = "{ let mut x = (1, 2); let mut y = !x.0; x.0 }";
+		String input = "{ let mut x = (1, 2); let mut y = x.0; x.0 }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_29() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = y.1; y.1 }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_30() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (2, &mut x); let mut z = y.0; y.0 }";
 		check(input,Two);
 	}
 
@@ -197,6 +208,6 @@ public class PairRuntimeTests {
 		CoreRuntimeTests.check(input, output, PAIRS_SEMANTICS, new BorrowChecker(input, PAIRS_TYPING));
 	}
 
-	public static final BorrowChecker.Extension PAIRS_TYPING = new Pairs.Typing();
-	public static final OperationalSemantics PAIRS_SEMANTICS = new OperationalSemantics(new Pairs.Semantics());
+	public static final BorrowChecker.Extension PAIRS_TYPING = new Tuples.Typing();
+	public static final OperationalSemantics PAIRS_SEMANTICS = new OperationalSemantics(new Tuples.Semantics());
 }

@@ -58,7 +58,7 @@ public class CoreRuntimeTests {
 
 	@Test
 	public void test_02() throws IOException {
-		String input = "{ let mut x = 123; let mut y = !x; y}";
+		String input = "{ let mut x = 123; let mut y = x; y}";
 		check(input, OneTwoThree);
 	}
 
@@ -76,13 +76,13 @@ public class CoreRuntimeTests {
 
 	@Test
 	public void test_05() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 123; x = 2; !y}";
+		String input = "{ let mut x = 1; let mut y = 123; x = 2; y}";
 		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_06() throws IOException {
-		String input = "{ let mut x = 1; { let mut y = 123; !y } }";
+		String input = "{ let mut x = 1; { let mut y = 123; y } }";
 		check(input, OneTwoThree);
 	}
 
@@ -119,7 +119,7 @@ public class CoreRuntimeTests {
 
 	@Test
 	public void test_21() throws IOException {
-		String input = "{ let mut y = box 123; let mut x = *y; !x }";
+		String input = "{ let mut y = box 123; let mut x = *y; x }";
 		check(input,OneTwoThree);
 	}
 

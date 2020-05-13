@@ -340,8 +340,6 @@ public abstract class AbstractMachine {
 			for(Location location : locations) {
 				internalDrop(ncells,location);
 			}
-			// Check reference invariant);
-			checkReferenceInvariant(ncells);
 			//
 			return new Store(ncells);
 		}
@@ -368,8 +366,6 @@ public abstract class AbstractMachine {
 					Cell[] ncells = Arrays.copyOf(cells, cells.length);
 					// Perform the physical drop
 					internalDrop(ncells, location);
-					// Check reference invariant
-					checkReferenceInvariant(ncells);
 					// Done
 					return new Store(ncells);
 				}
@@ -419,25 +415,6 @@ public abstract class AbstractMachine {
 			finalise(ncells, ncell);
 			// Physically drop the location
 			ncells[location.getAddress()] = null;
-		}
-
-		/**
-		 * Check the reference invariant for a given array of cells. Specifically, for
-		 * every cell which points to another cell (i.e. holds its address), that other
-		 * cell must exist (i.e. is not null).
-		 *
-		 * @param ncells
-		 */
-		private static void checkReferenceInvariant(Cell[] ncells) {
-			for (int i = 0; i != ncells.length; ++i) {
-				Cell ncell = ncells[i];
-				if(ncell != null && ncell.value instanceof Value.Location) {
-					Value.Location loc = (Location) ncell.value;
-					if(ncells[loc.getAddress()] == null) {
-						throw new IllegalArgumentException("dangling reference created: &" + i);
-					}
-				}
-			}
 		}
 
 		/**

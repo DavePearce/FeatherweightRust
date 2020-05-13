@@ -25,7 +25,7 @@ import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
-import featherweightrust.extensions.Pairs;
+import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
@@ -100,8 +100,6 @@ public class Parser {
 			t = parseBracketedExpression(context,lifetime);
 		} else if (lookahead instanceof Ampersand) {
 			t = parseBorrow(context, lifetime);
-		} else if (lookahead instanceof Shreak) {
-			t = parseCopy(context, lifetime);
 		} else if (lookahead instanceof Int) {
 			int val = match(Int.class, "an integer").value;
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
@@ -159,7 +157,7 @@ public class Parser {
 			// Parse path
 			Path path = parsePath(context, lifetime);
 			// Done
-			return new Pairs.Syntax.PairAccess(lhs, path, sourceAttr(start, index - 1));
+			return new Tuples.Syntax.TupleAccess(lhs, path, sourceAttr(start, index - 1));
 		} else {
 			return lhs;
 		}
@@ -215,25 +213,23 @@ public class Parser {
 	public Term parseBracketedExpression(Context context, Lifetime lifetime) {
 		int start = index;
 		match("(");
-		ArrayList<Term> expressions = new ArrayList<>();
-		expressions.add(parseTerm(context, lifetime));
+		ArrayList<Term> terms = new ArrayList<>();
+		terms.add(parseTerm(context, lifetime));
 		checkNotEof();
 		while(index < tokens.size() && tokens.get(index) instanceof Comma) {
 			match(",");
-			expressions.add(parseTerm(context, lifetime));
+			terms.add(parseTerm(context, lifetime));
 		}
 		match(")");
-		switch(expressions.size()) {
+		switch(terms.size()) {
 		case 0:
-			syntaxError("no support for empty tuples!", expressions.get(2));
+			syntaxError("no support for empty tuples!", terms.get(2));
 			return null;
 		case 1:
-			return expressions.get(0);
-		case 2:
-			return Pairs.Syntax.Pair(expressions.get(0), expressions.get(1), sourceAttr(start, index - 1));
+			return terms.get(0);
 		default:
-			syntaxError("no support for arbitrary tuples yet!", expressions.get(2));
-			return null;
+			Term[] ts = terms.toArray(new Term[terms.size()]);
+			return new Tuples.Syntax.TupleTerm(ts, sourceAttr(start, index - 1));
 		}
 	}
 
@@ -264,16 +260,6 @@ public class Parser {
 		return new Term.Dereference(operand, sourceAttr(start, index - 1));
 	}
 
-	public Term.Copy parseCopy(Context context, Lifetime lifetime) {
-		int start = index;
-		match("!");
-		Term operand = parseTerm(context, lifetime);
-		if (!(operand instanceof Term.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Term.Copy((Term.Variable) operand, sourceAttr(start, index - 1));
-	}
-
 	public Term.Box parseBox(Context context, Lifetime lifetime) {
 		int start = index;
 		matchKeyword("box");
@@ -299,7 +285,7 @@ public class Parser {
 			do {
 				match(".");
 				int index = match(Int.class, "an integer").value;
-				elements.add(new Pairs.Syntax.Index(index));
+				elements.add(new Tuples.Syntax.Index(index));
 			} while (index < tokens.size() && tokens.get(index) instanceof Dot);
 			Path.Element[] es = elements.toArray(new Path.Element[elements.size()]);
 			return new Path(es, sourceAttr(start, index - 1));

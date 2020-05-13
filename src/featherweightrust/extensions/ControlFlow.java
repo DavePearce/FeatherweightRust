@@ -9,7 +9,6 @@ import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
-import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractMachine.State;
@@ -35,10 +34,6 @@ public class ControlFlow {
 	 * Indicates we're attempt to join two environments with incompatible cells
 	 */
 	private final static String INVALID_ENVIRONMENT_CELLS = "invalid environment cells (lifetime)";
-	/**
-	 * Indicates we're attempt to join two environments with incompatible cells
-	 */
-	private final static String INVALID_ENVIRONMENT_TYPES = "invalid environment cells (type)";
 
 	/**
 	 * Extensions to the core syntax of the language.

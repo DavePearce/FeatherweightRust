@@ -105,7 +105,7 @@ public class Lexer {
 		return new Int(r, input.substring(start, pos), start);
 	}
 
-	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', '!' };
+	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', '!', '.' };
 
 	public boolean isOperatorStart(char c) {
 		for (char o : opStarts) {
@@ -142,6 +142,8 @@ public class Lexer {
 			}
 		} else if (c == '*') {
 			return new Star(pos++);
+		} else if (c == '.') {
+			return new Dot(pos++);
 		} else if (c == '!') {
 			if((pos+1) < input.length() && input.charAt(pos+1) == '=' ) {
 				pos = pos + 2;
@@ -289,6 +291,12 @@ public class Lexer {
 	public static class Comma extends Token {
 		public Comma(int pos) {
 			super(",", pos);
+		}
+	}
+
+	public static class Dot extends Token {
+		public Dot(int pos) {
+			super(".", pos);
 		}
 	}
 

@@ -24,7 +24,10 @@ import java.util.Map;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 
@@ -72,13 +75,24 @@ public abstract class AbstractMachine {
 		}
 
 		/**
-		 * Determine the location associated with a given variable name
+		 * Determine the location associated with a given variable name.
 		 *
 		 * @param name
 		 * @return
 		 */
 		public Location locate(String name) {
 			return stack.get(name);
+		}
+
+		/**
+		 * Determine the location associated with a given variable slice.
+		 *
+		 * @param name
+		 * @return
+		 */
+		public Location locate(Slice item) {
+			Location loc = stack.get(item.name());
+			return loc.append(item.path());
 		}
 
 		/**
@@ -122,19 +136,6 @@ public abstract class AbstractMachine {
 			return new State(stack, nstore);
 		}
 
-
-		/**
-		 * Remove a given location from the store, thus rendering it inaccessible.
-		 *
-		 * @param location
-		 *            Location to update
-		 * @return
-		 */
-		public State remove(Location location) {
-			Store nstore = heap.remove(location);
-			return new State(stack, nstore);
-		}
-
 		/**
 		 * Bind a name to a given location, thus creating an updated state.
 		 *
@@ -144,8 +145,8 @@ public abstract class AbstractMachine {
 		 *            Location to be bound
 		 * @return
 		 */
-		public State bind(String name, Location location) {
-			StackFrame nstack = stack.bind(name, location);
+		public State bind(Term.Variable var, Location location) {
+			StackFrame nstack = stack.bind(var.name(), location);
 			return new State(nstack, heap);
 		}
 
@@ -294,11 +295,13 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public Value read(Location location) {
-			Cell cell = cells[location.getAddress()];
-			if (cell == null) {
-				throw new IllegalArgumentException("invalid cell (" + location + ")");
-			}
-			return cell.contents();
+			int address = location.getAddress();
+			Path path = location.getPath();
+			Cell cell = cells[address];
+			// Read value at location
+			Value contents = cell.contents();
+			// Extract path (if applicable)
+			return (path == Path.EMPTY) ? contents : contents.read(0, path);
 		}
 
 		/**
@@ -309,27 +312,18 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public Store write(Location location, Value value) {
-			Cell cell = cells[location.getAddress()];
-			if (cell == null) {
-				throw new IllegalArgumentException("invalid cell");
-			}
+			int address = location.getAddress();
+			Path path = location.getPath();
+			// Read cell from given base address
+			Cell cell = cells[address];
+			// Read value at location
+			Value n = cell.contents();
+			// Construct new value
+			Value nv = (path == Path.EMPTY) ? value : n.write(0, path, value);
 			// Copy cells ahead of write
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
 			// Perform actual write
-			ncells[location.getAddress()] = new Cell(cell.lifetime, value);
-			// Done
-			return new Store(ncells);
-		}
-
-		public Store remove(Location location) {
-			Cell cell = cells[location.getAddress()];
-			if (cell == null) {
-				throw new IllegalArgumentException("invalid cell");
-			}
-			// Copy cells ahead of write
-			Cell[] ncells = Arrays.copyOf(cells, cells.length);
-			// Perform actual write
-			ncells[location.getAddress()] = null;
+			ncells[address] = new Cell(cell.lifetime, nv);
 			// Done
 			return new Store(ncells);
 		}
@@ -346,8 +340,6 @@ public abstract class AbstractMachine {
 			for(Location location : locations) {
 				internalDrop(ncells,location);
 			}
-			// Check reference invariant);
-			checkReferenceInvariant(ncells);
 			//
 			return new Store(ncells);
 		}
@@ -374,8 +366,6 @@ public abstract class AbstractMachine {
 					Cell[] ncells = Arrays.copyOf(cells, cells.length);
 					// Perform the physical drop
 					internalDrop(ncells, location);
-					// Check reference invariant
-					checkReferenceInvariant(ncells);
 					// Done
 					return new Store(ncells);
 				}
@@ -425,25 +415,6 @@ public abstract class AbstractMachine {
 			finalise(ncells, ncell);
 			// Physically drop the location
 			ncells[location.getAddress()] = null;
-		}
-
-		/**
-		 * Check the reference invariant for a given array of cells. Specifically, for
-		 * every cell which points to another cell (i.e. holds its address), that other
-		 * cell must exist (i.e. is not null).
-		 *
-		 * @param ncells
-		 */
-		private static void checkReferenceInvariant(Cell[] ncells) {
-			for (int i = 0; i != ncells.length; ++i) {
-				Cell ncell = ncells[i];
-				if(ncell != null && ncell.value instanceof Value.Location) {
-					Value.Location loc = (Location) ncell.value;
-					if(ncells[loc.getAddress()] == null) {
-						throw new IllegalArgumentException("dangling reference created: &" + i);
-					}
-				}
-			}
 		}
 
 		/**

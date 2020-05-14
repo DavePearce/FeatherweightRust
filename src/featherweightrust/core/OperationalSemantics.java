@@ -21,8 +21,8 @@ import java.util.Arrays;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
-import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
 import static featherweightrust.core.Syntax.Value.Unit;
@@ -77,7 +77,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		State S2 = pl.first();
 		Location lx = pl.second();
 		// Bind variable to location
-		State S3 = S2.bind(x.name(), lx);
+		State S3 = S2.bind(x, lx);
 		// Done
 		return new Pair<>(S3, Unit);
 	}
@@ -117,13 +117,12 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Term> reduceBorrow(State S, Term.Variable x) {
-		String name = x.name();
+	public Pair<State, Term> reduceBorrow(State S, Slice s) {
 		// Locate operand
-		Location lx = S.locate(x.name());
+		Location lx = S.locate(s);
 		//
 		if (lx == null) {
-			throw new RuntimeException("invalid variable \"" + name + "\"");
+			throw new RuntimeException("invalid path \"" + s + "\"");
 		}
 		// Done
 		return new Pair<>(S, lx);
@@ -142,27 +141,13 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-CopyVar.
+	 * Rule R-Var.
 	 */
-	public Pair<State, Term> reduceCopy(State S, Term.Variable x) {
+	public Pair<State, Term> reduceVariable(State S, Term.Variable x) {
 		// Determine location bound by variable
 		Location lx = S.locate(x.name());
 		// Read location from store
 		return new Pair<>(S, S.read(lx));
-	}
-
-	/**
-	 * Rule R-MoveVar.
-	 */
-	public Pair<State, Term> reduceVariable(State S1, Term.Variable x) {
-		// Determine location bound by variable
-		Location lx = S1.locate(x.name());
-		// Read value held by x
-		Value v = S1.read(lx);
-		// Render location unusable
-		State S2 = S1.write(lx, null);
-		// Read location from store
-		return new Pair<>(S2, v);
 	}
 
 	@Override
@@ -274,11 +259,6 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	@Override
 	final public Pair<State, Term> apply(State S, Lifetime l, Term.Variable e) {
 		return reduceVariable(S, e);
-	}
-
-	@Override
-	final public Pair<State, Term> apply(State S, Lifetime l, Term.Copy e) {
-		return reduceCopy(S, e.operand());
 	}
 
 	@Override

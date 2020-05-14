@@ -801,7 +801,7 @@ public class FuzzTestingExperiment {
 					// T-BoxDeref
 					Type T = ((Type.Box) C1.type()).element();
 					//
-					if (!copyable(T) && !borrowed(R1, x)) {
+					if (!T.copyable() && !borrowed(R1, x)) {
 						// Implement destructive update
 						Environment R2 = R1.move(x);
 						//

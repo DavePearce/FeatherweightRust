@@ -132,6 +132,24 @@ public class ControlFlowBorrowCheckTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_17() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { let mut p = y; } else { let mut q = y; } *y = box 1; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_18() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { } else { let mut q = y; } *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_19() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { let mut p = y; } else { } *y }";
+		checkInvalid(input);
+	}
+
 	public static void checkInvalid(String input) throws IOException {
 		CoreBorrowCheckTests.checkInvalid(input, new BorrowChecker(input, CFLOW_TYPING));
 	}

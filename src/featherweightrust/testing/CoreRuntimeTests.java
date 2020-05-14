@@ -58,7 +58,7 @@ public class CoreRuntimeTests {
 
 	@Test
 	public void test_02() throws IOException {
-		String input = "{ let mut x = 123; let mut y = !x; y}";
+		String input = "{ let mut x = 123; let mut y = x; y}";
 		check(input, OneTwoThree);
 	}
 
@@ -76,13 +76,13 @@ public class CoreRuntimeTests {
 
 	@Test
 	public void test_05() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 123; x = 2; !y}";
+		String input = "{ let mut x = 1; let mut y = 123; x = 2; y}";
 		check(input, OneTwoThree);
 	}
 
 	@Test
 	public void test_06() throws IOException {
-		String input = "{ let mut x = 1; { let mut y = 123; !y } }";
+		String input = "{ let mut x = 1; { let mut y = 123; y } }";
 		check(input, OneTwoThree);
 	}
 
@@ -119,7 +119,7 @@ public class CoreRuntimeTests {
 
 	@Test
 	public void test_21() throws IOException {
-		String input = "{ let mut y = box 123; let mut x = *y; !x }";
+		String input = "{ let mut y = box 123; let mut x = *y; x }";
 		check(input,OneTwoThree);
 	}
 
@@ -182,6 +182,28 @@ public class CoreRuntimeTests {
 	@Test
 	public void test_61() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_62() throws IOException {
+		// FIXME: support moving out of boxes
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *z }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_63() throws IOException {
+		// NOTE: this test case appears to be something of an issue. It conflicts with
+		// core invalid #59 and the issue of strong updaes for boxes.
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *y = z; let mut w = *y; *w }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_64() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; *z }";
 		check(input, OneTwoThree);
 	}
 

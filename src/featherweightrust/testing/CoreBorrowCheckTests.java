@@ -66,6 +66,11 @@ public class CoreBorrowCheckTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_04() throws IOException {
+		String input = "{ let mut x = box 1; let mut y = x; *x = 123; }";
+		checkInvalid(input);
+	}
 
 	// ==============================================================
 	// Immutable Borrowing Examples
@@ -161,7 +166,7 @@ public class CoreBorrowCheckTests {
 	@Test
 	public void test_37() throws IOException {
 		// [E0503]: cannot use `x` because it was mutably borrowed
-		String input = "{ let mut x = 0; { let mut y = &mut x; *y = !x; } }";
+		String input = "{ let mut x = 0; { let mut y = &mut x; *y = x; } }";
 		checkInvalid(input);
 	}
 	// ==============================================================
@@ -230,6 +235,120 @@ public class CoreBorrowCheckTests {
 	public void test_59() throws IOException {
 		// Fails because no support for strong updates.
 		String input = "{ let mut x = 1; let mut y = 1; let mut p = box &mut x; *p = &mut y; x}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_60() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_61() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_62() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; let mut w = *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_63() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; let mut w = *y; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_64() throws IOException {
+		// Moved out of box
+		String input = "{" +
+				"let mut x = 123;" +
+				"let mut y = 234;" +
+				"let mut bx = box &mut x;" +
+				"let mut p = *bx;" +
+				"let mut q = bx; " +
+				"}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_65() throws IOException {
+		// Moved out of box
+		String input = "{" +
+				"let mut x = 123;" +
+				"let mut y = 234;" +
+				"let mut bx = box box x;" +
+				"let mut p = *bx;" +
+				"let mut q = bx; " +
+				"}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_66() throws IOException {
+		// Moved out of box
+		String input = "{" +
+				"let mut x = 123;" +
+				"let mut y = 234;" +
+				"let mut bx = box &mut x;" +
+				"let mut by = box &mut y;" +
+				"let mut p = *bx;" +
+				"let mut q = by; " +
+				"q = bx;" +
+				"}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_67() throws IOException {
+		// Moved out of box
+		String input = "{" +
+				"let mut x = 123;" +
+				"let mut y = 234;" +
+				"let mut bx = box box x;" +
+				"let mut by = box box y;" +
+				"let mut p = *bx;" +
+				"let mut q = by; " +
+				"q = bx;" +
+				"}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_68() throws IOException {
+		// Moved out of box
+		String input = "{" +
+				"let mut x = 123;" +
+				"let mut y = 234;" +
+				"let mut bx = box &mut x;" +
+				"let mut by = box &mut y;" +
+				"let mut p = *bx;" +
+				"let mut q = box by; " +
+				"*q = bx;" +
+				"}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_69() throws IOException {
+		// Moved out of box
+		String input = "{" +
+				"let mut x = 123;" +
+				"let mut y = 234;" +
+				"let mut bx = box box x;" +
+				"let mut by = box box y;" +
+				"let mut p = *bx;" +
+				"let mut q = box by; " +
+				"*q = bx;" +
+				"}";
 		checkInvalid(input);
 	}
 

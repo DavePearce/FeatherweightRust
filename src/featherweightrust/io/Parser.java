@@ -20,9 +20,12 @@ package featherweightrust.io;
 import java.util.*;
 
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Slice;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
+import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
@@ -84,34 +87,31 @@ public class Parser {
 		checkNotEof();
 		int start = index;
 		Token lookahead = tokens.get(index);
+		Term t;
 		//
 		if (lookahead.text.equals("let")) {
-			return parseVariableDeclaration(context, lifetime);
+			t = parseVariableDeclaration(context, lifetime);
 		} else if (lookahead.text.equals("if")) {
-			return parseIfElseStmt(context, lifetime);
+			t = parseIfElseStmt(context, lifetime);
 		} else if (lookahead instanceof LeftCurly) {
 			// nested block
-			return parseStatementBlock(context, lifetime);
+			t = parseStatementBlock(context, lifetime);
 		} else if (lookahead instanceof LeftBrace) {
-			match("(");
-			Term e = parseTerm(context, lifetime);
-			checkNotEof();
-			match(")");
-			return e;
+			t = parseBracketedExpression(context,lifetime);
 		} else if (lookahead instanceof Ampersand) {
-			return parseBorrow(context, lifetime);
-		} else if (lookahead instanceof Shreak) {
-			return parseCopy(context, lifetime);
+			t = parseBorrow(context, lifetime);
 		} else if (lookahead instanceof Int) {
 			int val = match(Int.class, "an integer").value;
-			return new Value.Integer(val, sourceAttr(start, index - 1));
+			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
-			return parseBox(context, lifetime);
+			t = parseBox(context, lifetime);
 		} else if (lookahead instanceof Star) {
-			return parseIndirectAssignmentOrDereference(context, lifetime);
+			t = parseIndirectAssignmentOrDereference(context, lifetime);
 		} else {
-			return parseAssignmentOrVariable(context, lifetime);
+			t = parseAssignmentOrVariable(context, lifetime);
 		}
+		// Done
+		return t;
 	}
 
 	/**
@@ -153,6 +153,11 @@ public class Parser {
 			match(";");
 			int end = index;
 			return new Term.Assignment((Term.Variable) lhs, rhs, sourceAttr(start, end - 1));
+		} else if (index < tokens.size() && tokens.get(index) instanceof Dot) {
+			// Parse path
+			Path path = parsePath(context, lifetime);
+			// Done
+			return new Tuples.Syntax.TupleAccess(lhs, path, sourceAttr(start, index - 1));
 		} else {
 			return lhs;
 		}
@@ -205,6 +210,29 @@ public class Parser {
 		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
 	}
 
+	public Term parseBracketedExpression(Context context, Lifetime lifetime) {
+		int start = index;
+		match("(");
+		ArrayList<Term> terms = new ArrayList<>();
+		terms.add(parseTerm(context, lifetime));
+		checkNotEof();
+		while(index < tokens.size() && tokens.get(index) instanceof Comma) {
+			match(",");
+			terms.add(parseTerm(context, lifetime));
+		}
+		match(")");
+		switch(terms.size()) {
+		case 0:
+			syntaxError("no support for empty tuples!", terms.get(2));
+			return null;
+		case 1:
+			return terms.get(0);
+		default:
+			Term[] ts = terms.toArray(new Term[terms.size()]);
+			return new Tuples.Syntax.TupleTerm(ts, sourceAttr(start, index - 1));
+		}
+	}
+
 	public Term.Variable parseVariable(Context context, Lifetime lifetime) {
 		int start = index;
 		Identifier var = matchIdentifier();
@@ -219,7 +247,7 @@ public class Parser {
 			matchKeyword("mut");
 			mutable = true;
 		}
-		Term.Variable operand = parseVariable(context, lifetime);
+		Slice operand = parseSlice(context, lifetime);
 		//
 		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
@@ -232,21 +260,39 @@ public class Parser {
 		return new Term.Dereference(operand, sourceAttr(start, index - 1));
 	}
 
-	public Term.Copy parseCopy(Context context, Lifetime lifetime) {
-		int start = index;
-		match("!");
-		Term operand = parseTerm(context, lifetime);
-		if (!(operand instanceof Term.Variable)) {
-			syntaxError("expecting variable, found " + operand + ".", operand);
-		}
-		return new Term.Copy((Term.Variable) operand, sourceAttr(start, index - 1));
-	}
-
 	public Term.Box parseBox(Context context, Lifetime lifetime) {
 		int start = index;
 		matchKeyword("box");
 		Term operand = parseTerm(context,lifetime);
 		return new Term.Box(operand, sourceAttr(start, index - 1));
+	}
+
+	public Slice parseSlice(Context context, Lifetime lifetime) {
+		int start = index;
+		// Parse variable identifier
+		Identifier var = matchIdentifier();
+		// Path path
+		Path path = parsePath(context, lifetime);
+		// Done
+		return new Slice(var.text, path, sourceAttr(start, index - 1));
+	}
+
+	public Path parsePath(Context context, Lifetime lifetime) {
+		// Parse access path (if applicable)
+		if (index < tokens.size() && tokens.get(index) instanceof Dot) {
+			int start = index;
+			ArrayList<Path.Element> elements = new ArrayList<>();
+			do {
+				match(".");
+				int index = match(Int.class, "an integer").value;
+				elements.add(new Tuples.Syntax.Index(index));
+			} while (index < tokens.size() && tokens.get(index) instanceof Dot);
+			Path.Element[] es = elements.toArray(new Path.Element[elements.size()]);
+			return new Path(es, sourceAttr(start, index - 1));
+		} else {
+			// Common case
+			return Path.EMPTY;
+		}
 	}
 
 	private void checkNotEof() {

@@ -25,7 +25,7 @@ import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
-import featherweightrust.core.Syntax.Slice;
+import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
@@ -85,17 +85,6 @@ public abstract class AbstractMachine {
 		}
 
 		/**
-		 * Determine the location associated with a given variable slice.
-		 *
-		 * @param name
-		 * @return
-		 */
-		public Location locate(Slice item) {
-			Location loc = stack.get(item.name());
-			return loc.append(item.path());
-		}
-
-		/**
 		 * Allocate a new cell in memory with a given lifetime and initial value.
 		 *
 		 * @param lifetime
@@ -145,8 +134,8 @@ public abstract class AbstractMachine {
 		 *            Location to be bound
 		 * @return
 		 */
-		public State bind(Term.Variable var, Location location) {
-			StackFrame nstack = stack.bind(var.name(), location);
+		public State bind(String var, Location location) {
+			StackFrame nstack = stack.bind(var, location);
 			return new State(nstack, heap);
 		}
 
@@ -296,12 +285,12 @@ public abstract class AbstractMachine {
 		 */
 		public Value read(Location location) {
 			int address = location.getAddress();
-			Path path = location.getPath();
+			int[] path = location.getPath();
 			Cell cell = cells[address];
 			// Read value at location
 			Value contents = cell.contents();
 			// Extract path (if applicable)
-			return (path == Path.EMPTY) ? contents : contents.read(0, path);
+			return (path.length == 0) ? contents : contents.read(path, 0);
 		}
 
 		/**
@@ -313,13 +302,13 @@ public abstract class AbstractMachine {
 		 */
 		public Store write(Location location, Value value) {
 			int address = location.getAddress();
-			Path path = location.getPath();
+			int[] path = location.getPath();
 			// Read cell from given base address
 			Cell cell = cells[address];
 			// Read value at location
 			Value n = cell.contents();
 			// Construct new value
-			Value nv = (path == Path.EMPTY) ? value : n.write(0, path, value);
+			Value nv = (path.length == 0) ? value : n.write(path, 0, value);
 			// Copy cells ahead of write
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
 			// Perform actual write

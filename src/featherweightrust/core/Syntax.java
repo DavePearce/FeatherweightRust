@@ -23,7 +23,14 @@ import java.util.List;
 
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
+import featherweightrust.core.Syntax.LVal;
+import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Type;
+import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.util.AbstractMachine.State;
+import featherweightrust.util.AbstractMachine.Store;
 import featherweightrust.util.ArrayUtils;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Walker;
@@ -33,9 +40,7 @@ import jmodelgen.util.Walkers;
 public class Syntax {
 	public final static int TERM_let = 0;
 	public final static int TERM_assignment = 1;
-	public final static int TERM_indirectassignment = 2;
 	public final static int TERM_block = 3;
-	public final static int TERM_var = 4;
 	public final static int TERM_borrow = 6;
 	public final static int TERM_dereference = 7;
 	public final static int TERM_box = 8;
@@ -82,10 +87,10 @@ public class Syntax {
 		 *
 		 */
 		public class Let extends AbstractTerm {
-			private final Term.Variable variable;
+			private final String variable;
 			private final Term initialiser;
 
-			public Let(Term.Variable variable, Term initialiser, Attribute... attributes) {
+			public Let(String variable, Term initialiser, Attribute... attributes) {
 				super(TERM_let, attributes);
 				this.variable = variable;
 				this.initialiser = initialiser;
@@ -96,7 +101,7 @@ public class Syntax {
 			 *
 			 * @return
 			 */
-			public Term.Variable variable() {
+			public String variable() {
 				return variable;
 			}
 
@@ -111,11 +116,11 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return "let mut " + variable.name() + " = " + initialiser + ";";
+				return "let mut " + variable + " = " + initialiser + ";";
 			}
 
 			public static Let construct(String variable, Term initialiser) {
-				return new Let(new Term.Variable(variable), initialiser);
+				return new Let(variable, initialiser);
 			}
 
 			public static Domain.Big<Let> toBigDomain(Domain.Small<String> first, Domain.Big<Term> second) {
@@ -134,16 +139,16 @@ public class Syntax {
 		 *
 		 */
 		public class Assignment extends AbstractTerm {
-			public final Term.Variable lhs;
+			public final LVal lhs;
 			public final Term rhs;
 
-			public Assignment(Term.Variable lhs, Term rhs, Attribute... attributes) {
+			public Assignment(LVal lhs, Term rhs, Attribute... attributes) {
 				super(TERM_assignment,attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
 
-			public Term.Variable leftOperand() {
+			public LVal leftOperand() {
 				return lhs;
 			}
 
@@ -153,58 +158,16 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return lhs.name + " = " + rhs + ";";
+				return lhs + " = " + rhs + ";";
 			}
 
-			public static Assignment construct(String variable, Term initialiser) {
-				return new Assignment(new Term.Variable(variable), initialiser);
-			}
-
-			public static Domain.Big<Assignment> toBigDomain(Domain.Small<String> first, Domain.Big<Term> second) {
-				return Domains.Product(first, second, Assignment::construct);
-			}
-		}
-
-		/**
-		 * Represents an indirect assignment such as the following:
-		 *
-		 * <pre>
-		 * *x = e
-		 * </pre>
-		 *
-		 * @author David J. Pearce
-		 *
-		 */
-		public class IndirectAssignment extends AbstractTerm {
-			private final Term.Variable lhs;
-			private final Term rhs;
-
-			public IndirectAssignment(Term.Variable lhs, Term rhs, Attribute... attributes) {
-				super(TERM_indirectassignment,attributes);
-				this.lhs = lhs;
-				this.rhs = rhs;
-			}
-
-			public Term.Variable leftOperand() {
-				return lhs;
-			}
-
-			public Term rightOperand() {
-				return rhs;
-			}
-
-			@Override
-			public String toString() {
-				return "*" + lhs.name + " = " + rhs + ";";
-			}
-
-			public static IndirectAssignment construct(String variable, Term initialiser) {
-				return new IndirectAssignment(new Term.Variable(variable), initialiser);
-			}
-
-			public static Domain.Big<IndirectAssignment> toBigDomain(Domain.Small<String> first, Domain.Big<Term> second) {
-				return Domains.Product(first, second, IndirectAssignment::construct);
-			}
+//			public static Assignment construct(String variable, Term initialiser) {
+//				return new Assignment(new Term.Variable(variable), initialiser);
+//			}
+//
+//			public static Domain.Big<Assignment> toBigDomain(Domain.Small<String> first, Domain.Big<Term> second) {
+//				return Domains.Product(first, second, Assignment::construct);
+//			}
 		}
 
 		/**
@@ -266,83 +229,43 @@ public class Syntax {
 			}
 		}
 
-		public class Variable extends AbstractTerm implements Term {
-			private final String name;
-
-			public Variable(String name, Attribute... attributes) {
-				super(TERM_var, attributes);
-				this.name = name;
-			}
-
-			public String name() {
-				return name;
-			}
-
-			@Override
-			public boolean equals(Object o) {
-				if(o instanceof Variable) {
-					Variable v = (Variable) o;
-					return name.equals(v.name);
-				} else {
-					return false;
-				}
-			}
-
-			@Override
-			public int hashCode() {
-				return name.hashCode();
-			}
-			@Override
-			public String toString() {
-				return name;
-			}
-
-			public static Term.Variable construct(String name) {
-				return new Term.Variable(name);
-			}
-
-			public static Domain.Big<Variable> toBigDomain(Domain.Small<String> subdomain) {
-				return Domains.Adaptor(subdomain,Variable::construct);
-			}
-		}
-
 		public class Dereference extends AbstractTerm implements Term {
-			private final Term.Variable operand;
+			private final LVal slice;
 
-			public Dereference(Term.Variable operand, Attribute... attributes) {
+			public Dereference(LVal slice, Attribute... attributes) {
 				super(TERM_dereference, attributes);
-				this.operand = operand;
+				this.slice = slice;
 			}
 
-			public Term.Variable operand() {
-				return operand;
+			public LVal operand() {
+				return slice;
 			}
 
 			@Override
 			public String toString() {
-				return "*" + operand.toString();
+				return slice.toString();
 			}
-
-			public static Term.Dereference construct(String name) {
-				return new Term.Dereference(new Term.Variable(name));
-			}
-
-			public static Domain.Big<Dereference> toBigDomain(Domain.Small<String> subdomain) {
-				return Domains.Adaptor(subdomain, Dereference::construct);
-			}
+//
+//			public static Term.Dereference construct(String name) {
+//				return new Term.Dereference(new Term.Variable(name));
+//			}
+//
+//			public static Domain.Big<Dereference> toBigDomain(Domain.Small<String> subdomain) {
+//				return Domains.Adaptor(subdomain, Dereference::construct);
+//			}
 		}
 
 		public class Borrow extends AbstractTerm implements Term {
-			private final Slice operand;
+			private final LVal operand;
 			private final boolean mutable;
 
-			public Borrow(Slice operand, boolean mutable, Attribute... attributes) {
+			public Borrow(LVal operand, boolean mutable, Attribute... attributes) {
 				super(TERM_borrow,attributes);
 				this.operand = operand;
 				this.mutable = mutable;
 			}
 
-			public Slice operand() {
+			public LVal operand() {
 				return operand;
 			}
 
@@ -410,7 +333,7 @@ public class Syntax {
 		 * @param path
 		 * @return
 		 */
-		public Value read(int index, Path path);
+		public Value read(int[] path, int index);
 
 		/**
 		 * Write a give value into this value at a given path, returned the updated
@@ -421,7 +344,7 @@ public class Syntax {
 		 * @param value
 		 * @return
 		 */
-		public Value write(int index, Path path, Value value);
+		public Value write(int[] path, int index, Value value);
 
 		/**
 		 * An indivisible value which can be stored in exactly one location. For
@@ -438,16 +361,16 @@ public class Syntax {
 			}
 
 			@Override
-			public Value read(int index, Path path) {
-				if(index != path.size()) {
+			public Value read(int[] path, int index) {
+				if(index != path.length) {
 					throw new IllegalArgumentException("invalid path");
 				}
 				return this;
 			}
 
 			@Override
-			public Value write(int index, Path path, Value value) {
-				if(index != path.size()) {
+			public Value write(int[] path, int index, Value value) {
+				if(index != path.length) {
 					throw new IllegalArgumentException("invalid path");
 				}
 				return value;
@@ -512,15 +435,22 @@ public class Syntax {
 			}
 		}
 
+		/**
+		 * Represents a location in the abstract machine's memory. Each location can
+		 * store an atomic value.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
 		public class Location extends Atom {
 			private final int address;
-			private final Path path;
+			private final int[] path;
 
 			public Location(int address, Attribute... attributes) {
-				this(address,Path.EMPTY,attributes);
+				this(address, new int[0], attributes);
 			}
 
-			public Location(int address, Path path, Attribute... attributes) {
+			public Location(int address, int[] path, Attribute... attributes) {
 				super(TERM_location, attributes);
 				this.address = address;
 				this.path = path;
@@ -535,36 +465,43 @@ public class Syntax {
 				return address;
 			}
 
-			/**
-			 * Get the path within the allocation unit this location refers to.
-			 *
-			 * @return
-			 */
-			public Path getPath() {
+			public int[] getPath() {
 				return path;
 			}
 
-			public Location append(Path p) {
-				return new Location(address, path.append(p), attributes());
+			/**
+			 * Access a location within this location at the given offset.
+			 *
+			 * @param offset
+			 * @return
+			 */
+			public Location at(int offset) {
+				int[] npath = Arrays.copyOf(path, path.length + 1);
+				npath[path.length] = offset;
+				return new Location(address,npath);
 			}
 
 			@Override
 			public int hashCode() {
-				return address;
+				return address ^ Arrays.hashCode(path);
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if (o instanceof Location) {
 					Location l = ((Location) o);
-					return l.address == address && path.equals(l.path);
+					return l.address == address && Arrays.equals(path, l.path);
 				}
 				return false;
 			}
 
 			@Override
 			public String toString() {
-				return "&" + address + path;
+				String p = "";
+				for(int i=0;i!=path.length;++i) {
+					p = p + ":" + path[i];
+				}
+				return "&" + address + p;
 			}
 		}
 	}
@@ -610,7 +547,7 @@ public class Syntax {
 
 		/**
 		 * Check whether this type can be copied or not. Some types (e.g. primitive
-		 * integers) can be copied whilst others (e.g. mutable references) cannot.
+		 * integers) can be copied whilst others (e.g. mutable borrows) cannot.
 		 *
 		 * @param t
 		 * @return
@@ -618,66 +555,35 @@ public class Syntax {
 		public boolean copyable();
 
 		/**
-		 * Check whether this type is "compatible" with another. That is, for a variable
-		 * declared with a given type, it can subsequently only be assigned values which
-		 * are compatible with its type.
+		 * Determine whether this type prohibits a given lval from being read. For
+		 * example, if this type mutable borrows the lval then it cannot be read.
 		 *
-		 * @param R1 --- the environment in which this type is defined.
-		 * @param t2 --- the other type being compared for compatibility.
-		 * @param R2 --- the environment in which the other type is defined.
+		 * @param LVal lval being checked.
 		 * @return
 		 */
-		public boolean compatible(Environment R1, Type t2, Environment R2);
+		public boolean prohibitsReading(LVal lv);
 
 		/**
-		 * Determine whether this type indicates that a given slice is already borrowed
-		 * (either mutably or not).
+		 * Determine whether this type prohibits a given lval from being written. For
+		 * example, if this type borrows the lval then it cannot be written.
 		 *
-		 * @param path The path being checked (which e.g. could be a variable)
-		 * @param mut Flag indicating whether we're interested only mutable borrows, or
-		 *            any borrows.
+		 * @param lv
 		 * @return
 		 */
-		public boolean borrowed(String name, Path path, boolean mut);
+		public boolean prohibitsWriting(LVal lv);
 
 		/**
-		 * Apply a move effect to this type, producing a "shadow type"
-		 *
-		 * @return
+		 * Constant representing the type void
 		 */
-		public Type move();
-
-		/**
-		 * Extract the (sub)type to which a given path corresponds.
-		 *
-		 * @param index Position in path being read
-		 * @param path
-		 * @return
-		 */
-		public Type read(int index, Path path);
-
-		/**
-		 * Write a given type to a given path within this type. For example, writing
-		 * <code>int</code> into <code>(bool,bool)</code> at position <code>1</code>
-		 * gives <code>(int,bool)</code>.
-		 *
-		 * @param index Position in path being written
-		 * @param path
-		 * @param type
-		 * @return
-		 */
-		public Type write(int index, Path path, Type type);
-
 		public static Type Void = new Void();
+		/**
+		 * Constant representing the type int
+		 */
+		public static Type Int = new Int();
 
 		public static abstract class AbstractType extends SyntacticElement.Impl implements Type {
 			public AbstractType(Attribute... attributes) {
 				super(attributes);
-			}
-
-			@Override
-			public Type move() {
-				return new Shadow(this);
 			}
 
 			@Override
@@ -697,7 +603,12 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(String name, Path path, boolean mut) {
+			public boolean prohibitsReading(LVal lv) {
+				return false;
+			}
+
+			@Override
+			public boolean prohibitsWriting(LVal lv) {
 				return false;
 			}
 
@@ -727,37 +638,11 @@ public class Syntax {
 					throw new IllegalArgumentException("invalid intersect");
 				}
 			}
-
-			@Override
-			public Type read(int index, Path p) {
-				if(index == p.size()) {
-					return this;
-				} else {
-					throw new IllegalArgumentException("invalid position");
-				}
-			}
-
-			@Override
-			public Type write(int index, Path p, Type t) {
-				if (index == p.size()) {
-					return t;
-				} else {
-					throw new IllegalArgumentException("invalid position");
-				}
-			}
 		}
 
 		public static class Void extends AbstractAtom {
 			public Void(Attribute... attributes) {
 				super(attributes);
-			}
-
-			@Override
-			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				// Effects ignored for compatibility
-				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
-				//
-				return t2 instanceof Type.Void;
 			}
 
 			@Override
@@ -777,16 +662,8 @@ public class Syntax {
 		}
 
 		public static class Int extends AbstractAtom {
-			public Int(Attribute... attributes) {
+			private Int(Attribute... attributes) {
 				super(attributes);
-			}
-
-			@Override
-			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				// Effects ignored for compatibility
-				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
-				//
-				return t2 instanceof Type.Int;
 			}
 
 			@Override
@@ -805,13 +682,13 @@ public class Syntax {
 
 		public static class Borrow extends AbstractAtom {
 			private final boolean mut;
-			private final Slice[] items;
+			private final LVal[] items;
 
-			public Borrow(boolean mut, Slice item, Attribute... attributes) {
-				this(mut,new Slice[] {item}, attributes);
+			public Borrow(boolean mut, LVal item, Attribute... attributes) {
+				this(mut,new LVal[] {item}, attributes);
 			}
 
-			public Borrow(boolean mut, Slice[] paths, Attribute... attributes) {
+			public Borrow(boolean mut, LVal[] paths, Attribute... attributes) {
 				super(attributes);
 				if(paths.length == 0) {
 					throw new IllegalArgumentException("invalid names argumetn");
@@ -823,14 +700,22 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(String name, Path path, boolean mut) {
-				if (!mut || isMutable()) {
-					for (int i = 0; i != items.length; ++i) {
-						Slice ith = items[i];
-						// FIXME: this is broken!
-						if (ith.name().equals(name) && ith.path().conflicts(path)) {
-							return true;
-						}
+			public boolean prohibitsReading(LVal lv) {
+				if(mut) {
+					// Only a mutable borrow can prohibit other borrows from being read.
+					return prohibitsWriting(lv);
+				}
+				return false;
+			}
+
+			@Override
+			public boolean prohibitsWriting(LVal lv) {
+				// Any conflicting borrow prohibits an lval from being written.
+				for (int i = 0; i != items.length; ++i) {
+					LVal ith = items[i];
+					// Check whether potential conflict
+					if (lv.conflicts(ith)) {
+						return true;
 					}
 				}
 				return false;
@@ -847,28 +732,10 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				// Effects ignored for compatibility
-				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
-				//
-				if (t2 instanceof Type.Borrow) {
-					Type.Borrow b2 = (Type.Borrow) t2;
-					// NOTE: follow holds because all members of a single borrow must be compatible
-					// by construction.
-					Type ti = R1.typeOf(items[0]);
-					Type tj = R2.typeOf(b2.slices()[0]);
-					//
-					return mut == b2.isMutable() && ti.compatible(R1, tj, R2);
-				} else {
-					return false;
-				}
-			}
-
-			@Override
 			public boolean within(BorrowChecker checker, Environment R, Lifetime l) {
 				boolean r = true;
 				for (int i = 0; i != items.length; ++i) {
-					Slice ith = items[i];
+					LVal ith = items[i];
 					checker.check(R.get(ith.name()) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
 					Cell C = R.get(ith.name());
 					r &= C.lifetime().contains(l);
@@ -884,7 +751,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						Slice[] ps = ArrayUtils.append(items, b.items);
+						LVal[] ps = ArrayUtils.append(items, b.items);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -903,7 +770,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						Slice[] ps = ArrayUtils.append(items, b.items);
+						LVal[] ps = ArrayUtils.append(items, b.items);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -913,7 +780,7 @@ public class Syntax {
 				throw new IllegalArgumentException("invalid intersect");
 			}
 
-			public Slice[] slices() {
+			public LVal[] slices() {
 				return items;
 			}
 
@@ -940,7 +807,7 @@ public class Syntax {
 				}
 			}
 
-			private static String toString(Slice[]  slices) {
+			private static String toString(LVal[]  slices) {
 				if(slices.length == 1) {
 					return slices[0].toString();
 				} else {
@@ -970,8 +837,13 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean borrowed(String name, Path path, boolean mut) {
-				return element.borrowed(name, path, mut);
+			public boolean prohibitsReading(LVal lv) {
+				return element.prohibitsReading(lv);
+			}
+
+			@Override
+			public boolean prohibitsWriting(LVal lv) {
+				return element.prohibitsWriting(lv);
 			}
 
 			@Override
@@ -983,19 +855,6 @@ public class Syntax {
 			@Override
 			public boolean moveable() {
 				return element.moveable();
-			}
-
-			@Override
-			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				// Effects ignored for compatibility
-				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
-				//
-				if (t2 instanceof Type.Box) {
-					Type.Box b2 = (Type.Box) t2;
-					return element.compatible(R1, b2.element, R2);
-				} else {
-					return false;
-				}
 			}
 
 			public Type element() {
@@ -1058,20 +917,24 @@ public class Syntax {
 			}
 
 			@Override
-			public Type move() {
-				throw new IllegalArgumentException("cannot move effect");
-			}
-
-			@Override
 			public boolean within(BorrowChecker self, Environment e, Lifetime l) {
 				// Should never be able to assign an effected type
 				throw new IllegalArgumentException("deadcode reached");
 			}
 
 			@Override
-			public boolean borrowed(String name, Path path, boolean mut) {
+			public boolean prohibitsReading(LVal lv) {
 				// NOTE: shadow types do not correspond with actual values and, instead, are
-				// used purely to retain knowledge of the "structure".
+				// used purely to retain knowledge of the "structure". Hence, they do not
+				// prohibit other types from being read/written.
+				return false;
+			}
+
+			@Override
+			public boolean prohibitsWriting(LVal lv) {
+				// NOTE: shadow types do not correspond with actual values and, instead, are
+				// used purely to retain knowledge of the "structure". Hence, they do not
+				// prohibit other types from being read/written.
 				return false;
 			}
 
@@ -1093,36 +956,9 @@ public class Syntax {
 				return new Type.Shadow(type.union(t));
 			}
 
-
 			@Override
 			public Type intersect(Type t) {
 				return t;
-			}
-
-			@Override
-			public Type read(int index, Path p) {
-				if(index == p.size()) {
-					return this;
-				} else {
-					return null;
-				}
-			}
-
-			@Override
-			public Type write(int index, Path p, Type t) {
-				if(index == p.size()) {
-					return t;
-				} else {
-					throw new IllegalArgumentException("cannot write to moved location");
-				}
-			}
-
-			@Override
-			public boolean compatible(Environment R1, Type t2, Environment R2) {
-				// Effects ignored for compatibility
-				t2 = (t2 instanceof Shadow) ? ((Type.Shadow)t2).type : t2;
-				//
-				return type.compatible(R1, t2, R2);
 			}
 
 			@Override
@@ -1146,11 +982,11 @@ public class Syntax {
 		}
 	}
 
-	public static class Slice extends SyntacticElement.Impl implements Comparable<Slice> {
+	public static class LVal extends SyntacticElement.Impl implements Comparable<LVal> {
 		private final String name;
 		private final Path path;
 
-		public Slice(String name, Path path, Attribute... attributes) {
+		public LVal(String name, Path path, Attribute... attributes) {
 			super(attributes);
 			this.name = name;
 			this.path = path;
@@ -1164,10 +1000,14 @@ public class Syntax {
 			return path;
 		}
 
+		public boolean conflicts(LVal lv) {
+			return name.equals(lv.name) && path.conflicts(lv.path);
+		}
+
 		@Override
 		public boolean equals(Object o) {
-			if(o instanceof Slice) {
-				Slice s = (Slice) o;
+			if(o instanceof LVal) {
+				LVal s = (LVal) o;
 				return name.equals(s.name) && path.equals(s.path);
 			}
 			return false;
@@ -1178,8 +1018,21 @@ public class Syntax {
 			return name.hashCode() ^ path.hashCode();
 		}
 
+		/**
+		 * Locate the location to which this path refers in the given state.
+		 *
+		 * @param state
+		 * @return
+		 */
+		public Location locate(State state) {
+			// Identify root of path
+			Location l = state.locate(name);
+			// Apply each element in turn
+			return path.apply(l, state.store());
+		}
+
 		@Override
-		public int compareTo(Slice s) {
+		public int compareTo(LVal s) {
 			int c = name.compareTo(s.name);
 			if(c == 0) {
 				c = path.compareTo(s.path);
@@ -1189,7 +1042,7 @@ public class Syntax {
 
 		@Override
 		public String toString() {
-			return name + path;
+			return path.toString(name);
 		}
 	}
 
@@ -1202,17 +1055,6 @@ public class Syntax {
 	 */
 	public static class Path extends SyntacticElement.Impl implements Comparable<Path> {
 		/**
-		 * A constant representing the empty path.
-		 */
-		public final static Path EMPTY = new Path() {
-			@Override
-			public Path append(Path p) {
-				// Appending path to empty path returns path
-				return p;
-			}
-		};
-
-		/**
 		 * The sequence of elements making up this path
 		 */
 		private final Element[] elements;
@@ -1223,6 +1065,9 @@ public class Syntax {
 
 		public Path(Element[] elements, Attribute... attributes) {
 			super(attributes);
+			if(attributes.length == 0) {
+				throw new IllegalArgumentException();
+			}
 			this.elements = elements;
 		}
 
@@ -1243,6 +1088,22 @@ public class Syntax {
 		 */
 		public Path.Element get(int index) {
 			return elements[index];
+		}
+
+		/**
+		 * Apply this path to a given location. For example, if this path represents a
+		 * dereference then we will read the location and returns its contents (as a
+		 * location).
+		 *
+		 * @param location
+		 * @param store
+		 * @return
+		 */
+		public Location apply(Location location, Store store) {
+			for (int i = 0; i != elements.length; ++i) {
+				location = elements[i].apply(store, location);
+			}
+			return location;
 		}
 
 		/**
@@ -1268,10 +1129,6 @@ public class Syntax {
 			}
 			// Done
 			return true;
-		}
-
-		public Path append(Path p) {
-			throw new IllegalArgumentException("implement me");
 		}
 
 		@Override
@@ -1304,13 +1161,14 @@ public class Syntax {
 			return 0;
 		}
 
-		@Override
-		public String toString() {
-			String p = "";
+		public String toString(String src) {
 			for(int i=0;i!=elements.length;++i) {
-				p += "." + elements[i];
+				if(i != 0) {
+					src = "(" + src + ")";
+				}
+			  src = elements[i].toString(src);
 			}
-			return p;
+			return src;
 		}
 
 		public interface Element extends Comparable<Element> {
@@ -1321,7 +1179,51 @@ public class Syntax {
 			 * @return
 			 */
 			public boolean conflicts(Element e);
+
+			/**
+			 * Apply this element to a given location in a given store, producing an updated
+			 * location.
+			 *
+			 * @param loc
+			 * @param store
+			 * @return
+			 */
+			public Location apply(Store store, Location loc);
+
+			public String toString(String src);
 		}
+
+		public static Element DEREF = new Deref();
+
+		/**
+		 * Represents a dereference path element
+		 */
+		public static class Deref implements Element {
+
+			@Override
+			public int compareTo(Element arg0) {
+				if (arg0 == DEREF) {
+					return 0;
+				} else {
+					throw new IllegalArgumentException("GOT HERE");
+				}
+			}
+
+			@Override
+			public boolean conflicts(Element e) {
+				throw new IllegalArgumentException("GOT HERE");
+			}
+
+			@Override
+			public Location apply(Store store, Location loc) {
+				return (Location) store.read(loc);
+			}
+
+			@Override
+			public String toString(String src) {
+				return "*" + src;
+			}
+		};
 	}
 
 	/**
@@ -1342,41 +1244,41 @@ public class Syntax {
 	 *        already been declared.
 	 * @return
 	 */
-	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Big<Term> expressions,
-			Domain.Small<String> declared, Domain.Small<String> undeclared) {
-		// Let statements can only be constructed from undeclared variables
-		Domain.Big<Term.Let> lets = Term.Let.toBigDomain(undeclared, expressions);
-		// Assignments can only use declared variables
-		Domain.Big<Term.Assignment> assigns = Term.Assignment.toBigDomain(declared, expressions);
-		// Indirect assignments can only use declared variables
-		Domain.Big<Term.IndirectAssignment> indirects = Term.IndirectAssignment.toBigDomain(declared, expressions);
-		if (depth == 0) {
-			return Domains.Union(lets, assigns, indirects);
-		} else {
-			// Determine lifetime for blocks at this level
-			lifetime = lifetime.freshWithin();
-			// Recursively construct subdomain generator
-			Domain.Big<Term> subdomain = toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
-			// Using this construct the block generator
-			Domain.Big<Term.Block> blocks = Term.Block.toBigDomain(lifetime, 1, width, subdomain);
-			// Done
-			return Domains.Union(lets, assigns, indirects, blocks);
-		}
-	}
-
-	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> names) {
-		Domain.Big<Value.Integer> integers = Value.Integer.toBigDomain(ints);
-		Domain.Big<Term.Variable> vars = Term.Variable.toBigDomain(names);
-		Domain.Big<Term.Borrow> borrows = Term.Borrow.toBigDomain(names);
-		Domain.Big<Term.Dereference> derefs = Term.Dereference.toBigDomain(names);
-		if (depth == 0) {
-			return Domains.Union(integers, vars, borrows, derefs);
-		} else {
-			Domain.Big<Term> subdomain = toBigDomain(depth - 1, ints, names);
-			Domain.Big<Term.Box> boxes = Term.Box.toBigDomain(subdomain);
-			return Domains.Union(integers, vars, borrows, derefs, boxes);
-		}
-	}
+//	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Big<Term> expressions,
+//			Domain.Small<String> declared, Domain.Small<String> undeclared) {
+//		// Let statements can only be constructed from undeclared variables
+//		Domain.Big<Term.Let> lets = Term.Let.toBigDomain(undeclared, expressions);
+//		// Assignments can only use declared variables
+//		Domain.Big<Term.Assignment> assigns = Term.Assignment.toBigDomain(declared, expressions);
+//		// Indirect assignments can only use declared variables
+//		Domain.Big<Term.IndirectAssignment> indirects = Term.IndirectAssignment.toBigDomain(declared, expressions);
+//		if (depth == 0) {
+//			return Domains.Union(lets, assigns, indirects);
+//		} else {
+//			// Determine lifetime for blocks at this level
+//			lifetime = lifetime.freshWithin();
+//			// Recursively construct subdomain generator
+//			Domain.Big<Term> subdomain = toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
+//			// Using this construct the block generator
+//			Domain.Big<Term.Block> blocks = Term.Block.toBigDomain(lifetime, 1, width, subdomain);
+//			// Done
+//			return Domains.Union(lets, assigns, indirects, blocks);
+//		}
+//	}
+//
+//	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> names) {
+//		Domain.Big<Value.Integer> integers = Value.Integer.toBigDomain(ints);
+//		Domain.Big<Term.Variable> vars = Term.Variable.toBigDomain(names);
+//		Domain.Big<Term.Borrow> borrows = Term.Borrow.toBigDomain(names);
+//		Domain.Big<Term.Dereference> derefs = Term.Dereference.toBigDomain(names);
+//		if (depth == 0) {
+//			return Domains.Union(integers, vars, borrows, derefs);
+//		} else {
+//			Domain.Big<Term> subdomain = toBigDomain(depth - 1, ints, names);
+//			Domain.Big<Term.Box> boxes = Term.Box.toBigDomain(subdomain);
+//			return Domains.Union(integers, vars, borrows, derefs, boxes);
+//		}
+//	}
 
 
 
@@ -1389,14 +1291,18 @@ public class Syntax {
 	 *
 	 */
 	public static class Lifetime {
+		private static int LIFETIME_COUNTER = 0;
+		private final int index;
 		private final Lifetime parent;
 
 		public Lifetime() {
 			this.parent = null;
+			this.index = LIFETIME_COUNTER++;
 		}
 
 		public Lifetime(Lifetime parent) {
 			this.parent = parent;
+			this.index = LIFETIME_COUNTER++;
 		}
 
 		/**
@@ -1443,7 +1349,7 @@ public class Syntax {
 
 		@Override
 		public String toString() {
-			return "l" + System.identityHashCode(this);
+			return "l" + index;
 		}
 	}
 

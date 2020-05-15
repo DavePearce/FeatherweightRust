@@ -49,6 +49,12 @@ public class CoreBorrowCheckTests {
 	// ==============================================================
 
 	@Test
+	public void test_00() throws IOException {
+		String input = "{ let mut x = 123; let mut y = &mut x; x = 1; }";
+		checkInvalid(input);
+	}
+
+	@Test
 	public void test_01() throws IOException {
 		String input = "{ x = 123; }";
 		checkInvalid(input);
@@ -108,7 +114,6 @@ public class CoreBorrowCheckTests {
 
 	@Test
 	public void test_25() throws IOException {
-		// Requires Non-Lexical Lifetimes
 		String input = "{ let mut x = 123; let mut y = &x; let mut z = &mut x; }";
 		checkInvalid(input);
 	}
@@ -255,7 +260,7 @@ public class CoreBorrowCheckTests {
 	@Test
 	public void test_62() throws IOException {
 		// Moved out of box
-		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; let mut w = *y }";
+		String input = "{ let mut x = 123; let mut y = box &mut x; let mut z = *y; let mut w = *y; }";
 		checkInvalid(input);
 	}
 
@@ -349,6 +354,25 @@ public class CoreBorrowCheckTests {
 				"let mut q = box by; " +
 				"*q = bx;" +
 				"}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_70() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; let mut w = &y; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_71() throws IOException {
+		String input = "{ let mut x = 123; let mut y = &x; let mut z = &mut y; **z = 1; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_72() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 123; let mut y = &x1; let mut z = &mut y; *z = &mut x2; }";
 		checkInvalid(input);
 	}
 

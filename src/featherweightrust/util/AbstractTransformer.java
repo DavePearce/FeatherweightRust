@@ -39,12 +39,8 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 			return (Pair<T, S>) apply(state, lifetime, (Term.Let) term);
 		case Syntax.TERM_assignment:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Assignment) term);
-		case Syntax.TERM_indirectassignment:
-			return (Pair<T, S>) apply(state, lifetime, (Term.IndirectAssignment) term);
 		case Syntax.TERM_block:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Block) term);
-		case Syntax.TERM_var:
-			return (Pair<T, S>) apply(state, lifetime, (Term.Variable) term);
 		case Syntax.TERM_borrow:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Borrow) term);
 		case Syntax.TERM_dereference:
@@ -90,16 +86,6 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Block term);
 
 	/**
-	 * Apply this transformer to a given indirect assignment statement.
-	 *
-	 * @param state    The current state (e.g. typing or runtime store)
-	 * @param lifetime The enclosing lifetime of this term
-	 * @param stmt     The term being transformed.
-	 * @return
-	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.IndirectAssignment term);
-
-	/**
 	 * Apply this transformer to a given let statement.
 	 *
 	 * @param state    The current state (e.g. typing or runtime store)
@@ -138,16 +124,6 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @return
 	 */
 	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Box term);
-
-	/**
-	 * Apply this transformer to a given variable access expression.
-	 *
-	 * @param state    The current state (e.g. typing or runtime store)
-	 * @param lifetime The enclosing lifetime of this term
-	 * @param stmt     The term being transformed.
-	 * @return
-	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Variable term);
 
 	/**
 	 * Apply this transformer to the unit constant.

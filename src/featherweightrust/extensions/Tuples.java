@@ -303,6 +303,8 @@ public class Tuples {
 
 	public static class Semantics extends OperationalSemantics.Extension {
 
+		// FIXME: dropping tuple values doesn't recursively drop boxes.
+
 		@Override
 		public Pair<State, Term> apply(State S, Lifetime l, Term term) {
 			switch(term.getOpcode()) {

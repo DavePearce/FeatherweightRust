@@ -327,6 +327,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
+		System.out.println("WRITING: " + lv + "=" + T1 + " in " + R1);
 		Path path = lv.path();
 		// Extract target cell
 		Cell Cx = R1.get(lv.name());
@@ -342,6 +343,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Check compatibility
 		check(compatible(R1, T3, T1, R1), INCOMPATIBLE_TYPE, lv);
 		// Apply write
+		System.out.println("WRITING(2): " + path.toString(T2.toString()) + "=" + T1);
 		Pair<Environment, Type> p = write(R1, T2, path, 0, T1, strong);
 		Environment R2 = p.first();
 		Type T4 = p.second();
@@ -381,14 +383,16 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			LVal y = ys[j];
 			Cell Cy = R.get(y.name());
 			Type Ty = typeOf(Rn, y);
+			System.out.println("IN: " + y + " : " + T2);
 			// NOTE: this prohibits a strong update in certain cases where it may, in fact,
 			// be possible to do this. It's not clear to me that this is always necessary or
 			// even desirable. However, at the time of writing, this mimics the Rust
 			// compiler.
-			Pair<Environment,Type> r = write(Rn, Ty, p, i + 1, T2, false);
-			Rn = r.first();
-			// Update environment
-			Rn = Rn.put(y.name(), r.second(), Cy.lifetime());
+//			Pair<Environment,Type> r = write(Rn, Ty, p, i + 1, T2, false);
+//			Rn = r.first();
+//			// Update environment
+//			Rn = Rn.put(y.name(), r.second(), Cy.lifetime());
+			Rn = write(R, y, T2, false);
 		}
 		//
 		return new Pair<>(Rn, T1);
@@ -448,6 +452,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	public boolean available(Environment R, LVal lv, boolean mut) {
+		System.out.println("CHECKING AVAILABLE: " + lv + " in " + R);
 		Cell Cx = R.get(lv.name());
 		// NOTE: can assume here that declaration check on lv.name() has already
 		// occurred.  Hence, Cx != null

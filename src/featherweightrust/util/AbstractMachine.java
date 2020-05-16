@@ -18,6 +18,7 @@
 package featherweightrust.util;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -159,7 +160,7 @@ public abstract class AbstractMachine {
 		 * @param lifetime
 		 * @return
 		 */
-		public State drop(Set<Location> locations) {
+		public State drop(BitSet locations) {
 			return new State(stack, heap.drop(locations));
 		}
 
@@ -169,7 +170,7 @@ public abstract class AbstractMachine {
 		 * @param lifetime
 		 * @return
 		 */
-		public Set<Location> findAll(Lifetime lifetime) {
+		public BitSet findAll(Lifetime lifetime) {
 			return heap.findAll(lifetime);
 		}
 
@@ -324,10 +325,10 @@ public abstract class AbstractMachine {
 		 * @param location
 		 * @return
 		 */
-		public Store drop(Set<Location> locations) {
+		public Store drop(BitSet locations) {
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
-			for(Location location : locations) {
-				internalDrop(ncells,location);
+			for (int i = locations.nextSetBit(0); i != -1; i = locations.nextSetBit(i + 1)) {
+				internalDrop(ncells, i);
 			}
 			//
 			return new Store(ncells);
@@ -350,14 +351,21 @@ public abstract class AbstractMachine {
 				// heap location, we'll need to drop it.
 				Location location = (Location) v;
 				// Check whether reference location is heap (i.e. owned)
-				if (cells[location.getAddress()].hasGlobalLifetime()) {
+				if (location.owner() && cells[location.getAddress()].hasGlobalLifetime()) {
 					// Prepare for the drop by copying all cells
 					Cell[] ncells = Arrays.copyOf(cells, cells.length);
 					// Perform the physical drop
-					internalDrop(ncells, location);
+					internalDrop(ncells, location.getAddress());
 					// Done
 					return new Store(ncells);
 				}
+			} else if(v != null && v.size() > 0) {
+				Store S = this;
+				// Compound values can contain other values.
+				for(int i=0;i!=v.size();++i) {
+					S = S.drop(v.get(i));
+				}
+				return S;
 			}
 			return this;
 		}
@@ -368,13 +376,14 @@ public abstract class AbstractMachine {
 		 * @param lifetime
 		 * @return
 		 */
-		public Set<Location> findAll(Lifetime lifetime) {
-			HashSet<Location> matches = new HashSet<>();
+		public BitSet findAll(Lifetime lifetime) {
+			BitSet matches = new BitSet();
 			// Action the drop
 			for (int i = 0; i != cells.length; ++i) {
 				Cell ncell = cells[i];
 				if (ncell != null && ncell.lifetime() == lifetime) {
-					matches.add(new Location(i));
+					// Mark address
+					matches.set(i);
 				}
 			}
 			// Convert results to array
@@ -397,13 +406,13 @@ public abstract class AbstractMachine {
 		 * @param l
 		 * @return
 		 */
-		private static void internalDrop(Cell[] ncells, Location location) {
+		private static void internalDrop(Cell[] ncells, int address) {
 			// Locate cell being dropped
-			Cell ncell = ncells[location.getAddress()];
+			Cell ncell = ncells[address];
 			// Recursively drop owned locations
 			finalise(ncells, ncell);
 			// Physically drop the location
-			ncells[location.getAddress()] = null;
+			ncells[address] = null;
 		}
 
 		/**
@@ -418,11 +427,16 @@ public abstract class AbstractMachine {
 			Value v = cell.value;
 			if(v instanceof Value.Location) {
 				Value.Location loc = (Value.Location) v;
-				Cell lcell = cells[loc.getAddress()];
-				if (lcell != null && lcell.hasGlobalLifetime()) {
-					cells[loc.getAddress()] = null;
-					finalise(cells, lcell);
+				// Check whether is an owner reference
+				if(loc.owner()) {
+					Cell lcell = cells[loc.getAddress()];
+					if (lcell != null && lcell.hasGlobalLifetime()) {
+						cells[loc.getAddress()] = null;
+						finalise(cells, lcell);
+					}
 				}
+			} else if(v != null && v.size() > 0) {
+				throw new RuntimeException("implement me");
 			}
 		}
 	}

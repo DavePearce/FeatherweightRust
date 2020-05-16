@@ -324,6 +324,22 @@ public class Syntax {
 		public static Unit Unit = new Unit();
 
 		/**
+		 * Get the width of this value. For compound values, this determines the number
+		 * of values contained within at the first level.
+		 *
+		 * @return
+		 */
+		public int size();
+
+		/**
+		 * Get the ith value contained within at the first level.
+		 *
+		 * @param i
+		 * @return
+		 */
+		public Value get(int i);
+
+		/**
 		 * Read the value at a given path within this value. If path is empty, then that
 		 * identifies this value to be returned. For example, given a tuple
 		 * <code>(1,2)</code>, reading the value at path <code>1</code> gives
@@ -358,6 +374,16 @@ public class Syntax {
 		public class Atom extends AbstractTerm implements Value {
 			public Atom(int opcode, Attribute... attributes) {
 				super(opcode, attributes);
+			}
+
+			@Override
+			public int size() {
+				return 0;
+			}
+
+			@Override
+			public Value get(int i) {
+				throw new IllegalArgumentException("cannot subdivide atom");
 			}
 
 			@Override
@@ -443,14 +469,16 @@ public class Syntax {
 		 *
 		 */
 		public class Location extends Atom {
+			private static final int[] OWNER = new int[0];
+			private static final int[] OTHER = new int[0];
 			private final int address;
 			private final int[] path;
 
 			public Location(int address, Attribute... attributes) {
-				this(address, new int[0], attributes);
+				this(address, OWNER, attributes);
 			}
 
-			public Location(int address, int[] path, Attribute... attributes) {
+			private Location(int address, int[] path, Attribute... attributes) {
 				super(TERM_location, attributes);
 				this.address = address;
 				this.path = path;
@@ -467,6 +495,29 @@ public class Syntax {
 
 			public int[] getPath() {
 				return path;
+			}
+
+			/**
+			 * Determine the ownership status of this location. Specifically, whether or not
+			 * this reference is responsible for deallocating its location.
+			 *
+			 * @return
+			 */
+			public boolean owner() {
+				return path == OWNER;
+			}
+
+			/**
+			 * Obtain a reference which is not an owner to which it refers.
+			 *
+			 * @return
+			 */
+			public Location reference() {
+				if (path == OWNER) {
+					return new Location(address, OTHER);
+				} else {
+					return this;
+				}
 			}
 
 			/**

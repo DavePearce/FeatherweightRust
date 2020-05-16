@@ -18,6 +18,7 @@
 package featherweightrust.core;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
@@ -50,6 +51,13 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		for(Extension e : extensions) {
 			e.self = this;
 		}
+	}
+
+	@Override
+	public Pair<State, Term> apply(State S, Lifetime l, Term t) {
+		Pair<State,Term> p = super.apply(S,l,t);
+		System.out.println("(" + S + "," + t + ") ==> " + p);
+		return p;
 	}
 
 	/**
@@ -100,8 +108,10 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		if (lx == null) {
 			throw new RuntimeException("invalid path \"" + s + "\"");
 		}
-		// Done
-		return new Pair<>(S, lx);
+		// NOTE: since this is a borrow, must obtain a reference to the location (i.e.
+		// something which is not also an owner of that location). Otherwise, we risk
+		// this borrow resulting in the location to which it refers being dropped.
+		return new Pair<>(S, lx.reference());
 	}
 
 	/**
@@ -144,7 +154,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		// drop all bindings created within block
 		State S2 = new State(outerFrame, S1.store());
 		// Identify locations allocated in this lifetime
-		Set<Location> phi = S2.findAll(b.lifetime());
+		BitSet phi = S2.findAll(b.lifetime());
+		//
+		System.out.println("DROPPING: " + phi);
 		// drop all matching locations
 		State S3 = S2.drop(phi);
 		//

@@ -11,7 +11,7 @@ import featherweightrust.extensions.Tuples;
 
 import static featherweightrust.core.Syntax.Value.Unit;
 
-public class PairBorrowCheckTests {
+public class TupleBorrowCheckTests {
 	@Test
 	public void test_01() throws IOException {
 		String input = "{ let mut x = (); }";
@@ -166,9 +166,56 @@ public class PairBorrowCheckTests {
 		checkInvalid(input);
 	}
 
-	public static void checkInvalid(String input) throws IOException {
-		CoreBorrowCheckTests.checkInvalid(input, new BorrowChecker(input, PAIR_TYPING));
+	@Test
+	public void test_33() throws IOException {
+		String input = "{ let mut x = (0,0); x.0 = (1,2); }";
+		checkInvalid(input);
 	}
 
-	public static final BorrowChecker.Extension PAIR_TYPING = new Tuples.Typing();
+	@Test
+	public void test_34() throws IOException {
+		String input = "{ let mut x = (0,0); x.1 = (1,2); }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_35() throws IOException {
+		String input = "{ let mut x = (0,0); let mut y = &mut x.0; x.0 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_36() throws IOException {
+		String input = "{ let mut x = (0,0); let mut y = &mut x.1; x.1 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_37() throws IOException {
+		String input = "{ let mut x = (box 0, box 0); let mut y = x.0; let mut z = &x; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_38() throws IOException {
+		String input = "{ let mut x = (box 0, box 0); let mut y = 1; x.0 = &y; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_39() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = x.2; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_40() throws IOException {
+		String input = "{ let mut x = (1,2,3); let mut y = x.3; }";
+		checkInvalid(input);
+	}
+
+	public static void checkInvalid(String input) throws IOException {
+		CoreBorrowCheckTests.checkInvalid(input, new Tuples.Checker(input));
+	}
+
 }

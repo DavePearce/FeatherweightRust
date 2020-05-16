@@ -131,36 +131,36 @@ public class ControlFlow {
 			}
 		}
 
-		private Pair<State, Term> apply(State S, Lifetime l, Syntax.IfElse t1) {
-			Term lhs = t1.leftHandSide();
-			Term rhs = t1.rightHandSide();
+		private Pair<State, Term> apply(State S1, Lifetime l, Syntax.IfElse t1) {
+			final Term lhs = t1.leftHandSide();
+			final Term rhs = t1.rightHandSide();
 			//
 			if (lhs instanceof Value && rhs instanceof Value) {
 				boolean eq = lhs.equals(rhs);
 				// Both lhs and rhs fully reduced
 				if (t1.condition() == eq) {
-					return new Pair<>(S, t1.trueBlock());
+					return new Pair<>(S1, t1.trueBlock());
 				} else {
-					return new Pair<>(S, t1.falseBlock());
+					return new Pair<>(S1, t1.falseBlock());
 				}
 			} else if (lhs instanceof Value) {
-				// lhs fully reduced but rhs not, so reduce it
-				Term.Variable rv = (Term.Variable) rhs;
-				// Read lhs from store
-				Value v = S.read(S.locate(rv.name()));
-				// Read location from store
-				Term t2 = new Syntax.IfElse(t1.eq, lhs, v, t1.trueBlock(), t1.falseBlock(), t1.attributes());
+				// Statement not ready to be reduced yet
+				Pair<State, Term> p = self.apply(S1, l, rhs);
+				State S2 = p.first();
+				Term _rhs = p.second();
+				// Construct term reduced by one step
+				Term t2 = new Syntax.IfElse(t1.eq, lhs, _rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
 				// Done
-				return new Pair<State, Term>(S, t2);
+				return new Pair<State, Term>(S2, t2);
 			} else {
-				// lhs not fully reduced, so reduce it
-				Term.Variable lv = (Term.Variable) lhs;
-				// Read lhs from store
-				Value v = S.read(S.locate(lv.name()));
-				// Construct reduced term
-				Term t2 = new Syntax.IfElse(t1.eq, v, rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
+				// Statement not ready to be reduced yet
+				Pair<State, Term> p = self.apply(S1, l, lhs);
+				State S2 = p.first();
+				Term _lhs = p.second();
+				// Construct term reduced by one step
+				Term t2 = new Syntax.IfElse(t1.eq, _lhs, rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
 				// Done
-				return new Pair<State, Term>(S, t2);
+				return new Pair<State, Term>(S2, t2);
 			}
 		}
 	}
@@ -182,7 +182,7 @@ public class ControlFlow {
 			// Type right-hand side
 			Type Ty = self.apply(R1, l, t.rightHandSide()).second();
 			// Check operands are compatible
-			self.check(Tx.compatible(R1, Ty, R1), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(self.compatible(R1, Tx, Ty, R1), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Type true and false blocks
 			Pair<Environment, Type> pTrue = self.apply(R1, l, t.trueBlock());
 			Pair<Environment, Type> pFalse = self.apply(R1, l, t.falseBlock());
@@ -192,7 +192,7 @@ public class ControlFlow {
 			Type T2 = pTrue.second();
 			Type T3 = pFalse.second();
 			// Check return types are compatible
-			self.check(T2.compatible(R2, T3, R3), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(self.compatible(R2, T2, T3, R3), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Join environment and types from both branches
 			return new Pair<>(join(R2, R3, t), T2.union(T3));
 		}
@@ -209,7 +209,7 @@ public class ControlFlow {
 				// Sanity check lifetimes match
 				self.check(Cl.lifetime().equals(Cr.lifetime()), INVALID_ENVIRONMENT_CELLS, e);
 				// Check types are compatible
-				self.check(Cl.type().compatible(lhs, Cr.type(), rhs), BorrowChecker.INCOMPATIBLE_TYPE, e);
+				self.check(self.compatible(lhs, Cl.type(), Cr.type(), rhs), BorrowChecker.INCOMPATIBLE_TYPE, e);
 				// Determine joined type
 				Type type = Cl.type().union(Cr.type());
 				// Done

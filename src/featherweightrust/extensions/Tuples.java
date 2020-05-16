@@ -1,14 +1,12 @@
 package featherweightrust.extensions;
 
 import featherweightrust.core.BorrowChecker;
-import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
-import static featherweightrust.core.BorrowChecker.mutBorrowed;
 
 import java.util.Arrays;
 
-import static featherweightrust.core.BorrowChecker.borrowed;
 import featherweightrust.core.OperationalSemantics;
+import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Path.Element;
@@ -18,11 +16,12 @@ import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Location;
 import featherweightrust.util.Pair;
+import featherweightrust.util.SyntaxError;
 import featherweightrust.util.AbstractMachine.State;
+import featherweightrust.util.AbstractMachine.Store;
 
 public class Tuples {
 	public final static int TERM_tuple = 30;
-	public final static int TERM_tupleaccess = 31;
 
 	public final static String EXPECTED_TUPLE = "expected tuple type";
 	public final static String INVALID_TUPLE_ACCESS = "invalid tuple accessor";
@@ -100,59 +99,36 @@ public class Tuples {
 			}
 
 			@Override
-			public Value read(int index, Path path) {
+			public Value read(int[] path, int index) {
 				// Corresponding element should be an index
-				if(index == path.size()) {
+				if(index == path.length) {
 					return this;
 				} else {
 					// Extract element index being read
-					int i = ((Index) path.get(index)).index;
+					int i = path[index];
 					// Select element
 					Value t = (Value) terms[i];
 					// Read element
-					return t.read(index + 1, path);
+					return t.read(path, index + 1);
 				}
 			}
 
 			@Override
-			public Value write(int index, Path path, Value value) {
-				if (index == path.size()) {
+			public Value write(int[] path, int index, Value value) {
+				if (index == path.length) {
 					return value;
 				} else {
 					//
 					Term[] nterms = Arrays.copyOf(terms, terms.length);
 					// Extract element index being written
-					int i = ((Index) path.get(index)).index;
+					int i = path[index];
 					// Select element
 					Value n = (Value) terms[i];
 					// Write updated element
-					nterms[i] = (n == null) ? value : n.write(index + 1, path, value);
+					nterms[i] = (n == null) ? value : n.write(path, index + 1, value);
+					//
 					return new TupleValue(nterms);
 				}
-			}
-		}
-
-		public static class TupleAccess extends AbstractTerm {
-			private final Term source;
-			private final Path path;
-
-			public TupleAccess(Term source, Path path, Attribute... attributes) {
-				super(TERM_tupleaccess,attributes);
-				this.source = source;
-				this.path = path;
-			}
-
-			public Term source() {
-				return source;
-			}
-
-			public Path path() {
-				return path;
-			}
-
-			@Override
-			public String toString() {
-				return source.toString() + path;
 			}
 		}
 
@@ -185,48 +161,6 @@ public class Tuples {
 			}
 
 			@Override
-			public boolean borrowed(String name, Path path, boolean mut) {
-				for(int i=0;i!=types.length;++i) {
-					if(types[i].borrowed(name, path, mut)) {
-						return true;
-					}
-				}
-				return false;
-			}
-
-			@Override
-			public Type read(int index, Path path) {
-				// Corresponding element should be an index
-				if(index == path.size()) {
-					return this;
-				} else {
-					// Extract element index being read
-					int i = ((Index) path.get(index)).index;
-					// Select element
-					Type t = types[i];
-					// Read element
-					return t.read(index + 1, path);
-				}
-			}
-
-			@Override
-			public Type write(int index, Path path, Type type) {
-				if (index == path.size()) {
-					return type;
-				} else {
-					Type[] ntypes = Arrays.copyOf(types, types.length);
-					// Extract element index being written
-					int i = ((Index) path.get(index)).index;
-					// Select element
-					Type t = types[i];
-					// write element
-					ntypes[i] = t.write(index + 1, path, type);
-					// Done
-					return new TupleType(ntypes);
-				}
-			}
-
-			@Override
 			public boolean copyable() {
 				for(int i=0;i!=types.length;++i) {
 					if(!types[i].copyable()) {
@@ -247,24 +181,23 @@ public class Tuples {
 			}
 
 			@Override
-			public boolean compatible(Environment R1, Type T2, Environment R2) {
-				if(T2 instanceof TupleType) {
-					TupleType tp = (TupleType) T2;
-					if(types.length != tp.types.length) {
-						return false;
-					} else {
-						for(int i=0;i!=types.length;++i) {
-							Type ith = types[i];
-							Type tp_ith = tp.types[i];
-							if(!ith.compatible(R1,tp_ith,R2)) {
-								return false;
-							}
-						}
+			public boolean prohibitsReading(LVal lv) {
+				for(int i=0;i!=types.length;++i) {
+					if(types[i].prohibitsReading(lv)) {
+						return true;
 					}
-					return true;
-				} else {
-					return false;
 				}
+				return false;
+			}
+
+			@Override
+			public boolean prohibitsWriting(LVal lv) {
+				for(int i=0;i!=types.length;++i) {
+					if(types[i].prohibitsWriting(lv)) {
+						return true;
+					}
+				}
+				return false;
 			}
 
 			@Override
@@ -354,6 +287,16 @@ public class Tuples {
 			public String toString() {
 				return Integer.toString(index);
 			}
+
+			@Override
+			public Location apply(Store store, Location loc) {
+				return loc.at(index);
+			}
+
+			@Override
+			public String toString(String src) {
+				return src + "." + index;
+			}
 		}
 	}
 
@@ -365,8 +308,6 @@ public class Tuples {
 			switch(term.getOpcode()) {
 			case TERM_tuple:
 				return apply(S, l, ((Syntax.TupleTerm<?>) term));
-			case TERM_tupleaccess:
-				return apply(S, l, ((Syntax.TupleAccess) term));
 			default:
 				return null;
 			}
@@ -391,22 +332,6 @@ public class Tuples {
 			}
 		}
 
-		private Pair<State, Term> apply(State S, Lifetime l, Syntax.TupleAccess t) {
-			Term src = t.source;
-			//
-			if (src instanceof Value) {
-				Syntax.TupleValue v = (Syntax.TupleValue) src;
-				return new Pair<>(S, v.read(0, t.path));
-			} else {
-				Term.Variable x = (Term.Variable) src;
-				// Continue reducing operand.
-				Location lx = S.locate(x.name());
-				// Read value held by x
-				Value v = S.read(lx);
-				// Done
-				return new Pair<>(S, new Syntax.TupleAccess(v, t.path));
-			}
-		}
 	}
 
 	public static class Typing extends BorrowChecker.Extension {
@@ -416,8 +341,6 @@ public class Tuples {
 			switch(term.getOpcode()) {
 			case TERM_tuple:
 				return apply(state, lifetime, ((Syntax.TupleTerm<?>) term));
-			case TERM_tupleaccess:
-				return apply(state, lifetime, ((Syntax.TupleAccess) term));
 			default:
 				return null;
 			}
@@ -445,40 +368,110 @@ public class Tuples {
 			// Done
 			return new Pair<>(R2, new Syntax.TupleType(types));
 		}
+	}
 
-		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.TupleAccess t) {
-			// Descructure term
-			Term.Variable x = (Term.Variable) t.source();
-			Path p = t.path();
-			//
-			Cell Cx = R1.get(x.name());
-			// Check variable is declared
-			self.check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, t);
-			// Destructure cell
-			Type Tx = Cx.type();
-			// Check path component not moved
-			self.check(Tx.read(0, t.path()) != null, BorrowChecker.VARIABLE_MOVED, t);
-			// Check source is tuple
-			self.check(Tx instanceof Syntax.TupleType, EXPECTED_TUPLE, t);
-			// Check path not moved
-			Type T2 = Tx.read(0, p);
-			self.check(T2.moveable(), BorrowChecker.VARIABLE_MOVED, t);
-			// Determine if copy or move
-			if(T2.copyable()) {
-				// Check slice not mutably borrowed
-				self.check(!mutBorrowed(R1, x.name(), p), BorrowChecker.VARIABLE_BORROWED, t);
-				//
-				return new Pair<>(R1, T2);
-			} else {
-				// Check slice not borrowed at all
-				self.check(!borrowed(R1, x.name(), p), BorrowChecker.VARIABLE_BORROWED, t);
-				// Implement destructive update
-				Environment R2 = R1.put(x.name(), Tx.write(0, p, T2.move()), Cx.lifetime());
-				// Done
-				return new Pair<>(R2, T2);
-			}
+	public static class Checker extends BorrowChecker {
 
+		public Checker(String sourcefile) {
+			super(sourcefile, TYPING);
 		}
+
+		@Override
+		public Type move(Type T, Path p, int i) {
+			if (i < p.size() && T instanceof Syntax.TupleType) {
+				Path.Element ith = p.get(i);
+				if (ith instanceof Syntax.Index) {
+					Syntax.TupleType _T = (Syntax.TupleType) T;
+					Type[] ts = _T.types;
+					int index = ((Syntax.Index) p.get(i)).index;
+					if (index < ts.length) {
+						ts = Arrays.copyOf(ts, ts.length);
+						ts[index] = move(ts[index], p, i + 1);
+						return new Syntax.TupleType(ts);
+					}
+				}
+				syntaxError("Invalid tuple access \"" + ith.toString(T.toString()) + "\"", null);
+			}
+			// Default fallback
+			return super.move(T, p, i);
+		}
+
+		@Override
+		public Pair<Environment, Type> write(Environment R, Type T1, Path p, int i, Type T2, boolean strong) {
+			if (i < p.size() && T1 instanceof Syntax.TupleType) {
+				Path.Element ith = p.get(i);
+				if (ith instanceof Syntax.Index) {
+					Syntax.TupleType _T1 = (Syntax.TupleType) T1;
+					Type[] ts = _T1.types;
+					int index = ((Syntax.Index) p.get(i)).index;
+					if (index < ts.length) {
+						ts = Arrays.copyOf(ts, ts.length);
+						Pair<Environment, Type> r = write(R, ts[i], p, i + 1, T2, strong);
+						ts[index] = r.second();;
+						return new Pair<>(r.first(), new Syntax.TupleType(ts));
+					}
+				}
+				syntaxError("Invalid tuple access \"" + ith.toString(T1.toString()) + "\"", null);
+			}
+			return super.write(R, T1, p, i, T2, strong);
+		}
+
+		@Override
+		public boolean available(Environment R, Type T, Path p, int i, boolean mut) {
+			if (i < p.size() && T instanceof Syntax.TupleType) {
+				Path.Element ith = p.get(i);
+				if (ith instanceof Syntax.Index) {
+					Syntax.TupleType _T = (Syntax.TupleType) T;
+					Type[] ts = _T.types;
+					int index = ((Syntax.Index) p.get(i)).index;
+					if (index < ts.length) {
+						return available(R, ts[index], p, i + 1, mut);
+					}
+				}
+				syntaxError("Invalid tuple access \"" + ith.toString(T.toString()) + "\"", null);
+			}
+			// Default fallback
+			return super.available(R, T, p, i, mut);
+		}
+
+		@Override
+		public boolean compatible(Environment R1, Type T1, Type T2, Environment R2) {
+			if(T1 instanceof Syntax.TupleType && T2 instanceof Syntax.TupleType) {
+				Syntax.TupleType _T1 = (Syntax.TupleType) T1;
+				Syntax.TupleType _T2 = (Syntax.TupleType) T2;
+				if(_T1.types.length != _T2.types.length) {
+					return false;
+				} else {
+					for(int i=0;i!=_T1.types.length;++i) {
+						Type t1 = _T1.types[i];
+						Type t2 = _T2.types[i];
+						if(!compatible(R1,t1,t2,R2)) {
+							return false;
+						}
+					}
+				}
+				return true;
+			} else {
+				return super.compatible(R1, T1, T2, R2);
+			}
+		}
+
+		@Override
+		public Type typeOf(Environment env, Type type, Path.Element ith) {
+			if(ith instanceof Syntax.Index) {
+				int i = ((Syntax.Index) ith).index;
+				if(type instanceof Syntax.TupleType) {
+					Syntax.TupleType t = (Syntax.TupleType) type;
+					Type[] ts = t.types;
+					if(i < ts.length) {
+						return ts[i];
+					}
+				}
+				syntaxError("Invalid tuple access \"" + ith.toString(type.toString()) + "\"", null);
+			}
+			return super.typeOf(env, type, ith);
+		}
+
 	}
 
 	/**
@@ -514,4 +507,7 @@ public class Tuples {
 		}
 		return freshVars;
 	}
+
+	public static final BorrowChecker.Extension TYPING = new Typing();
+	public static final OperationalSemantics SEMANTICS = new OperationalSemantics(new Tuples.Semantics());
 }

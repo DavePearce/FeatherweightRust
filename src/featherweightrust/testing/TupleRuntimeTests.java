@@ -12,7 +12,7 @@ import featherweightrust.extensions.Tuples.Syntax;
 
 import static featherweightrust.core.Syntax.Value.Unit;
 
-public class PairRuntimeTests {
+public class TupleRuntimeTests {
 	private static Value.Integer One = new Value.Integer(1);
 	private static Value.Integer Two = new Value.Integer(2);
 	private static Value PairOneOne = new Syntax.TupleValue(One,One);
@@ -203,11 +203,83 @@ public class PairRuntimeTests {
 		check(input,Two);
 	}
 
-	public static void check(String input, Value output) throws IOException {
-		// Reuse existing checking facility
-		CoreRuntimeTests.check(input, output, PAIRS_SEMANTICS, new BorrowChecker(input, PAIRS_TYPING));
+	@Test
+	public void test_31() throws IOException {
+		String input = "{ let mut x = (0,2); x.0 = 1; x}";
+		check(input,PairOneTwo);
 	}
 
-	public static final BorrowChecker.Extension PAIRS_TYPING = new Tuples.Typing();
-	public static final OperationalSemantics PAIRS_SEMANTICS = new OperationalSemantics(new Tuples.Semantics());
+	@Test
+	public void test_32() throws IOException {
+		String input = "{ let mut x = (1,1); x.1 = 2; x}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_33() throws IOException {
+		String input = "{ let mut x = (0,0); x.0 = 1; x.1 = 2; x}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_34() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; *y}";
+		check(input,One);
+	}
+
+	@Test
+	public void test_35() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; *y}";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_36() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; let mut z = *y; x}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_37() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &mut x.0; x.1 }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_38() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &mut x.1; x.0 }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_39() throws IOException {
+		String input = "{ let mut x = (0,2); { let mut y = &mut x.0; *y = 1; } x }";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_40() throws IOException {
+		String input = "{ let mut x = (1,0); { let mut y = &mut x.1; *y = 2; } x }";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_41() throws IOException {
+		String input = "{ let mut x = (box 0,box 2); let mut y = x.0; x.0 = box 1; (*(x.0), *x.1) }";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_42() throws IOException {
+		String input = "{ let mut x = (box 1,box 1); let mut y = x.1; x.1 = box 2; (*x.0, *x.1) }";
+		check(input,PairOneTwo);
+	}
+
+
+	public static void check(String input, Value output) throws IOException {
+		// Reuse existing checking facility
+		CoreRuntimeTests.check(input, output, Tuples.SEMANTICS, new Tuples.Checker(input));
+	}
+
+
 }

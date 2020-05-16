@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Slice;
+import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
@@ -53,25 +53,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-Assign.
-	 */
-	public Pair<State, Term> reduceAssignment(State S1, Lifetime l, Term.Variable x, Value v2) {
-		// Extract the location being assigned
-		Location lx = S1.locate(x.name());
-		// Extract value being overwritten
-		Value v1 = S1.read(lx);
-		// Drop overwritten value (and any owned boxes)
-		State S2 = S1.write(lx, null).drop(v1);
-		// Perform the assignment
-		State S3 = S2.write(lx, v2);
-		// Done
-		return new Pair<>(S3, Unit);
-	}
-
-	/**
 	 * Rule R-Declare.
 	 */
-	public Pair<State, Term> reduceLet(State S1, Lifetime l, Term.Variable x, Value v) {
+	public Pair<State, Term> reduceLet(State S1, Lifetime l, String x, Value v) {
 		// Allocate new location
 		Pair<State, Location> pl = S1.allocate(l, v);
 		State S2 = pl.first();
@@ -85,31 +69,23 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-IndAssign.
 	 */
-	public Pair<State, Term> reduceIndirectAssignment(State S1, Lifetime l, Term.Variable x, Value v) {
-		// Extract the location of x
-		Location lx = S1.locate(x.name());
-		// Extract target location being assigned
-		Location ly = (Location) S1.read(lx);
-		// Extract value being overwritten
-		Value v1 = S1.read(ly);
-		// Drop any owned locations
-		State S2 = S1.write(ly, null).drop(v1);
-		// Perform the indirect assignment
-		State S3 = S2.write(ly, v);
+	public Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal lv, Value v) {
+		// Extract location, or throw exception otherwise
+		Location lx = lv.locate(S1);
+		// FIXME: drop?
+		State S2 = S1.write(lx, v);
 		// Done
-		return new Pair<>(S3, Unit);
+		return new Pair<>(S2, Unit);
 	}
 
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Term> reduceDereference(State S, Term.Variable x) {
+	public Pair<State, Term> reduceDereference(State S, LVal lv) {
 		// Extract location, or throw exception otherwise
-		Location lx = S.locate(x.name());
-		// Read contents of x (which should be location)
-		Location ly = (Location) S.read(lx);
+		Location lx = lv.locate(S);
 		// Read contents of cell at given location
-		Value v = S.read(ly);
+		Value v = S.read(lx);
 		//
 		return new Pair<>(S, v);
 	}
@@ -117,9 +93,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Term> reduceBorrow(State S, Slice s) {
+	public Pair<State, Term> reduceBorrow(State S, LVal s) {
 		// Locate operand
-		Location lx = S.locate(s);
+		Location lx = s.locate(S);
 		//
 		if (lx == null) {
 			throw new RuntimeException("invalid path \"" + s + "\"");
@@ -138,16 +114,6 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		Location ln = pl.second();
 		// Done
 		return new Pair<>(S2, ln);
-	}
-
-	/**
-	 * Rule R-Var.
-	 */
-	public Pair<State, Term> reduceVariable(State S, Term.Variable x) {
-		// Determine location bound by variable
-		Location lx = S.locate(x.name());
-		// Read location from store
-		return new Pair<>(S, S.read(lx));
 	}
 
 	@Override
@@ -186,21 +152,6 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Assignment s) {
-		if (s.rightOperand() instanceof Value) {
-			// Statement can be completely reduced
-			return reduceAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
-		} else {
-			// Statement not ready to be reduced yet
-			Pair<State, Term> rhs = apply(S1, l, s.rightOperand());
-			// Construct reduce statement
-			s = new Term.Assignment(s.leftOperand(), rhs.second(), s.attributes());
-			// Done
-			return new Pair<>(rhs.first(), s);
-		}
-	}
-
-	@Override
 	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Let s) {
 		if (s.initialiser() instanceof Value) {
 			// Statement can be completely reduced
@@ -217,15 +168,15 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S1, Lifetime l, Term.IndirectAssignment s) {
+	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Assignment s) {
 		if (s.rightOperand() instanceof Value) {
 			// Statement can be completely reduced
-			return reduceIndirectAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
+			return reduceAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
 		} else {
 			// Statement not ready to be reduced yet
 			Pair<State, Term> rhs = apply(S1, l, s.rightOperand());
 			// Construct reduce statement
-			s = new Term.IndirectAssignment(s.leftOperand(), rhs.second(), s.attributes());
+			s = new Term.Assignment(s.leftOperand(), rhs.second(), s.attributes());
 			// Done
 			return new Pair<>(rhs.first(), s);
 		}
@@ -254,11 +205,6 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 			// Done
 			return new Pair<>(rhs.first(), e);
 		}
-	}
-
-	@Override
-	final public Pair<State, Term> apply(State S, Lifetime l, Term.Variable e) {
-		return reduceVariable(S, e);
 	}
 
 	@Override

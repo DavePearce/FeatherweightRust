@@ -21,9 +21,11 @@ import java.util.*;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
-import featherweightrust.core.Syntax.Slice;
+import featherweightrust.core.Syntax;
+import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.extensions.ControlFlow;
 import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
@@ -105,10 +107,8 @@ public class Parser {
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
 			t = parseBox(context, lifetime);
-		} else if (lookahead instanceof Star) {
-			t = parseIndirectAssignmentOrDereference(context, lifetime);
 		} else {
-			t = parseAssignmentOrVariable(context, lifetime);
+			t = parseAssignmentOrDereference(context, lifetime);
 		}
 		// Done
 		return t;
@@ -119,32 +119,10 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Term parseIndirectAssignmentOrDereference(Context context, Lifetime lifetime) {
+	public Term parseAssignmentOrDereference(Context context, Lifetime lifetime) {
 		int start = index;
 		// Parse potential lhs
 		Term.Dereference lhs = parseDereference(context, lifetime);
-		//
-		if (index < tokens.size() && tokens.get(index) instanceof Equals && lhs.operand() instanceof Term.Variable) {
-			// This is an assignment statement
-			match("=");
-			Term rhs = parseTerm(context, lifetime);
-			match(";");
-			int end = index;
-			return new Term.IndirectAssignment((Term.Variable) lhs.operand(), rhs, sourceAttr(start, end - 1));
-		} else {
-			return lhs;
-		}
-	}
-
-	/**
-	 * Parse an assignment or variable load expression.
-	 *
-	 * @return
-	 */
-	public Term parseAssignmentOrVariable(Context context, Lifetime lifetime) {
-		int start = index;
-		// Parse potential lhs
-		Term.Variable lhs = parseVariable(context, lifetime);
 		//
 		if (index < tokens.size() && tokens.get(index) instanceof Equals) {
 			// This is an assignment statement
@@ -152,12 +130,7 @@ public class Parser {
 			Term rhs = parseTerm(context, lifetime);
 			match(";");
 			int end = index;
-			return new Term.Assignment((Term.Variable) lhs, rhs, sourceAttr(start, end - 1));
-		} else if (index < tokens.size() && tokens.get(index) instanceof Dot) {
-			// Parse path
-			Path path = parsePath(context, lifetime);
-			// Done
-			return new Tuples.Syntax.TupleAccess(lhs, path, sourceAttr(start, index - 1));
+			return new Term.Assignment(lhs.operand(), rhs, sourceAttr(start, end - 1));
 		} else {
 			return lhs;
 		}
@@ -177,8 +150,8 @@ public class Parser {
 		matchKeyword("let");
 		matchKeyword("mut");
 		// Match and declare variable name
-		Term.Variable variable = parseVariable(context, lifetime);
-		context.declare(variable.name());
+		String variable = matchIdentifier().text;
+		context.declare(variable);
 		// A variable declaration may optionally be assigned an initialiser
 		// expression.
 		match("=");
@@ -192,14 +165,12 @@ public class Parser {
 		int start = index;
 		matchKeyword("if");
 		// Match and declare lhs variable
-		Term.Variable lhs = parseVariable(context, lifetime);
-		context.declare(lhs.name());
+		Term lhs = parseTerm(context, lifetime);
 		Token t = match("==","!=");
 		// Determine condition
 		boolean eq = t.text.equals("==");
 		// Match and declare rhs variable
-		Term.Variable rhs = parseVariable(context, lifetime);
-		context.declare(rhs.name());
+		Term rhs = parseTerm(context, lifetime);
 		// Parse true block
 		Term.Block trueBlock = parseStatementBlock(context,lifetime);
 		// Match else
@@ -233,12 +204,6 @@ public class Parser {
 		}
 	}
 
-	public Term.Variable parseVariable(Context context, Lifetime lifetime) {
-		int start = index;
-		Identifier var = matchIdentifier();
-		return new Term.Variable(var.text, sourceAttr(start, index - 1));
-	}
-
 	public Term.Borrow parseBorrow(Context context, Lifetime lifetime) {
 		int start = index;
 		boolean mutable = false;
@@ -247,15 +212,14 @@ public class Parser {
 			matchKeyword("mut");
 			mutable = true;
 		}
-		Slice operand = parseSlice(context, lifetime);
+		LVal operand = parseLVal(context, lifetime);
 		//
 		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
 
 	public Term.Dereference parseDereference(Context context, Lifetime lifetime) {
 		int start = index;
-		match("*");
-		Term.Variable operand = parseVariable(context, lifetime);
+		LVal operand = parseLVal(context, lifetime);
 		//
 		return new Term.Dereference(operand, sourceAttr(start, index - 1));
 	}
@@ -267,20 +231,34 @@ public class Parser {
 		return new Term.Box(operand, sourceAttr(start, index - 1));
 	}
 
-	public Slice parseSlice(Context context, Lifetime lifetime) {
+	public LVal parseLVal(Context context, Lifetime lifetime) {
 		int start = index;
-		// Parse variable identifier
-		Identifier var = matchIdentifier();
-		// Path path
-		Path path = parsePath(context, lifetime);
-		// Done
-		return new Slice(var.text, path, sourceAttr(start, index - 1));
+		// Parse dereferences
+		if (index < tokens.size() && tokens.get(index) instanceof Star) {
+			match("*");
+			LVal lv;
+			if (index < tokens.size() && tokens.get(index) instanceof LeftBrace) {
+				match("(");
+				lv = parseLVal(context, lifetime);
+				match(")");
+			} else {
+				lv = parseLVal(context, lifetime);
+			}
+			// Done
+			return new LVal(lv.name(), append(lv.path(), Syntax.Path.DEREF), sourceAttr(start, index - 1));
+		} else {
+			// Parse variable identifier
+			Identifier var = matchIdentifier();
+			// Parse trailing dot accesses
+			Path post = parseDotPath(context,lifetime,start);
+			// Done
+			return new LVal(var.text, post, sourceAttr(start, index - 1));
+		}
 	}
 
-	public Path parsePath(Context context, Lifetime lifetime) {
+	public Path parseDotPath(Context context, Lifetime lifetime, int start) {
 		// Parse access path (if applicable)
 		if (index < tokens.size() && tokens.get(index) instanceof Dot) {
-			int start = index;
 			ArrayList<Path.Element> elements = new ArrayList<>();
 			do {
 				match(".");
@@ -291,7 +269,7 @@ public class Parser {
 			return new Path(es, sourceAttr(start, index - 1));
 		} else {
 			// Common case
-			return Path.EMPTY;
+			return new Path(sourceAttr(start, index - 1));
 		}
 	}
 
@@ -332,8 +310,6 @@ public class Parser {
 		return null;
 	}
 
-
-
 	@SuppressWarnings("unchecked")
 	private <T extends Token> T match(Class<T> c, String name) {
 		checkNotEof();
@@ -368,6 +344,39 @@ public class Parser {
 		}
 		syntaxError("keyword " + keyword + " expected.", t);
 		return null;
+	}
+
+	/**
+	 * Append two paths together.
+	 *
+	 * @param lhs
+	 * @param rhs
+	 * @return
+	 */
+	private static Path append(Path lhs, Path rhs) {
+		final int n = lhs.size();
+		final int m = rhs.size();
+		Element[] es = new Element[n + m];
+		for (int i = 0; i != n; ++i) {
+			es[i] = lhs.get(i);
+		}
+		for (int i = 0; i != m; ++i) {
+			es[n + i] = rhs.get(i);
+		}
+		Attribute.Source l = lhs.attribute(Attribute.Source.class);
+		Attribute.Source r = rhs.attribute(Attribute.Source.class);
+		return new Path(es, new Attribute.Source(Math.min(l.start, r.start), Math.max(l.end, r.end)));
+	}
+
+	private static Path append(Path lhs, Path.Element rhs) {
+		final int n = lhs.size();
+		Element[] es = new Element[n + 1];
+		for (int i = 0; i != n; ++i) {
+			es[i] = lhs.get(i);
+		}
+		es[n] = rhs;
+		Attribute.Source l = lhs.attribute(Attribute.Source.class);
+		return new Path(es, l);
 	}
 
 	private Attribute.Source sourceAttr(int start, int end) {

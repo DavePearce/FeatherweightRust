@@ -229,6 +229,40 @@ public class CoreRuntimeTests {
 	}
 
 	// ==============================================================
+	// Reborrowing Examples
+	// ==============================================================
+
+	@Test
+	public void test_70() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; { let mut z = &mut *y; *z = 123; } *y }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
+	public void test_71() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &*y; *y }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_72() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &*y; *z }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_73() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; let mut w = &mut *z; *w }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_74() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box x; { let mut z = &mut *y; *z = 123; } *y }";
+		check(input,OneTwoThree);
+	}
+
+	// ==============================================================
 	// Helpers
 	// ==============================================================
 

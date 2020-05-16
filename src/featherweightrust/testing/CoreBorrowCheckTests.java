@@ -375,6 +375,53 @@ public class CoreBorrowCheckTests {
 		String input = "{ let mut x1 = 1; let mut x2 = 123; let mut y = &x1; let mut z = &mut y; *z = &mut x2; }";
 		checkInvalid(input);
 	}
+	// ==============================================================
+	// Reborrowing examples
+	// ==============================================================
+
+	@Test
+	public void test_80() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_81() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &*y; *y = 2; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_82() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &*y; *z = 2; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_83() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; let mut w = &mut *y; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_84() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; let mut w = &mut *z; *y }";
+		checkInvalid(input);
+	}
+
+
+	@Test
+	public void test_85() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; let mut w = &mut *z; *z }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_86() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &*y; let mut w = &mut *z; }";
+		checkInvalid(input);
+	}
+
 
 	public static void checkInvalid(String input) throws IOException {
 		checkInvalid(input, new BorrowChecker(input));

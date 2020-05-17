@@ -12,6 +12,7 @@ import static featherweightrust.core.Syntax.Value.Unit;
 public class ControlFlowRuntimeTests {
 	private static Value.Integer One = new Value.Integer(1);
 	private static Value.Integer Two = new Value.Integer(2);
+	private static Value.Integer OneTwoThree = new Value.Integer(123);
 	@Test
 	public void test_01() throws IOException {
 		String input = "{ let mut x = 1; if x == x { 1 } else { 2 } }";
@@ -75,6 +76,54 @@ public class ControlFlowRuntimeTests {
 	@Test
 	public void test_12() throws IOException {
 		String input = "{ let mut x = 1; let mut p = &x; let mut q = &x; if *p == *q { 1 } else { 2 } }";
+		check(input, One);
+	}
+
+	@Test
+	public void test_13() throws IOException {
+		String input = "{ let mut x = box 1; if *x == *x { x = box 2; } else { x = box 3; } *x }";
+		check(input, Two);
+	}
+
+	@Test
+	public void test_14() throws IOException {
+		String input = "{ let mut x = box 3; if *x != *x { x = box 2; } else { x = box 1; } *x }";
+		check(input, One);
+	}
+
+	@Test
+	public void test_15() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; let mut p = &x; if x == x { p = &y; } else { } *p }";
+		check(input, Two);
+	}
+
+	@Test
+	public void test_16() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; let mut p = &x; if x != x { } else { p = &y; } *p }";
+		check(input, Two);
+	}
+
+	@Test
+	public void test_17() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; {let mut p = &mut x; if y == y { p = &mut y; } else { } *p = 123;} x }";
+		check(input, One);
+	}
+
+	@Test
+	public void test_18() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; {let mut p = &mut x; if y == y { p = &mut y; } else { } *p = 123;} y }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_19() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; {let mut p = &mut x; if y != y { p = &mut y; } else { } *p = 123;} x }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_20() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; {let mut p = &mut x; if y == y { p = &mut y; } else { } *p = 123;} x }";
 		check(input, One);
 	}
 

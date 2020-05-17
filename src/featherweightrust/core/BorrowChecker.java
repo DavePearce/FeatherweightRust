@@ -35,6 +35,7 @@ import featherweightrust.core.Syntax.Type.Box;
 import featherweightrust.core.Syntax.Type.Shadow;
 import featherweightrust.extensions.ControlFlow;
 import featherweightrust.util.AbstractTransformer;
+import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement;
 import featherweightrust.util.SyntaxError;
@@ -81,8 +82,16 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Pair<Environment,Type> p = super.apply(R1,l,t);
 		Environment R2 = p.first();
 		Type T = p.second();
-		System.out.println(R1 + " |- " + t + " : " + T + " -| " + R2);
-		System.out.println("---------------------------------------");
+		// Debugging output
+		final int CONSOLE_WIDTH = 120;
+		String m = " |- " + ArrayUtils.centerPad(40, t + " : " + T) + " -| ";
+		int lw = (CONSOLE_WIDTH - m.length()) / 2;
+		int rw = (CONSOLE_WIDTH - m.length() - lw);
+		String sl = ArrayUtils.leftPad(lw,R1.toString());
+		String sr = ArrayUtils.rightPad(rw,R2.toString());
+		String s = sl + m + sr;
+		System.out.println(s);
+		System.out.println(ArrayUtils.pad(s.length(), '='));
 		return p;
 	}
 
@@ -220,7 +229,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Location t) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Reference t) {
 		// NOTE: Safe since locations not part of source level syntax.
 		throw new UnsupportedOperationException();
 	}
@@ -327,7 +336,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
-		System.out.println("WRITING: " + lv + "=" + T1 + " in " + R1);
 		Path path = lv.path();
 		// Extract target cell
 		Cell Cx = R1.get(lv.name());
@@ -343,7 +351,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Check compatibility
 		check(compatible(R1, T3, T1, R1), INCOMPATIBLE_TYPE, lv);
 		// Apply write
-		System.out.println("WRITING(2): " + path.toString(T2.toString()) + "=" + T1);
 		Pair<Environment, Type> p = write(R1, T2, path, 0, T1, strong);
 		Environment R2 = p.first();
 		Type T4 = p.second();
@@ -452,7 +459,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	public boolean available(Environment R, LVal lv, boolean mut) {
-		System.out.println("CHECKING AVAILABLE: " + lv + " in " + R);
 		Cell Cx = R.get(lv.name());
 		// NOTE: can assume here that declaration check on lv.name() has already
 		// occurred.  Hence, Cx != null

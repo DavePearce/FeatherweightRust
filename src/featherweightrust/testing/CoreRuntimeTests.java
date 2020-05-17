@@ -141,6 +141,34 @@ public class CoreRuntimeTests {
 		check(input, OneTwoThree);
 	}
 
+
+	@Test
+	public void test_25() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; *z }";
+		check(input, OneTwoThree);
+	}
+
+
+	@Test
+	public void test_26() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = box box 1; **x = 123; **x }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
+	public void test_27() throws IOException {
+		String input = "{ let mut x = box 1; { let mut y = box 123; x = y; } *x }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
+	public void test_28() throws IOException {
+		String input = "{ let mut x = box box 123; let mut y = *x; *y }";
+		check(input,OneTwoThree);
+	}
+
 	// ==============================================================
 	// Immutable Borrowing Examples
 	// ==============================================================
@@ -203,28 +231,35 @@ public class CoreRuntimeTests {
 	@Test
 	public void test_64() throws IOException {
 		// Moved out of box
-		String input = "{ let mut x = 123; let mut y = box box x; let mut z = *y; *z }";
-		check(input, OneTwoThree);
-	}
-
-	@Test
-	public void test_65() throws IOException {
-		// Moved out of box
 		String input = "{ let mut x = 123; let mut y = &x; let mut z = &mut y; **z }";
 		check(input,OneTwoThree);
 	}
 
 	@Test
-	public void test_66() throws IOException {
+	public void test_65() throws IOException {
 		// Moved out of box
 		String input = "{ let mut x1 = 1; let mut x2 = 123; let mut y = &x1; let mut z = &mut y; *z = &x2; **z }";
 		check(input,OneTwoThree);
 	}
 
 	@Test
-	public void test_67() throws IOException {
+	public void test_66() throws IOException {
 		// Moved out of box
 		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut y; **z = 123; **z }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
+	public void test_67() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = 1; let mut y = box &mut x; **y = 123; **y }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
+	public void test_68() throws IOException {
+		// Moved out of box
+		String input = "{ let mut x = box 1; let mut y = &mut x; **y = 123; **y }";
 		check(input,OneTwoThree);
 	}
 

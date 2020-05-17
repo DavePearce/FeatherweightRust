@@ -30,7 +30,7 @@ import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
-import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.core.Syntax.Value.Reference;
 
 public abstract class AbstractMachine {
 
@@ -81,7 +81,7 @@ public abstract class AbstractMachine {
 		 * @param name
 		 * @return
 		 */
-		public Location locate(String name) {
+		public Reference locate(String name) {
 			return stack.get(name);
 		}
 
@@ -94,9 +94,9 @@ public abstract class AbstractMachine {
 		 *            Initial value to be used for allocated cell
 		 * @return
 		 */
-		public Pair<State, Location> allocate(Lifetime lifetime, Value v) {
+		public Pair<State, Reference> allocate(Lifetime lifetime, Value v) {
 			// Allocate cell in store
-			Pair<Store, Location> p = heap.allocate(lifetime, v);
+			Pair<Store, Reference> p = heap.allocate(lifetime, v);
 			// Return updated state
 			return new Pair<>(new State(stack, p.first()), p.second());
 		}
@@ -108,7 +108,7 @@ public abstract class AbstractMachine {
 		 *            Location to read
 		 * @return
 		 */
-		public Value read(Location location) {
+		public Value read(Reference location) {
 			return heap.read(location);
 		}
 
@@ -121,7 +121,7 @@ public abstract class AbstractMachine {
 		 *            Value to be written
 		 * @return
 		 */
-		public State write(Location location, Value value) {
+		public State write(Reference location, Value value) {
 			Store nstore = heap.write(location, value);
 			return new State(stack, nstore);
 		}
@@ -135,7 +135,7 @@ public abstract class AbstractMachine {
 		 *            Location to be bound
 		 * @return
 		 */
-		public State bind(String var, Location location) {
+		public State bind(String var, Reference location) {
 			StackFrame nstack = stack.bind(var, location);
 			return new State(nstack, heap);
 		}
@@ -151,6 +151,7 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public State drop(Value value) {
+			System.out.println("DROPPING: " + value);
 			return new State(stack, heap.drop(value));
 		}
 
@@ -161,6 +162,7 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public State drop(BitSet locations) {
+			System.out.println("DROPPING: " + locations);
 			return new State(stack, heap.drop(locations));
 		}
 
@@ -174,7 +176,7 @@ public abstract class AbstractMachine {
 			return heap.findAll(lifetime);
 		}
 
-		public void push(Map<String, Location> frame) {
+		public void push(Map<String, Reference> frame) {
 
 		}
 
@@ -191,7 +193,7 @@ public abstract class AbstractMachine {
 	 *
 	 */
 	public static class StackFrame {
-		private final HashMap<String, Location> locations;
+		private final HashMap<String, Reference> locations;
 
 		/**
 		 * Construct an initial (empty) call stack
@@ -205,7 +207,7 @@ public abstract class AbstractMachine {
 		 *
 		 * @param locations
 		 */
-		private StackFrame(HashMap<String, Location> locations) {
+		private StackFrame(HashMap<String, Reference> locations) {
 			this.locations = locations;
 		}
 
@@ -216,7 +218,7 @@ public abstract class AbstractMachine {
 		 *            Name of location to return
 		 * @return
 		 */
-		public Location get(String name) {
+		public Reference get(String name) {
 			return locations.get(name);
 		}
 
@@ -231,9 +233,9 @@ public abstract class AbstractMachine {
 		 *            Location to be bound
 		 * @return
 		 */
-		public StackFrame bind(String name, Location location) {
+		public StackFrame bind(String name, Reference location) {
 			// Clone the locations map in order to update it
-			HashMap<String, Location> nlocations = new HashMap<>(locations);
+			HashMap<String, Reference> nlocations = new HashMap<>(locations);
 			// Update new mapping
 			nlocations.put(name, location);
 			//
@@ -268,13 +270,13 @@ public abstract class AbstractMachine {
 		 *
 		 * @return
 		 */
-		public Pair<Store, Location> allocate(Lifetime lifetime, Value v) {
+		public Pair<Store, Reference> allocate(Lifetime lifetime, Value v) {
 			// Create space for new cell at end of array
 			Cell[] ncells = Arrays.copyOf(cells, cells.length + 1);
 			// Create new cell using given contents
 			ncells[cells.length] = new Cell(lifetime, v);
 			// Return updated store and location
-			return new Pair<>(new Store(ncells), new Location(cells.length));
+			return new Pair<>(new Store(ncells), new Reference(cells.length));
 		}
 
 		/**
@@ -284,7 +286,7 @@ public abstract class AbstractMachine {
 		 * @param location
 		 * @return
 		 */
-		public Value read(Location location) {
+		public Value read(Reference location) {
 			int address = location.getAddress();
 			int[] path = location.getPath();
 			Cell cell = cells[address];
@@ -301,7 +303,7 @@ public abstract class AbstractMachine {
 		 * @param location
 		 * @return
 		 */
-		public Store write(Location location, Value value) {
+		public Store write(Reference location, Value value) {
 			int address = location.getAddress();
 			int[] path = location.getPath();
 			// Read cell from given base address
@@ -328,9 +330,11 @@ public abstract class AbstractMachine {
 		public Store drop(BitSet locations) {
 			Cell[] ncells = Arrays.copyOf(cells, cells.length);
 			for (int i = locations.nextSetBit(0); i != -1; i = locations.nextSetBit(i + 1)) {
-				internalDrop(ncells, i);
+				destroy(ncells, i);
 			}
-			//
+			// Check the heap invariant still holds!
+			assert heapInvariant(ncells);
+			// Done
 			return new Store(ncells);
 		}
 
@@ -346,26 +350,15 @@ public abstract class AbstractMachine {
 		 */
 		public Store drop(Value v) {
 			// Check whether we need to drop anything.
-			if (v instanceof Location) {
-				// Value overwritten pointed to something. Therefore, if that something was a
-				// heap location, we'll need to drop it.
-				Location location = (Location) v;
-				// Check whether reference location is heap (i.e. owned)
-				if (location.owner() && cells[location.getAddress()].hasGlobalLifetime()) {
-					// Prepare for the drop by copying all cells
-					Cell[] ncells = Arrays.copyOf(cells, cells.length);
-					// Perform the physical drop
-					internalDrop(ncells, location.getAddress());
-					// Done
-					return new Store(ncells);
-				}
-			} else if(v != null && v.size() > 0) {
-				Store S = this;
-				// Compound values can contain other values.
-				for(int i=0;i!=v.size();++i) {
-					S = S.drop(v.get(i));
-				}
-				return S;
+			if(containsOwnerReference(v)) {
+				// Prepare for the drop by copying all cells
+				Cell[] ncells = Arrays.copyOf(cells, cells.length);
+				// Perform the physical drop
+				finalise(ncells, v);
+				// Check heap invariant still holds!
+				assert heapInvariant(ncells);
+				// Done
+				return new Store(ncells);
 			}
 			return this;
 		}
@@ -400,43 +393,123 @@ public abstract class AbstractMachine {
 		}
 
 		/**
-		 * Drop a location without worrying about the reference invariant. This is
-		 * important so that we can drop a whole bunch of locations in one go.
+		 * Check whether a given value is or contains an owner reference. This indicates
+		 * that, should the value in question be dropped, then we need to do some
+		 * additional work.
 		 *
-		 * @param l
+		 * @param v
 		 * @return
 		 */
-		private static void internalDrop(Cell[] ncells, int address) {
-			// Locate cell being dropped
-			Cell ncell = ncells[address];
-			// Recursively drop owned locations
-			finalise(ncells, ncell);
-			// Physically drop the location
-			ncells[address] = null;
+		private static boolean containsOwnerReference(Value v) {
+			if (v instanceof Value.Reference) {
+				Value.Reference r = (Value.Reference) v;
+				return r.owner();
+			} else if (v instanceof Value.Compound) {
+				Value.Compound c = (Value.Compound) v;
+				for (int i = 0; i != c.size(); ++i) {
+					if (containsOwnerReference(c.get(i))) {
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 
 		/**
-		 * When a given cell is collected, we need to finalise it by collected any owned
-		 * locations.
+		 * Destroy a location and ensure its contents (including anything contained
+		 * within) are finalised. For example, if the location contains an owned
+		 * reference some heap memory, then this is destroyed as well. Likewise, if the
+		 * location contains a compound value then we must traverse this looking for any
+		 * owner references within.
 		 *
-		 * @param cells Cells to update
-		 * @param cell Cell being finalised
+		 * @param cells   Cells to update
+		 * @param address Address of location to destroy.
 		 * @return
 		 */
-		private static void finalise(Cell[] cells, Cell cell) {
+		private static void destroy(Cell[] cells, int address) {
+			// Locate cell being dropped
+			Cell cell = cells[address];
+			// Save value for later
 			Value v = cell.value;
-			if(v instanceof Value.Location) {
-				Value.Location loc = (Value.Location) v;
-				// Check whether is an owner reference
-				if(loc.owner()) {
-					Cell lcell = cells[loc.getAddress()];
-					if (lcell != null && lcell.hasGlobalLifetime()) {
-						cells[loc.getAddress()] = null;
-						finalise(cells, lcell);
-					}
+			// Physically drop the location
+			cells[address] = null;
+			// Finalise value by dropping any owned values.
+			finalise(cells,v);
+		}
+
+		/**
+		 * Finalise a value after the location containing it has been destroyed. If this
+		 * is an owner reference to heap memory, then we must collect that memory as
+		 * well. Likewise, if its a compound value then we must traverse its contents
+		 *
+		 * @param cells
+		 * @param v
+		 */
+		private static void finalise(Cell[] cells, Value v) {
+			if(v instanceof Value.Reference) {
+				Value.Reference ref = (Value.Reference) v;
+				// Check whether is an owner reference or not. If it is, then it should be
+				// deallocated.
+				if(ref.owner()) {
+					final int l = ref.getAddress();
+					// NOTE: it's an invariant that all reachable owned references have global
+					// lifetime. Likewise, since there is only ever one owning reference for a heap
+					// location, we can be guaranteed that it hasn't been collected at this point
+					// (i.e. that <code>cells[l] != null</code>).
+					assert cells[l] != null;
+					assert cells[l].hasGlobalLifetime();
+					// Recursively finalise this cell.
+					destroy(cells, l);
 				}
-			} else if(v != null && v.size() > 0) {
-				throw new RuntimeException("implement me");
+			} else if (v instanceof Value.Compound) {
+				Value.Compound c = (Value.Compound) v;
+				// We have a compound value, therefore need to explore the values it contains to
+				// check whether any contain references which need to be dropped.
+				for (int i = 0; i != c.size(); ++i) {
+					finalise(cells, c.get(i));
+				}
+			}
+		}
+
+		/**
+		 * The heap invariant states that every heap location should have exactly one
+		 * owning reference.
+		 *
+		 * @param cells
+		 * @return
+		 */
+		private static boolean heapInvariant(Cell[] cells) {
+			int[] owners = new int[cells.length];
+			// First, mark all owned locations
+			for(int i=0;i!=cells.length;++i) {
+				Cell ith = cells[i];
+				if(ith != null) {
+					markOwners(ith.contents(),owners);
+				}
+			}
+			// Second look for any heap locations which are not owned.
+			for(int i=0;i!=cells.length;++i) {
+				Cell ith = cells[i];
+				if (ith != null && ith.hasGlobalLifetime() && owners[i] != 1) {
+					System.out.println("FAILED(" + i + ":" + owners[i] + ") " + Arrays.toString(cells));
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private static void markOwners(Value v, int[] owners) {
+			if(v instanceof Value.Reference) {
+				Value.Reference r = (Value.Reference) v;
+				int l = r.getAddress();
+				if (r.owner()) {
+					owners[l]++;
+				}
+			} else if(v instanceof Value.Compound) {
+				Value.Compound c = (Value.Compound) v;
+				for(int i=0;i!=c.size();++i) {
+					markOwners(c.get(i),owners);
+				}
 			}
 		}
 	}

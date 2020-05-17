@@ -27,11 +27,12 @@ import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
 import static featherweightrust.core.Syntax.Value.Unit;
-import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.AbstractMachine.StackFrame;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractTransformer;
+import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.Pair;
 
 /**
@@ -56,7 +57,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	@Override
 	public Pair<State, Term> apply(State S, Lifetime l, Term t) {
 		Pair<State,Term> p = super.apply(S,l,t);
-		System.out.println("(" + S + "," + t + ") ==> " + p);
+		String sl = ArrayUtils.leftPad(60,"(" + S + ", " + t + ")");
+		String sr = ArrayUtils.rightPad(60,p.toString());
+		System.out.println(sl + " ===> " + sr);
 		return p;
 	}
 
@@ -65,9 +68,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 */
 	public Pair<State, Term> reduceLet(State S1, Lifetime l, String x, Value v) {
 		// Allocate new location
-		Pair<State, Location> pl = S1.allocate(l, v);
+		Pair<State, Reference> pl = S1.allocate(l, v);
 		State S2 = pl.first();
-		Location lx = pl.second();
+		Reference lx = pl.second();
 		// Bind variable to location
 		State S3 = S2.bind(x, lx);
 		// Done
@@ -79,11 +82,15 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 */
 	public Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal lv, Value v) {
 		// Extract location, or throw exception otherwise
-		Location lx = lv.locate(S1);
-		// FIXME: drop?
+		Reference lx = lv.locate(S1);
+		// Extract value being overwritten
+		Value v1 = S1.read(lx);
+		// Perform the assignment
 		State S2 = S1.write(lx, v);
+		// Drop overwritten value (and any owned boxes)
+		State S3 = S2.drop(v1);
 		// Done
-		return new Pair<>(S2, Unit);
+		return new Pair<>(S3, Unit);
 	}
 
 	/**
@@ -91,10 +98,15 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 */
 	public Pair<State, Term> reduceDereference(State S, LVal lv) {
 		// Extract location, or throw exception otherwise
-		Location lx = lv.locate(S);
+		Reference lx = lv.locate(S);
 		// Read contents of cell at given location
 		Value v = S.read(lx);
-		//
+		// Check whether move required
+		if(!v.copyable()) {
+			// Apply destructive update
+			S = S.write(lx, null);
+		}
+		// Done
 		return new Pair<>(S, v);
 	}
 
@@ -103,7 +115,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 */
 	public Pair<State, Term> reduceBorrow(State S, LVal s) {
 		// Locate operand
-		Location lx = s.locate(S);
+		Reference lx = s.locate(S);
 		//
 		if (lx == null) {
 			throw new RuntimeException("invalid path \"" + s + "\"");
@@ -119,9 +131,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 */
 	public Pair<State, Term> reduceBox(State S1, Value v, Lifetime global) {
 		// Allocate new location
-		Pair<State, Location> pl = S1.allocate(global, v);
+		Pair<State, Reference> pl = S1.allocate(global, v);
 		State S2 = pl.first();
-		Location ln = pl.second();
+		Reference ln = pl.second();
 		// Done
 		return new Pair<>(S2, ln);
 	}
@@ -155,8 +167,6 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		State S2 = new State(outerFrame, S1.store());
 		// Identify locations allocated in this lifetime
 		BitSet phi = S2.findAll(b.lifetime());
-		//
-		System.out.println("DROPPING: " + phi);
 		// drop all matching locations
 		State S3 = S2.drop(phi);
 		//
@@ -230,7 +240,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Location v) {
+	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Reference v) {
 		return new Pair<>(S, v);
 	}
 

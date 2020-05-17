@@ -52,7 +52,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 		case Syntax.TERM_integer:
 			return (Pair<T, S>) apply(state, lifetime, (Value.Integer) term);
 		case Syntax.TERM_location:
-			return (Pair<T, S>) apply(state, lifetime, (Value.Location) term);
+			return (Pair<T, S>) apply(state, lifetime, (Value.Reference) term);
 		}
 		// Attempt to run extensions
 		for(int i=0;i!=extensions.length;++i) {
@@ -153,7 +153,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetim, Value.Location value);
+	public abstract Pair<T, S> apply(T state, Lifetime lifetim, Value.Reference value);
 
 	/**
 	 * Provides a mechanism by which a transformer can be extended.

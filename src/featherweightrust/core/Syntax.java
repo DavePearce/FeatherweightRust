@@ -26,7 +26,7 @@ import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Type;
-import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
 import featherweightrust.util.ArrayUtils;
@@ -324,20 +324,38 @@ public class Syntax {
 		public static Unit Unit = new Unit();
 
 		/**
-		 * Get the width of this value. For compound values, this determines the number
-		 * of values contained within at the first level.
+		 * Check whether this value is copy or not. Any compound which contains a
+		 * non-copy value is itself not copy. By default, owned references are the only
+		 * value which are not copy.
 		 *
 		 * @return
 		 */
-		public int size();
+		public boolean copyable();
 
 		/**
-		 * Get the ith value contained within at the first level.
+		 * A compound value contains zero or more sub-values which can be identified and
+		 * extracted.
 		 *
-		 * @param i
-		 * @return
+		 * @author David J. Pearce
+		 *
 		 */
-		public Value get(int i);
+		public interface Compound extends Value {
+			/**
+			 * Get the width of this value. For compound values, this determines the number
+			 * of values contained within at the first level.
+			 *
+			 * @return
+			 */
+			public int size();
+
+			/**
+			 * Get the ith value contained within at the first level.
+			 *
+			 * @param i
+			 * @return
+			 */
+			public Value get(int i);
+		}
 
 		/**
 		 * Read the value at a given path within this value. If path is empty, then that
@@ -377,13 +395,8 @@ public class Syntax {
 			}
 
 			@Override
-			public int size() {
-				return 0;
-			}
-
-			@Override
-			public Value get(int i) {
-				throw new IllegalArgumentException("cannot subdivide atom");
+			public boolean copyable() {
+				return true;
 			}
 
 			@Override
@@ -462,30 +475,43 @@ public class Syntax {
 		}
 
 		/**
-		 * Represents a location in the abstract machine's memory. Each location can
-		 * store an atomic value.
+		 * Represents an <i>owned</i> or <i>unowned</i> reference to a give location (or
+		 * part thereof) in the machines memory. An owning reference is one which
+		 * assumes responsibility for memory deallocation. A reference can refer to a
+		 * position within a given location, and this is determined by the <i>path</i>.
+		 * That is a sequence of zero or more <i>indices</i> into the location. For
+		 * example, a location holding a <i>pair</i> value would have two positions at
+		 * the first level. If <code>l</code> refers is the address of this location,
+		 * then the valid references are: <code>l</code>, <code>l:0</code> and
+		 * <code>l:1</code> (along with the owning / non-owning variants).
 		 *
 		 * @author David J. Pearce
 		 *
 		 */
-		public class Location extends Atom {
+		public class Reference extends Atom {
 			private static final int[] OWNER = new int[0];
 			private static final int[] OTHER = new int[0];
+			/**
+			 * The location's address in the machines memory
+			 */
 			private final int address;
+			/**
+			 * Identifies the position within the location to which this reference refers.
+			 */
 			private final int[] path;
 
-			public Location(int address, Attribute... attributes) {
+			public Reference(int address, Attribute... attributes) {
 				this(address, OWNER, attributes);
 			}
 
-			private Location(int address, int[] path, Attribute... attributes) {
+			private Reference(int address, int[] path, Attribute... attributes) {
 				super(TERM_location, attributes);
 				this.address = address;
 				this.path = path;
 			}
 
 			/**
-			 * Get the base address of the allocation unit this location refers to.
+			 * Get the base address of the location this reference refers to.
 			 *
 			 * @return
 			 */
@@ -493,6 +519,12 @@ public class Syntax {
 				return address;
 			}
 
+			/**
+			 * Get the path to the position within the location which this references refers
+			 * to.
+			 *
+			 * @return
+			 */
 			public int[] getPath() {
 				return path;
 			}
@@ -507,14 +539,20 @@ public class Syntax {
 				return path == OWNER;
 			}
 
+			@Override
+			public boolean copyable() {
+				// Owned references are not copy
+				return path != OWNER;
+			}
+
 			/**
 			 * Obtain a reference which is not an owner to which it refers.
 			 *
 			 * @return
 			 */
-			public Location reference() {
+			public Reference reference() {
 				if (path == OWNER) {
-					return new Location(address, OTHER);
+					return new Reference(address, OTHER);
 				} else {
 					return this;
 				}
@@ -526,10 +564,10 @@ public class Syntax {
 			 * @param offset
 			 * @return
 			 */
-			public Location at(int offset) {
+			public Reference at(int offset) {
 				int[] npath = Arrays.copyOf(path, path.length + 1);
 				npath[path.length] = offset;
-				return new Location(address,npath);
+				return new Reference(address,npath);
 			}
 
 			@Override
@@ -539,8 +577,8 @@ public class Syntax {
 
 			@Override
 			public boolean equals(Object o) {
-				if (o instanceof Location) {
-					Location l = ((Location) o);
+				if (o instanceof Reference) {
+					Reference l = ((Reference) o);
 					return l.address == address && Arrays.equals(path, l.path);
 				}
 				return false;
@@ -552,7 +590,8 @@ public class Syntax {
 				for(int i=0;i!=path.length;++i) {
 					p = p + ":" + path[i];
 				}
-				return "&" + address + p;
+				String q = owner() ? "+" : "";
+				return "&" + q + address + p;
 			}
 		}
 	}
@@ -1075,9 +1114,9 @@ public class Syntax {
 		 * @param state
 		 * @return
 		 */
-		public Location locate(State state) {
+		public Reference locate(State state) {
 			// Identify root of path
-			Location l = state.locate(name);
+			Reference l = state.locate(name);
 			// Apply each element in turn
 			return path.apply(l, state.store());
 		}
@@ -1150,7 +1189,7 @@ public class Syntax {
 		 * @param store
 		 * @return
 		 */
-		public Location apply(Location location, Store store) {
+		public Reference apply(Reference location, Store store) {
 			for (int i = 0; i != elements.length; ++i) {
 				location = elements[i].apply(store, location);
 			}
@@ -1239,7 +1278,7 @@ public class Syntax {
 			 * @param store
 			 * @return
 			 */
-			public Location apply(Store store, Location loc);
+			public Reference apply(Store store, Reference loc);
 
 			public String toString(String src);
 		}
@@ -1266,8 +1305,8 @@ public class Syntax {
 			}
 
 			@Override
-			public Location apply(Store store, Location loc) {
-				return (Location) store.read(loc);
+			public Reference apply(Store store, Reference loc) {
+				return (Reference) store.read(loc);
 			}
 
 			@Override

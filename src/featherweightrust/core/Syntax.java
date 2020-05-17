@@ -772,7 +772,7 @@ public class Syntax {
 
 		public static class Borrow extends AbstractAtom {
 			private final boolean mut;
-			private final LVal[] items;
+			private final LVal[] lvals;
 
 			public Borrow(boolean mut, LVal item, Attribute... attributes) {
 				this(mut,new LVal[] {item}, attributes);
@@ -784,7 +784,7 @@ public class Syntax {
 					throw new IllegalArgumentException("invalid names argumetn");
 				}
 				this.mut = mut;
-				this.items = paths;
+				this.lvals = paths;
 				// Ensure sorted invariant
 				Arrays.sort(paths);
 			}
@@ -801,8 +801,8 @@ public class Syntax {
 			@Override
 			public boolean prohibitsWriting(LVal lv) {
 				// Any conflicting borrow prohibits an lval from being written.
-				for (int i = 0; i != items.length; ++i) {
-					LVal ith = items[i];
+				for (int i = 0; i != lvals.length; ++i) {
+					LVal ith = lvals[i];
 					// Check whether potential conflict
 					if (lv.conflicts(ith)) {
 						return true;
@@ -824,8 +824,8 @@ public class Syntax {
 			@Override
 			public boolean within(BorrowChecker checker, Environment R, Lifetime l) {
 				boolean r = true;
-				for (int i = 0; i != items.length; ++i) {
-					LVal ith = items[i];
+				for (int i = 0; i != lvals.length; ++i) {
+					LVal ith = lvals[i];
 					checker.check(R.get(ith.name()) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
 					Cell C = R.get(ith.name());
 					r &= C.lifetime().contains(l);
@@ -841,7 +841,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						LVal[] ps = ArrayUtils.append(items, b.items);
+						LVal[] ps = ArrayUtils.append(lvals, b.lvals);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -860,7 +860,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						LVal[] ps = ArrayUtils.append(items, b.items);
+						LVal[] ps = ArrayUtils.append(lvals, b.lvals);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -870,30 +870,30 @@ public class Syntax {
 				throw new IllegalArgumentException("invalid intersect");
 			}
 
-			public LVal[] slices() {
-				return items;
+			public LVal[] lvals() {
+				return lvals;
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if(o instanceof Borrow) {
 					Borrow b = (Borrow) o;
-					return mut == b.mut && Arrays.equals(items, b.items);
+					return mut == b.mut && Arrays.equals(lvals, b.lvals);
 				}
 				return false;
 			}
 
 			@Override
 			public int hashCode() {
-				return Boolean.hashCode(mut) ^ Arrays.hashCode(items);
+				return Boolean.hashCode(mut) ^ Arrays.hashCode(lvals);
 			}
 
 			@Override
 			public String toString() {
 				if (mut) {
-					return "&mut " + toString(items);
+					return "&mut " + toString(lvals);
 				} else {
-					return "&" + toString(items);
+					return "&" + toString(lvals);
 				}
 			}
 
@@ -1121,6 +1121,22 @@ public class Syntax {
 			return path.apply(l, state.store());
 		}
 
+		public LVal traverse(Path p, int i) {
+			final Path.Element[] path_elements = path.elements;
+			final Path.Element[] p_elements = p.elements;
+			// Handle common case
+			if (p_elements.length == i) {
+				return this;
+			} else {
+				final int n = path_elements.length;
+				final int m = p_elements.length - i;
+				Path.Element[] nelements = new Path.Element[n + m];
+				System.arraycopy(path_elements, 0, nelements, 0, n);
+				System.arraycopy(p_elements, i, nelements, n, m);
+				return new LVal(name, new Path(nelements));
+			}
+		}
+
 		@Override
 		public int compareTo(LVal s) {
 			int c = name.compareTo(s.name);
@@ -1155,9 +1171,6 @@ public class Syntax {
 
 		public Path(Element[] elements, Attribute... attributes) {
 			super(attributes);
-			if(attributes.length == 0) {
-				throw new IllegalArgumentException();
-			}
 			this.elements = elements;
 		}
 
@@ -1301,7 +1314,7 @@ public class Syntax {
 
 			@Override
 			public boolean conflicts(Element e) {
-				throw new IllegalArgumentException("GOT HERE");
+				return true;
 			}
 
 			@Override

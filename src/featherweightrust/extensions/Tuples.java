@@ -109,7 +109,7 @@ public class Tuples {
 					// Select element
 					Value t = (Value) terms[i];
 					// Read element
-					return t.read(path, index + 1);
+					return (t == null) ? t : t.read(path, index + 1);
 				}
 			}
 
@@ -129,6 +129,17 @@ public class Tuples {
 					//
 					return new TupleValue(nterms);
 				}
+			}
+
+			@Override
+			public boolean copyable() {
+				for (int i = 0; i != terms.length; ++i) {
+					Value v = (Value) terms[i];
+					if (!v.copyable()) {
+						return false;
+					}
+				}
+				return true;
 			}
 		}
 

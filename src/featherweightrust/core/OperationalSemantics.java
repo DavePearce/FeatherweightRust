@@ -45,6 +45,7 @@ import featherweightrust.util.Pair;
  *
  */
 public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
+	private static final boolean DEBUG = false;
 
 	public OperationalSemantics(Extension... extensions) {
 		super(extensions);
@@ -55,11 +56,13 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Lifetime l, Term t) {
+	public final Pair<State, Term> apply(State S, Lifetime l, Term t) {
 		Pair<State,Term> p = super.apply(S,l,t);
-		String sl = ArrayUtils.leftPad(60,"(" + S + ", " + t + ")");
-		String sr = ArrayUtils.rightPad(60,p.toString());
-		System.out.println(sl + " ===> " + sr);
+		if(DEBUG) {
+			String sl = ArrayUtils.leftPad(60,"(" + S + ", " + t + ")");
+			String sr = ArrayUtils.rightPad(60,p.toString());
+			System.err.println(sl + " ===> " + sr);
+		}
 		return p;
 	}
 

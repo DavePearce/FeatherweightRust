@@ -151,7 +151,6 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public State drop(Value value) {
-			System.out.println("DROPPING: " + value);
 			return new State(stack, heap.drop(value));
 		}
 
@@ -162,7 +161,6 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public State drop(BitSet locations) {
-			System.out.println("DROPPING: " + locations);
 			return new State(stack, heap.drop(locations));
 		}
 
@@ -491,7 +489,6 @@ public abstract class AbstractMachine {
 			for(int i=0;i!=cells.length;++i) {
 				Cell ith = cells[i];
 				if (ith != null && ith.hasGlobalLifetime() && owners[i] != 1) {
-					System.out.println("FAILED(" + i + ":" + owners[i] + ") " + Arrays.toString(cells));
 					return false;
 				}
 			}

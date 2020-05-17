@@ -1,7 +1,7 @@
 package featherweightrust.testing;
 
 import java.io.IOException;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.OperationalSemantics;
@@ -9,10 +9,11 @@ import featherweightrust.core.Syntax.Value;
 import featherweightrust.extensions.ControlFlow;
 import static featherweightrust.core.Syntax.Value.Unit;
 
-public class ControlFlowRuntimeTests {
+public class ControlFlowTests {
 	private static Value.Integer One = new Value.Integer(1);
 	private static Value.Integer Two = new Value.Integer(2);
 	private static Value.Integer OneTwoThree = new Value.Integer(123);
+
 	@Test
 	public void test_01() throws IOException {
 		String input = "{ let mut x = 1; if x == x { 1 } else { 2 } }";
@@ -127,9 +128,138 @@ public class ControlFlowRuntimeTests {
 		check(input, One);
 	}
 
+	@Test
+	public void test_41() throws IOException {
+		String input = "{ if x == x { } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_42() throws IOException {
+		String input = "{ let mut x = 1; if x == y { } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_43() throws IOException {
+		String input = "{ let mut x = 1; if x == x { } else { 1 } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_44() throws IOException {
+		String input = "{ let mut x = 1; if x == x { } else { &x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_45() throws IOException {
+		String input = "{ let mut x = 1; if x == x { } else { &mut x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_46() throws IOException {
+		String input = "{ let mut x = 1; if x == x { } else { box 1 } }";
+		checkInvalid(input);
+	}
+	@Test
+	public void test_47() throws IOException {
+		String input = "{ let mut x = 1; if x == x { 1 } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_48() throws IOException {
+		String input = "{ let mut x = 1; if x == x { } else { 1 } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_49() throws IOException {
+		String input = "{ let mut x = 1; if x == x { &x } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_50() throws IOException {
+		String input = "{ let mut x = 1; if x == x { &x } else { 1 } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_51() throws IOException {
+		String input = "{ let mut x = 1; if x == x { &x } else { &mut x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_52() throws IOException {
+		String input = "{ let mut x = 1; if x == x { &x } else { box 1 } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_53() throws IOException {
+		String input = "{ let mut x = 1; if x == x { box 1 } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_54() throws IOException {
+		String input = "{ let mut x = 1; if x == x { box 1 } else { 1 } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_55() throws IOException {
+		String input = "{ let mut x = 1; if x == x { box 1 } else { &x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_56() throws IOException {
+		String input = "{ let mut x = 1; if x == x { box 1 } else { &mut x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_57() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { let mut p = y; } else { let mut q = y; } *y = box 1; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_58() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { } else { let mut q = y; } *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_59() throws IOException {
+		String input = "{ let mut x = 1; let mut y = box 1; if x == x { let mut p = y; } else { } *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_60() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; let mut p = &mut x; if y == y { p = &y; } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_61() throws IOException {
+		String input = "{ let mut x = 1; let mut p = &x; if x == x { let mut y = 2; p = &y; } else { } }";
+		checkInvalid(input);
+	}
+
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
-		CoreRuntimeTests.check(input, output, CFLOW_SEMANTICS, new BorrowChecker(input, CFLOW_TYPING));
+		CoreTests.check(input, output, CFLOW_SEMANTICS, new BorrowChecker(input, CFLOW_TYPING));
+	}
+
+	public static void checkInvalid(String input) throws IOException {
+		CoreTests.checkInvalid(input, new BorrowChecker(input, CFLOW_TYPING));
 	}
 
 	public static final BorrowChecker.Extension CFLOW_TYPING = new ControlFlow.Typing();

@@ -346,28 +346,6 @@ public class Parser {
 		return null;
 	}
 
-	/**
-	 * Append two paths together.
-	 *
-	 * @param lhs
-	 * @param rhs
-	 * @return
-	 */
-	private static Path append(Path lhs, Path rhs) {
-		final int n = lhs.size();
-		final int m = rhs.size();
-		Element[] es = new Element[n + m];
-		for (int i = 0; i != n; ++i) {
-			es[i] = lhs.get(i);
-		}
-		for (int i = 0; i != m; ++i) {
-			es[n + i] = rhs.get(i);
-		}
-		Attribute.Source l = lhs.attribute(Attribute.Source.class);
-		Attribute.Source r = rhs.attribute(Attribute.Source.class);
-		return new Path(es, new Attribute.Source(Math.min(l.start, r.start), Math.max(l.end, r.end)));
-	}
-
 	private static Path append(Path lhs, Path.Element rhs) {
 		final int n = lhs.size();
 		Element[] es = new Element[n + 1];

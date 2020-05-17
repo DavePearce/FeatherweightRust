@@ -45,7 +45,7 @@ import featherweightrust.util.Pair;
  *
  */
 public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = true;
 
 	public OperationalSemantics(Extension... extensions) {
 		super(extensions);
@@ -143,23 +143,25 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 
 	@Override
 	public Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
+		final int n = b.size();
 		// Save current bindings so they can be restored
 		StackFrame outerFrame = S1.frame();
 		Term returnValue = Unit;
 		//
-		if (b.size() == 1 && b.get(0) instanceof Value) {
-			// Return value produced
-			returnValue = b.get(0);
-		} else if (b.size() > 0) {
+		if (n > 0) {
 			Pair<State, Term> p = apply(S1, b.lifetime(), b.get(0));
 			Term s = p.second();
 			S1 = p.first();
-			if(s == Unit) {
-				// Slice off head
-				return new Pair<>(S1, new Term.Block(b.lifetime(), slice(b, 1), b.attributes()));
+			if(s instanceof Value) {
+				if(n == 1) {
+					returnValue = s;
+				} else {
+					// Slice off head
+					return new Pair<>(S1, new Term.Block(b.lifetime(), slice(b, 1), b.attributes()));
+				}
 			} else {
 				// Statement hasn't completed
-				Term[] stmts = Arrays.copyOf(b.toArray(), b.size());
+				Term[] stmts = Arrays.copyOf(b.toArray(), n);
 				// Replace with partially reduced statement
 				stmts[0] = s;
 				// Go around again
@@ -266,7 +268,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 */
 	private static Term[] slice(Term.Block b, int n) {
 		Term[] stmts = new Term[b.size() - n];
-		for (int i = n; i != b.size(); ++i) {
+		for (int i = n; i < b.size(); ++i) {
 			stmts[i - n] = b.get(i);
 		}
 		return stmts;

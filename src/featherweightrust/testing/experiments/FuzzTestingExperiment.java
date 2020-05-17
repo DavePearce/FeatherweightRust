@@ -793,7 +793,7 @@ public class FuzzTestingExperiment {
 				// Check variable is declared
 				check(Cx != null, UNDECLARED_VARIABLE, e);
 				// Check variable not moved
-				check(!Cx.moved(), VARIABLE_MOVED, e);
+				check(!Cx.moved(), LVAL_MOVED, e);
 				// Locate operand type
 				Cell C1 = R1.get(x);
 				// Check operand has reference type

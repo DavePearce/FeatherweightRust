@@ -26,6 +26,7 @@ import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Path.Element;
+import featherweightrust.core.Syntax.Term.Dereference;
 import featherweightrust.extensions.ControlFlow;
 import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
@@ -61,7 +62,7 @@ public class Parser {
 		match("{");
 		ArrayList<Term> stmts = new ArrayList<>();
 		while (index < tokens.size() && !(tokens.get(index) instanceof RightCurly)) {
-			Term stmt = parseTerm(context, myLifetime);
+			Term stmt = parseTerm(context, myLifetime, true);
 			stmts.add(stmt);
 		}
 		match("}");
@@ -85,7 +86,7 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Term parseTerm(Context context, Lifetime lifetime) {
+	public Term parseTerm(Context context, Lifetime lifetime, boolean consumed) {
 		checkNotEof();
 		int start = index;
 		Token lookahead = tokens.get(index);
@@ -99,16 +100,16 @@ public class Parser {
 			// nested block
 			t = parseStatementBlock(context, lifetime);
 		} else if (lookahead instanceof LeftBrace) {
-			t = parseBracketedExpression(context,lifetime);
+			t = parseBracketedExpression(context,lifetime, consumed);
 		} else if (lookahead instanceof Ampersand) {
 			t = parseBorrow(context, lifetime);
 		} else if (lookahead instanceof Int) {
 			int val = match(Int.class, "an integer").value;
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
-			t = parseBox(context, lifetime);
+			t = parseBox(context, lifetime, consumed);
 		} else {
-			t = parseAssignmentOrDereference(context, lifetime);
+			t = parseAssignmentOrDereference(context, lifetime, consumed);
 		}
 		// Done
 		return t;
@@ -119,15 +120,15 @@ public class Parser {
 	 *
 	 * @return
 	 */
-	public Term parseAssignmentOrDereference(Context context, Lifetime lifetime) {
+	public Term parseAssignmentOrDereference(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
 		// Parse potential lhs
-		Term.Dereference lhs = parseDereference(context, lifetime);
+		Term.Dereference lhs = parseDereference(context, lifetime, consumed);
 		//
 		if (index < tokens.size() && tokens.get(index) instanceof Equals) {
 			// This is an assignment statement
 			match("=");
-			Term rhs = parseTerm(context, lifetime);
+			Term rhs = parseTerm(context, lifetime, true);
 			match(";");
 			int end = index;
 			return new Term.Assignment(lhs.operand(), rhs, sourceAttr(start, end - 1));
@@ -155,7 +156,7 @@ public class Parser {
 		// A variable declaration may optionally be assigned an initialiser
 		// expression.
 		match("=");
-		Term initialiser = parseTerm(context,lifetime);
+		Term initialiser = parseTerm(context, lifetime, true);
 		match(";");
 		// Done.
 		return new Term.Let(variable, initialiser, sourceAttr(start, index - 1));
@@ -165,12 +166,12 @@ public class Parser {
 		int start = index;
 		matchKeyword("if");
 		// Match and declare lhs variable
-		Term lhs = parseTerm(context, lifetime);
+		Term lhs = parseTerm(context, lifetime, false);
 		Token t = match("==","!=");
 		// Determine condition
 		boolean eq = t.text.equals("==");
 		// Match and declare rhs variable
-		Term rhs = parseTerm(context, lifetime);
+		Term rhs = parseTerm(context, lifetime, false);
 		// Parse true block
 		Term.Block trueBlock = parseStatementBlock(context,lifetime);
 		// Match else
@@ -181,15 +182,15 @@ public class Parser {
 		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
 	}
 
-	public Term parseBracketedExpression(Context context, Lifetime lifetime) {
+	public Term parseBracketedExpression(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
 		match("(");
 		ArrayList<Term> terms = new ArrayList<>();
-		terms.add(parseTerm(context, lifetime));
+		terms.add(parseTerm(context, lifetime, consumed));
 		checkNotEof();
 		while(index < tokens.size() && tokens.get(index) instanceof Comma) {
 			match(",");
-			terms.add(parseTerm(context, lifetime));
+			terms.add(parseTerm(context, lifetime, consumed));
 		}
 		match(")");
 		switch(terms.size()) {
@@ -217,22 +218,28 @@ public class Parser {
 		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
 
-	public Term.Dereference parseDereference(Context context, Lifetime lifetime) {
+	public Term.Dereference parseDereference(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
-		boolean copy = false;
-		if (index < tokens.size() && tokens.get(index) instanceof Shreak) {
+		boolean copy = !consumed;
+		if (consumed && index < tokens.size() && tokens.get(index) instanceof Shreak) {
 			match("!");
 			copy = true;
 		}
 		LVal operand = parseLVal(context, lifetime);
 		//
-		return new Term.Dereference(copy, operand, sourceAttr(start, index - 1));
+		Dereference.Kind kind = Dereference.Kind.MOVE;
+		if(!consumed) {
+			kind = Dereference.Kind.TEMP;
+		} else if(copy) {
+			kind = Dereference.Kind.COPY;
+		}
+		return new Term.Dereference(kind, operand, sourceAttr(start, index - 1));
 	}
 
-	public Term.Box parseBox(Context context, Lifetime lifetime) {
+	public Term.Box parseBox(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
 		matchKeyword("box");
-		Term operand = parseTerm(context,lifetime);
+		Term operand = parseTerm(context, lifetime, consumed);
 		return new Term.Box(operand, sourceAttr(start, index - 1));
 	}
 

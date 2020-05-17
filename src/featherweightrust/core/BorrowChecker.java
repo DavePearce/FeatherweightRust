@@ -52,22 +52,22 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	/**
 	 * Enable or disable debugging output.
 	 */
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = true;
 
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
 	public final static String UNDECLARED_VARIABLE = "variable undeclared";
 	public final static String CANNOT_MOVEOUT_THROUGH_BORROW = "cannot move out through borrow";
-	public final static String VARIABLE_MOVED = "use of moved variable";
 	public final static String VARIABLE_ALREADY_DECLARED = "variable already declared";
 	public final static String BORROWED_VARIABLE_ASSIGNMENT = "cannot assign because borrowed";
 	public final static String NOTWITHIN_VARIABLE_ASSIGNMENT = "cannot assign because lifetime not within";
 	public final static String INCOMPATIBLE_TYPE = "incompatible type";
-	public final static String VARIABLE_NOT_COPY = "variable's type cannot be copied";
 	public final static String EXPECTED_REFERENCE = "expected reference type";
 	public final static String EXPECTED_MUTABLE_BORROW = "expected mutable borrow";
+	public final static String LVAL_MOVED = "use of moved lval or attempt to move out of lval";
 	public final static String LVAL_NOT_WRITEABLE = "lval cannot be written (e.g. is moved in part or whole)";
 	public final static String LVAL_NOT_READABLE = "lval cannot be read (e.g. is moved in part or whole)";
+	public final static String LVAL_NOT_COPY = "lval's type cannot be copied";
 
 	public final static String LVAL_WRITE_PROHIBITED = "lval borrowed in part or whole";
 	public final static String LVAL_READ_PROHIBITED = "lval mutably borrowed in part or whole";
@@ -178,7 +178,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
-		return read(R, t.operand());
+		return read(R, t.operand(), t.copy());
 	}
 
 	/**
@@ -254,7 +254,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param lv The lval being read.
 	 * @return
 	 */
-	public Pair<Environment, Type> read(Environment R, LVal lv) {
+	public Pair<Environment, Type> read(Environment R, LVal lv, boolean copy) {
 		final String x = lv.name();
 		final Path path = lv.path();
 		// Extract target cell
@@ -262,11 +262,13 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
 		Type T1 = Cx.type();
 		// Check available at least for reading
-		check(available(R, lv, false), VARIABLE_MOVED, lv);
+		check(available(R, lv, false), LVAL_MOVED, lv);
 		// Determine type being read
 		Type T2 = typeOf(R,lv);
+		// Sanity check can copy this
+		check(!copy || T2.copyable(), LVAL_NOT_COPY, lv);
 		// Decide if copy or move
-		if(T2.copyable()) {
+		if(copy) {
 			// Check variable readable (e.g. not mutably borrowed)
 			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
 			// Done
@@ -274,7 +276,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		} else {
 			Lifetime m = Cx.lifetime();
 			// Check available for writing
-			check(available(R, lv, true), VARIABLE_MOVED, lv);
+			check(available(R, lv, true), LVAL_MOVED, lv);
 			// Check variable writeable (e.g. not borrowed). This is necessary because we
 			// going to move this value out completely and, hence, we must have ownership to
 			// do this safely.
@@ -709,6 +711,32 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 		return env;
 	}
+
+	private static int index = 0;
+
+	/**
+	 * Return a unique variable name everytime this is called.
+	 *
+	 * @return
+	 */
+	public static String fresh() {
+		return "?" + (index++);
+	}
+
+	/**
+	 * Return a sequence of zero or more fresh variable names
+	 *
+	 * @param n
+	 * @return
+	 */
+	public static String[] fresh(int n) {
+		String[] freshVars = new String[n];
+		for(int i=0;i!=n;++i) {
+			freshVars[i] = fresh();
+		}
+		return freshVars;
+	}
+
 
 	/**
 	 * Provides a specific extension mechanism for the borrow checker.

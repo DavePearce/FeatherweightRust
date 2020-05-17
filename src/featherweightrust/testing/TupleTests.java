@@ -36,460 +36,571 @@ public class TupleTests {
 	private static Value PairOneTwo = new Syntax.TupleValue(One,Two);
 
 	@Test
-	public void test_01() throws IOException {
+	public void test_0x0001() throws IOException {
 		String input = "{ (1,2) }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_02() throws IOException {
+	public void test_0x0002() throws IOException {
 		String input = "{ let mut x = (1,2); }";
 		check(input,Unit);
 	}
 
 	@Test
-	public void test_03() throws IOException {
+	public void test_0x0003() throws IOException {
 		String input = "{ let mut x = 1; (x,2)}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_04() throws IOException {
+	public void test_0x0004() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 2; (x,y)}";
 		check(input,PairOneTwo);
 	}
 
+
 	@Test
-	public void test_05() throws IOException {
+	public void test_0x0005() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; (!x,y)}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_0x0006() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; (x,!y)}";
+		check(input,PairOneTwo);
+	}
+
+
+	@Test
+	public void test_0x0007() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 2; (!x,!y)}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_0x0008() throws IOException {
 		String input = "{ let mut x = (0,0); x = (1,2); x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_06() throws IOException {
-		String input = "{ let mut x = 1; let mut y = (&x,&x); let mut z = y.0; *z}";
+	public void test_0x0009() throws IOException {
+		String input = "{ let mut x = (0,0); x = (1,2); !x}";
+		check(input,PairOneTwo);
+	}
+
+	@Test
+	public void test_0x000A() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&x,&x); let mut z = y.0; !*z}";
 		check(input,One);
 	}
 
 	@Test
-	public void test_07() throws IOException {
-		String input = "{ let mut x = 1; let mut y = (&x,&x); let mut z = y.1; *z}";
+	public void test_0x000B() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&x,&x); let mut z = y.1; !*z}";
 		check(input,One);
 	}
 
 	@Test
-	public void test_08() throws IOException {
-		String input = "{ let mut x = 1; let mut y = (&mut x,2); let mut z = y.0; *z}";
+	public void test_0x000C() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&mut x,2); let mut z = y.0; !*z}";
 		check(input,One);
 	}
 
 	@Test
-	public void test_09() throws IOException {
+	public void test_0x000D() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (&mut x,2); let mut z = y.1; z}";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_10() throws IOException {
+	public void test_0x000E() throws IOException {
 		String input = "{ let mut x = (1,2); x.0 }";
 		check(input,One);
 	}
 
+
 	@Test
-	public void test_11() throws IOException {
+	public void test_0x000F() throws IOException {
+		String input = "{ let mut x = (1,2); !x.0 }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_0x0010() throws IOException {
 		String input = "{ let mut x = (1,2); x.1 }";
 		check(input,Two);
 	}
 
+
 	@Test
-	public void test_12() throws IOException {
+	public void test_0x0011() throws IOException {
+		String input = "{ let mut x = (1,2); !x.1 }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_0x0012() throws IOException {
 		String input = "{ let mut x = ((1,2),3); x.0 }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_13() throws IOException {
+	public void test_0x0013() throws IOException {
 		String input = "{ let mut x = (3, (1,2)); x.1 }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_14() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.0; *y }";
+	public void test_0x0014() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; !*y }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_15() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; *y }";
+	public void test_0x0015() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; !*y }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_16() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.0; x }";
+	public void test_0x0016() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; !x }";
 		check(input,PairOneTwo);
 	}
 
 
 	@Test
-	public void test_17() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; x }";
+	public void test_0x0017() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; !x }";
 		check(input,PairOneTwo);
 	}
 
 
 	@Test
-	public void test_18() throws IOException {
+	public void test_0x0018() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.0; x.1 }";
 		check(input,Two);
 	}
 
 
 	@Test
-	public void test_19() throws IOException {
+	public void test_0x0019() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.1; x.0 }";
 		check(input,One);
 	}
 
 
 	@Test
-	public void test_20() throws IOException {
+	public void test_0x001A() throws IOException {
 		String input = "{ let mut x = (0,2); { let mut y = &mut x.0; *y = 1; } x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_21() throws IOException {
+	public void test_0x001B() throws IOException {
 		String input = "{ let mut x = (1,0); { let mut y = &mut x.1; *y = 2; } x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_22() throws IOException {
+	public void test_0x001C() throws IOException {
 		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.1; *y }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_23() throws IOException {
+	public void test_0x001D() throws IOException {
 		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.1; *z }";
 		check(input,Two);
 	}
 
-
 	@Test
-	public void test_24() throws IOException {
-		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *w }";
+	public void test_0x001E() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; !*w }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_25() throws IOException {
-		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *z }";
+	public void test_0x001F() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; !*z }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_26() throws IOException {
+	public void test_0x0020() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = y.0; y.1 }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_27() throws IOException {
+	public void test_0x0021() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (2, &mut x); let mut z = y.1; y.0 }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_28() throws IOException {
-		String input = "{ let mut x = (1, 2); let mut y = x.0; x.0 }";
+	public void test_0x0022() throws IOException {
+		String input = "{ let mut x = (1, 2); let mut y = !x.0; x.0 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_29() throws IOException {
-		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = y.1; y.1 }";
+	public void test_0x0023() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = !y.1; y.1 }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_30() throws IOException {
-		String input = "{ let mut x = 1; let mut y = (2, &mut x); let mut z = y.0; y.0 }";
+	public void test_0x0024() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (2, &mut x); let mut z = !y.0; y.0 }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_31() throws IOException {
+	public void test_0x0025() throws IOException {
 		String input = "{ let mut x = (0,2); x.0 = 1; x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_32() throws IOException {
+	public void test_0x0026() throws IOException {
 		String input = "{ let mut x = (1,1); x.1 = 2; x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_33() throws IOException {
+	public void test_0x0027() throws IOException {
 		String input = "{ let mut x = (0,0); x.0 = 1; x.1 = 2; x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_34() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.0; *y}";
+	public void test_0x0028() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; !*y}";
 		check(input,One);
 	}
 
 	@Test
-	public void test_35() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; *y}";
+	public void test_0x0029() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; !*y}";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_36() throws IOException {
-		String input = "{ let mut x = (1,2); let mut y = &x.1; let mut z = *y; x}";
+	public void test_0x002A() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; let mut z = !*y; !x}";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_37() throws IOException {
+	public void test_0x002B() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.0; x.1 }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_38() throws IOException {
+	public void test_0x002C() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = &mut x.1; x.0 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_39() throws IOException {
+	public void test_0x002D() throws IOException {
 		String input = "{ let mut x = (0,2); { let mut y = &mut x.0; *y = 1; } x }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_40() throws IOException {
+	public void test_0x002E() throws IOException {
 		String input = "{ let mut x = (1,0); { let mut y = &mut x.1; *y = 2; } x }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_41() throws IOException {
+	public void test_0x002F() throws IOException {
 		String input = "{ let mut x = (box 0,box 2); let mut y = x.0; x.0 = box 1; (*(x.0), *x.1) }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_42() throws IOException {
+	public void test_0x0030() throws IOException {
 		String input = "{ let mut x = (box 1,box 1); let mut y = x.1; x.1 = box 2; (*x.0, *x.1) }";
 		check(input,PairOneTwo);
 	}
 
 	@Test
-	public void test_60() throws IOException {
+	public void test_0x0050() throws IOException {
 		String input = "{ let mut x = (); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_61() throws IOException {
+	public void test_0x0051() throws IOException {
 		String input = "{ let mut x = (x,1); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_62() throws IOException {
+	public void test_0x0052() throws IOException {
 		String input = "{ let mut x = (1,x); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_63() throws IOException {
+	public void test_0x0053() throws IOException {
 		String input = "{ let mut x = box 1; (x,x)}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_64() throws IOException {
+	public void test_0x0054() throws IOException {
+		String input = "{ let mut x = box 1; let mut y = box 1; let mut z = !(x,y)}";
+		checkInvalid(input);
+	}
+
+
+	@Test
+	public void test_0x0055() throws IOException {
+		String input = "{ let mut x = box 1; let mut y = !(1,x)}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0056() throws IOException {
+		String input = "{ let mut x = box 1; let mut y = !(x,1)}";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0057() throws IOException {
+		String input = "{ let mut x = (1, 2); let mut y = x.0; x.0 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0058() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = y.1; y.1 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0059() throws IOException {
 		String input = "{ let mut x = (1,2); x = 1; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_65() throws IOException {
+	public void test_0x005A() throws IOException {
 		String input = "{ let mut x = 1; x = (1,2); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_66() throws IOException {
+	public void test_0x005B() throws IOException {
 		String input = "{ let mut x = 0; let mut y = (&mut x,&mut x); }";
+		checkInvalid(input);
+	}
+	@Test
+	public void test_0x005C() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&x,&x); let mut z = y.0; *z}";
+		checkInvalid(input);
+	}
+	@Test
+	public void test_0x005D() throws IOException {
+		String input = "{ let mut x = 1; let mut y = (&x,&x); let mut z = y.1; *z}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_67() throws IOException {
+	public void test_0x005E() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x005F() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.1; *y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0060() throws IOException {
+		String input = "{ let mut x = (1,2); let mut y = &x.0; x }";
+		checkInvalid(input);
+	}
+
+
+	@Test
+	public void test_0x0061() throws IOException {
 		String input = "{ let mut x = 0; let mut y = 1; let mut z = (&mut x,&mut x,&mut y); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_68() throws IOException {
+	public void test_0x0062() throws IOException {
 		String input = "{ let mut x = 0; let mut y = 1; let mut z = (&mut x,&mut y,&mut x); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_69() throws IOException {
+	public void test_0x0063() throws IOException {
 		String input = "{ let mut x = 0; let mut y = 1; let mut z = (&mut y,&mut x,&mut x); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_70() throws IOException {
+	public void test_0x0064() throws IOException {
 		String input = "{ let mut x = 0; let mut y = (&mut x,1); let mut z = &mut x;}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_71() throws IOException {
+	public void test_0x0065() throws IOException {
 		String input = "{ let mut x = 0; let mut y = (1,&mut x); let mut z = &mut x;}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_72() throws IOException {
+	public void test_0x0066() throws IOException {
 		String input = "{ let mut x = (0,0); let mut y = &mut x.0; x}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_73() throws IOException {
+	public void test_0x0067() throws IOException {
 		String input = "{ let mut x = (0,0); let mut y = &mut x.1; x}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_74() throws IOException {
+	public void test_0x0068() throws IOException {
 		String input = "{ let mut x = (0,0); let mut y = &mut x.0; *y = 2; x}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_75() throws IOException {
+	public void test_0x0069() throws IOException {
 		String input = "{ let mut x = (0,0); let mut y = &mut x.1; *y = 2; x}";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_76() throws IOException {
+	public void test_0x0070() throws IOException {
 		String input = "{ let mut x = (box 1, box 2); let mut y = x.0; let mut z = x.0; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_77() throws IOException {
+	public void test_0x0071() throws IOException {
 		String input = "{ let mut x = (box 1, box 2); let mut y = x.1; let mut z = x.1; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_78() throws IOException {
+	public void test_0x0072() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (&mut x, 0); let mut z = y.0; let mut w = y.0; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_79() throws IOException {
+	public void test_0x0073() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (0, &mut x); let mut z = y.1; let mut w = y.1; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_80() throws IOException {
+	public void test_0x0074() throws IOException {
 		// Partial moves not supported
 		String input = "{ let mut x = 1; let mut y = (&mut x, 0); let mut z = y.0; let mut w = y; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_81() throws IOException {
+	public void test_0x0075() throws IOException {
 		// Partial moves not supported
 		String input = "{ let mut x = 1; let mut y = (0, &mut x); let mut z = y.1; let mut w = y; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_82() throws IOException {
+	public void test_0x0076() throws IOException {
 		// This tests a "copymove" operation.
 		String input = "{ let mut x = 1; let mut y = (&mut x,2); let mut z = y; y.1 }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_83() throws IOException {
+	public void test_0x0077() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (&mut x, 2); let mut z = y.0; y.0 }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_84() throws IOException {
+	public void test_0x0078() throws IOException {
 		String input = "{ let mut x = 1; let mut y = (2, &mut x); let mut z = y.1; y.1 }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_85() throws IOException {
+	public void test_0x0079() throws IOException {
 		String input = "{ let mut x = (0,0); x.0 = (1,2); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_86() throws IOException {
+	public void test_0x007A() throws IOException {
 		String input = "{ let mut x = (0,0); x.1 = (1,2); }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_87() throws IOException {
+	public void test_0x007B() throws IOException {
 		String input = "{ let mut x = (0,0); let mut y = &mut x.0; x.0 }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_88() throws IOException {
+	public void test_0x007C() throws IOException {
 		String input = "{ let mut x = (0,0); let mut y = &mut x.1; x.1 }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_89() throws IOException {
+	public void test_0x007D() throws IOException {
 		String input = "{ let mut x = (box 0, box 0); let mut y = x.0; let mut z = &x; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_90() throws IOException {
+	public void test_0x007E() throws IOException {
 		String input = "{ let mut x = (box 0, box 0); let mut y = 1; x.0 = &y; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_91() throws IOException {
+	public void test_0x007F() throws IOException {
 		String input = "{ let mut x = (1,2); let mut y = x.2; }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_92() throws IOException {
+	public void test_0x0080() throws IOException {
 		String input = "{ let mut x = (1,2,3); let mut y = x.3; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0081() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *w }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0082() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y = (&mut x1, &mut x2); let mut z = y.0; let mut w = y.1; *z }";
 		checkInvalid(input);
 	}
 

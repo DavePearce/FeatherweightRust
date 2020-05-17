@@ -230,17 +230,35 @@ public class Syntax {
 		}
 
 		public class Dereference extends AbstractTerm implements Term {
-			private final boolean copy;
+			public enum Kind {
+				/**
+				 * Forces a move
+				 */
+				MOVE,
+				/**
+				 * Forces a copy
+				 */
+				COPY,
+				/**
+				 * Represents neither copy nor move!
+				 */
+				TEMP
+			}
+			private final Kind kind;
 			private final LVal slice;
 
-			public Dereference(boolean copy, LVal slice, Attribute... attributes) {
+			public Dereference(Kind kind, LVal slice, Attribute... attributes) {
 				super(TERM_dereference, attributes);
-				this.copy = copy;
+				this.kind = kind;
 				this.slice = slice;
 			}
 
 			public boolean copy() {
-				return copy;
+				return kind != Kind.MOVE;
+			}
+
+			public boolean temporary() {
+				return kind == Kind.TEMP;
 			}
 
 			public LVal operand() {
@@ -249,7 +267,7 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				if(copy) {
+				if(kind == Kind.COPY) {
 					return "!" + slice;
 				} else {
 					return slice.toString();

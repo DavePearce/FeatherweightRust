@@ -23,9 +23,12 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.OperationalSemantics;
+import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
+import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
+import featherweightrust.extensions.Tuples.Typing;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractMachine.State;
@@ -194,24 +197,31 @@ public class ControlFlow {
 		}
 
 		private Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.IfElse t) {
+			final String v = BorrowChecker.fresh();
 			// Type left-hand side
-			Type Tx = self.apply(R1, l, t.leftHandSide()).second();
+			Pair<Environment,Type> p1 = self.apply(R1, l, t.leftHandSide());
+			Environment R2 = p1.first();
+			Type Tx = p1.second();
 			// Type right-hand side
-			Type Ty = self.apply(R1, l, t.rightHandSide()).second();
+			Pair<Environment,Type> p2 = self.apply(R2.put(v, Tx, l), l, t.rightHandSide());
+			Environment R3 = p2.first();
+			Type Ty = p2.second();
+			// Remove temporary
+			Environment R4 = R3.remove(v);
 			// Check operands are compatible
-			self.check(self.compatible(R1, Tx, Ty, R1), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(self.compatible(R4, Tx, Ty, R4), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Type true and false blocks
-			Pair<Environment, Type> pTrue = self.apply(R1, l, t.trueBlock());
-			Pair<Environment, Type> pFalse = self.apply(R1, l, t.falseBlock());
+			Pair<Environment, Type> pTrue = self.apply(R4, l, t.trueBlock());
+			Pair<Environment, Type> pFalse = self.apply(R4, l, t.falseBlock());
 			// Destructure pairs
-			Environment R2 = pTrue.first();
-			Environment R3 = pFalse.first();
+			Environment R5 = pTrue.first();
+			Environment R6 = pFalse.first();
 			Type T2 = pTrue.second();
 			Type T3 = pFalse.second();
 			// Check return types are compatible
-			self.check(self.compatible(R2, T2, T3, R3), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(self.compatible(R5, T2, T3, R6), BorrowChecker.INCOMPATIBLE_TYPE, t);
 			// Join environment and types from both branches
-			return new Pair<>(join(R2, R3, t), T2.union(T3));
+			return new Pair<>(join(R5, R6, t), T2.union(T3));
 		}
 
 		private Environment join(Environment lhs, Environment rhs, SyntacticElement e) {
@@ -235,4 +245,54 @@ public class ControlFlow {
 			return lhs;
 		}
 	}
+
+	public static class Checker extends BorrowChecker {
+
+		public Checker(String sourcefile) {
+			super(sourcefile, TYPING);
+		}
+
+		@Override
+		public Pair<Environment, Type> apply(Environment R, Lifetime l, Term t) {
+			// NOTE: this is a bit sneaky as we need to intercept temporary dereference
+			// operations only.
+			if (t instanceof Term.Dereference) {
+				Term.Dereference d = (Term.Dereference) t;
+				if (d.temporary()) {
+					return readTemporary(R,d.operand());
+				}
+			}
+			return super.apply(R, l, t);
+		}
+
+		/**
+		 * Read the value of a given lval from the environment, leading to a potentially
+		 * updated environment. For example, if we are reading a type which is not copy,
+		 * then it is moved and this must be reflected in the updated environment.
+		 *
+		 * @param R  The environment in which the read is occuring.
+		 * @param lv The lval being read.
+		 * @return
+		 */
+		public Pair<Environment, Type> readTemporary(Environment R, LVal lv) {
+			System.out.println(">>>> READ TEMP");
+			final String x = lv.name();
+			// Extract target cell
+			Cell Cx = R.get(x);
+			check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
+			// Check available at least for reading
+			check(available(R, lv, false), LVAL_MOVED, lv);
+			// Determine type being read
+			Type T2 = typeOf(R,lv);
+			// Check variable readable (e.g. not mutably borrowed)
+			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
+			System.out.println("<<<< READ TEMP");
+			// Done
+			return new Pair<Environment, Type>(R,T2);
+		}
+
+	}
+
+	public static final BorrowChecker.Extension TYPING = new Typing();
+	public static final OperationalSemantics SEMANTICS = new OperationalSemantics(new ControlFlow.Semantics());
 }

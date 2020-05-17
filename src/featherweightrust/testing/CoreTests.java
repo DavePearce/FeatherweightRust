@@ -57,8 +57,26 @@ public class CoreTests {
 	}
 
 	@Test
+	public void test_01b() throws IOException {
+		String input = "{ let mut x = 123; !x }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
 	public void test_02() throws IOException {
 		String input = "{ let mut x = 123; let mut y = x; y}";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_02b() throws IOException {
+		String input = "{ let mut x = 123; let mut y = x; !y}";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_02c() throws IOException {
+		String input = "{ let mut x = 123; let mut y = !x; y}";
 		check(input, OneTwoThree);
 	}
 
@@ -107,33 +125,50 @@ public class CoreTests {
 		check(input, One);
 	}
 
-
 	@Test
 	public void test_20() throws IOException {
-		String input = "{ let mut x = 123; let mut y = &mut x; x = 1; }";
+		String input = "{ let mut x = 123; let mut y = x; x }";
 		checkInvalid(input);
 	}
 
 	@Test
 	public void test_21() throws IOException {
-		String input = "{ x = 123; }";
+		String input = "{ let mut x = box 1; let mut y = !x; }";
 		checkInvalid(input);
 	}
 
 	@Test
 	public void test_22() throws IOException {
-		String input = "{ let mut x = 123; y = 123; }";
+		String input = "{ let mut x = 123; let mut y = &mut x; let mut z = !y; }";
 		checkInvalid(input);
 	}
 
 	@Test
 	public void test_23() throws IOException {
-		String input = "{ let mut x = 123; { let mut y = 1; } y = 123; }";
+		String input = "{ let mut x = 123; let mut y = &mut x; x = 1; }";
 		checkInvalid(input);
 	}
 
 	@Test
 	public void test_24() throws IOException {
+		String input = "{ x = 123; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_25() throws IOException {
+		String input = "{ let mut x = 123; y = 123; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_26() throws IOException {
+		String input = "{ let mut x = 123; { let mut y = 1; } y = 123; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_27() throws IOException {
 		String input = "{ let mut x = box 1; let mut y = x; *x = 123; }";
 		checkInvalid(input);
 	}

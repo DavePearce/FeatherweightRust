@@ -99,13 +99,13 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Term> reduceDereference(State S, LVal lv) {
+	public Pair<State, Term> reduceDereference(State S, LVal lv, boolean copy) {
 		// Extract location, or throw exception otherwise
 		Reference lx = lv.locate(S);
 		// Read contents of cell at given location
 		Value v = S.read(lx);
 		// Check whether move required
-		if(!v.copyable()) {
+		if(!copy) {
 			// Apply destructive update
 			S = S.write(lx, null);
 		}
@@ -214,7 +214,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 
 	@Override
 	final public Pair<State, Term> apply(State S, Lifetime l, Term.Dereference e) {
-		return reduceDereference(S, e.operand());
+		return reduceDereference(S, e.operand(), e.copy());
 	}
 
 	@Override

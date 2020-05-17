@@ -219,9 +219,14 @@ public class Parser {
 
 	public Term.Dereference parseDereference(Context context, Lifetime lifetime) {
 		int start = index;
+		boolean copy = false;
+		if (index < tokens.size() && tokens.get(index) instanceof Shreak) {
+			match("!");
+			copy = true;
+		}
 		LVal operand = parseLVal(context, lifetime);
 		//
-		return new Term.Dereference(operand, sourceAttr(start, index - 1));
+		return new Term.Dereference(copy, operand, sourceAttr(start, index - 1));
 	}
 
 	public Term.Box parseBox(Context context, Lifetime lifetime) {

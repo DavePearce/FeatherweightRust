@@ -230,11 +230,17 @@ public class Syntax {
 		}
 
 		public class Dereference extends AbstractTerm implements Term {
+			private final boolean copy;
 			private final LVal slice;
 
-			public Dereference(LVal slice, Attribute... attributes) {
+			public Dereference(boolean copy, LVal slice, Attribute... attributes) {
 				super(TERM_dereference, attributes);
+				this.copy = copy;
 				this.slice = slice;
+			}
+
+			public boolean copy() {
+				return copy;
 			}
 
 			public LVal operand() {
@@ -243,7 +249,11 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return slice.toString();
+				if(copy) {
+					return "!" + slice;
+				} else {
+					return slice.toString();
+				}
 			}
 //
 //			public static Term.Dereference construct(String name) {
@@ -324,15 +334,6 @@ public class Syntax {
 		public static Unit Unit = new Unit();
 
 		/**
-		 * Check whether this value is copy or not. Any compound which contains a
-		 * non-copy value is itself not copy. By default, owned references are the only
-		 * value which are not copy.
-		 *
-		 * @return
-		 */
-		public boolean copyable();
-
-		/**
 		 * A compound value contains zero or more sub-values which can be identified and
 		 * extracted.
 		 *
@@ -392,11 +393,6 @@ public class Syntax {
 		public class Atom extends AbstractTerm implements Value {
 			public Atom(int opcode, Attribute... attributes) {
 				super(opcode, attributes);
-			}
-
-			@Override
-			public boolean copyable() {
-				return true;
 			}
 
 			@Override
@@ -533,12 +529,6 @@ public class Syntax {
 			 */
 			public boolean owner() {
 				return path == OWNER;
-			}
-
-			@Override
-			public boolean copyable() {
-				// Owned references are not copy
-				return path != OWNER;
 			}
 
 			/**

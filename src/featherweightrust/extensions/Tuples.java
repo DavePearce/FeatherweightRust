@@ -147,17 +147,6 @@ public class Tuples {
 					return new TupleValue(nterms);
 				}
 			}
-
-			@Override
-			public boolean copyable() {
-				for (int i = 0; i != terms.length; ++i) {
-					Value v = (Value) terms[i];
-					if (!v.copyable()) {
-						return false;
-					}
-				}
-				return true;
-			}
 		}
 
 		/**

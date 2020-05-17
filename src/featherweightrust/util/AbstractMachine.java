@@ -40,7 +40,7 @@ public abstract class AbstractMachine {
 	 * Represents the state before and after each transition by the operation
 	 * semantics.
 	 *
-	 * @author djp
+	 * @author David J. Pearce
 	 *
 	 */
 	public static class State {

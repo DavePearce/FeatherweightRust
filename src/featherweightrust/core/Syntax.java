@@ -401,17 +401,13 @@ public class Syntax {
 
 			@Override
 			public Value read(int[] path, int index) {
-				if(index != path.length) {
-					throw new IllegalArgumentException("invalid path");
-				}
+				assert index == path.length;
 				return this;
 			}
 
 			@Override
 			public Value write(int[] path, int index, Value value) {
-				if(index != path.length) {
-					throw new IllegalArgumentException("invalid path");
-				}
+				assert index == path.length;
 				return value;
 			}
 		}
@@ -780,9 +776,7 @@ public class Syntax {
 
 			public Borrow(boolean mut, LVal[] paths, Attribute... attributes) {
 				super(attributes);
-				if(paths.length == 0) {
-					throw new IllegalArgumentException("invalid names argumetn");
-				}
+				assert paths.length > 0;
 				this.mut = mut;
 				this.lvals = paths;
 				// Ensure sorted invariant
@@ -996,9 +990,7 @@ public class Syntax {
 
 			public Shadow(Type type, Attribute... attributes) {
 				super(attributes);
-				if(type instanceof Shadow) {
-					throw new IllegalArgumentException("should be impossible");
-				}
+				assert !(type instanceof Shadow);
 				this.type = type;
 			}
 
@@ -1308,6 +1300,7 @@ public class Syntax {
 				if (arg0 == DEREF) {
 					return 0;
 				} else {
+					// FIXME: do something here?
 					throw new IllegalArgumentException("GOT HERE");
 				}
 			}

@@ -14,7 +14,7 @@ import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
-import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.AbstractMachine.State;
@@ -89,7 +89,7 @@ public class Tuples {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class TupleValue extends TupleTerm<Value> implements Value {
+		public static class TupleValue extends TupleTerm<Value> implements Value.Compound {
 			public TupleValue(Term[] values, Attribute... attributes) {
 				super(values,attributes);
 			}
@@ -109,7 +109,7 @@ public class Tuples {
 					// Select element
 					Value t = (Value) terms[i];
 					// Read element
-					return t.read(path, index + 1);
+					return (t == null) ? t : t.read(path, index + 1);
 				}
 			}
 
@@ -129,6 +129,17 @@ public class Tuples {
 					//
 					return new TupleValue(nterms);
 				}
+			}
+
+			@Override
+			public boolean copyable() {
+				for (int i = 0; i != terms.length; ++i) {
+					Value v = (Value) terms[i];
+					if (!v.copyable()) {
+						return false;
+					}
+				}
+				return true;
 			}
 		}
 
@@ -289,7 +300,7 @@ public class Tuples {
 			}
 
 			@Override
-			public Location apply(Store store, Location loc) {
+			public Reference apply(Store store, Reference loc) {
 				return loc.at(index);
 			}
 
@@ -302,6 +313,8 @@ public class Tuples {
 
 
 	public static class Semantics extends OperationalSemantics.Extension {
+
+		// FIXME: dropping tuple values doesn't recursively drop boxes.
 
 		@Override
 		public Pair<State, Term> apply(State S, Lifetime l, Term term) {

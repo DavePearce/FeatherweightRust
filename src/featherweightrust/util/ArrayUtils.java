@@ -498,4 +498,52 @@ public class ArrayUtils {
 		}
 		return -1;
 	}
+
+	/**
+	 * Pad a given string with spaces to the left to ensure it is exactly a given
+	 * width (assuming the string itself is not larger than the width).
+	 *
+	 * @param width
+	 * @param r
+	 * @return
+	 */
+	public static String leftPad(int width, String r) {
+		width -= r.length();
+		return pad(width, ' ') + r;
+	}
+
+	/**
+	 * Pad a given string with spaces to the right to ensure it is exactly a given
+	 * width (assuming the string itself is not larger than the width).
+	 *
+	 * @param width
+	 * @param r
+	 * @return
+	 */
+	public static String rightPad(int width, String r) {
+		width -= r.length();
+		return r + pad(width, ' ');
+	}
+
+	public static String centerPad(int width, String r) {
+		width -= r.length();
+		int l = (width/2);
+		return pad(l,' ') + r + pad(width-l,' ');
+	}
+
+	/**
+	 * Construct a string containing replications of a given character upto a given
+	 * width.
+	 *
+	 * @param width
+	 * @param c
+	 * @return
+	 */
+	public static String pad(int width, char c) {
+		String r = "";
+		for(int i=0;i<width;++i) {
+			r += c;
+		}
+		return r;
+	}
 }

@@ -35,6 +35,7 @@ import featherweightrust.core.Syntax.Type.Box;
 import featherweightrust.core.Syntax.Type.Shadow;
 import featherweightrust.extensions.ControlFlow;
 import featherweightrust.util.AbstractTransformer;
+import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement;
 import featherweightrust.util.SyntaxError;
@@ -48,6 +49,11 @@ import featherweightrust.util.SyntacticElement.Attribute;
  *
  */
 public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment, Type, BorrowChecker.Extension> {
+	/**
+	 * Enable or disable debugging output.
+	 */
+	private static final boolean DEBUG = false;
+
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
 	public final static String UNDECLARED_VARIABLE = "variable undeclared";
@@ -79,10 +85,20 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term t) {
 		Pair<Environment,Type> p = super.apply(R1,l,t);
-		Environment R2 = p.first();
-		Type T = p.second();
-		System.out.println(R1 + " |- " + t + " : " + T + " -| " + R2);
-		System.out.println("---------------------------------------");
+		if(DEBUG) {
+			Environment R2 = p.first();
+			Type T = p.second();
+			// Debugging output
+			final int CONSOLE_WIDTH = 120;
+			String m = " |- " + ArrayUtils.centerPad(40, t + " : " + T) + " -| ";
+			int lw = (CONSOLE_WIDTH - m.length()) / 2;
+			int rw = (CONSOLE_WIDTH - m.length() - lw);
+			String sl = ArrayUtils.leftPad(lw,R1.toString());
+			String sr = ArrayUtils.rightPad(rw,R2.toString());
+			String s = sl + m + sr;
+			System.err.println(s);
+			System.err.println(ArrayUtils.pad(s.length(), '='));
+		}
 		return p;
 	}
 
@@ -220,7 +236,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Location t) {
+	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Reference t) {
 		// NOTE: Safe since locations not part of source level syntax.
 		throw new UnsupportedOperationException();
 	}
@@ -371,24 +387,20 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Pair<Environment,Type> write(Environment R, Type.Borrow T1, Path p, int i, Type T2) {
 		// T-BorrowAssign
 		Type.Borrow b = (Type.Borrow) T1;
-		LVal[] ys = b.slices();
+		LVal[] ys = b.lvals();
 		// Mutability check
 		check(b.isMutable(), EXPECTED_MUTABLE_BORROW, p);
 		//
 		Environment Rn = R;
 		// Consider all targets
 		for (int j = 0; j != ys.length; ++j) {
-			LVal y = ys[j];
-			Cell Cy = R.get(y.name());
-			Type Ty = typeOf(Rn, y);
+			// Traverse remainder of path from lval.
+			LVal y = ys[j].traverse(p,i+1);
 			// NOTE: this prohibits a strong update in certain cases where it may, in fact,
 			// be possible to do this. It's not clear to me that this is always necessary or
 			// even desirable. However, at the time of writing, this mimics the Rust
 			// compiler.
-			Pair<Environment,Type> r = write(Rn, Ty, p, i + 1, T2, false);
-			Rn = r.first();
-			// Update environment
-			Rn = Rn.put(y.name(), r.second(), Cy.lifetime());
+			Rn = write(R, y, T2, false);
 		}
 		//
 		return new Pair<>(Rn, T1);
@@ -522,8 +534,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			Type.Borrow _T2 = (Type.Borrow) T2;
 			// NOTE: follow holds because all members of a single borrow must be compatible
 			// by construction.
-			Type ti = typeOf(R1,_T1.slices()[0]);
-			Type tj = typeOf(R2,_T2.slices()[0]);
+			Type ti = typeOf(R1,_T1.lvals()[0]);
+			Type tj = typeOf(R2,_T2.lvals()[0]);
 			//
 			return _T1.isMutable() == _T2.isMutable() && compatible(R1, ti, tj, R2);
 		} else if(T1 instanceof Type.Box && T2 instanceof Type.Box) {
@@ -585,7 +597,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			return b.element();
 		} else if (type instanceof Type.Borrow) {
 			Type.Borrow b = (Type.Borrow) type;
-			LVal[] lvals = b.slices();
+			LVal[] lvals = b.lvals();
 			Type T = null;
 			for (int i = 0; i != lvals.length; ++i) {
 				Type ith = typeOf(env, lvals[i]);

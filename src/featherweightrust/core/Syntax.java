@@ -26,7 +26,7 @@ import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Type;
-import featherweightrust.core.Syntax.Value.Location;
+import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
 import featherweightrust.util.ArrayUtils;
@@ -324,6 +324,40 @@ public class Syntax {
 		public static Unit Unit = new Unit();
 
 		/**
+		 * Check whether this value is copy or not. Any compound which contains a
+		 * non-copy value is itself not copy. By default, owned references are the only
+		 * value which are not copy.
+		 *
+		 * @return
+		 */
+		public boolean copyable();
+
+		/**
+		 * A compound value contains zero or more sub-values which can be identified and
+		 * extracted.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public interface Compound extends Value {
+			/**
+			 * Get the width of this value. For compound values, this determines the number
+			 * of values contained within at the first level.
+			 *
+			 * @return
+			 */
+			public int size();
+
+			/**
+			 * Get the ith value contained within at the first level.
+			 *
+			 * @param i
+			 * @return
+			 */
+			public Value get(int i);
+		}
+
+		/**
 		 * Read the value at a given path within this value. If path is empty, then that
 		 * identifies this value to be returned. For example, given a tuple
 		 * <code>(1,2)</code>, reading the value at path <code>1</code> gives
@@ -358,6 +392,11 @@ public class Syntax {
 		public class Atom extends AbstractTerm implements Value {
 			public Atom(int opcode, Attribute... attributes) {
 				super(opcode, attributes);
+			}
+
+			@Override
+			public boolean copyable() {
+				return true;
 			}
 
 			@Override
@@ -436,28 +475,43 @@ public class Syntax {
 		}
 
 		/**
-		 * Represents a location in the abstract machine's memory. Each location can
-		 * store an atomic value.
+		 * Represents an <i>owned</i> or <i>unowned</i> reference to a give location (or
+		 * part thereof) in the machines memory. An owning reference is one which
+		 * assumes responsibility for memory deallocation. A reference can refer to a
+		 * position within a given location, and this is determined by the <i>path</i>.
+		 * That is a sequence of zero or more <i>indices</i> into the location. For
+		 * example, a location holding a <i>pair</i> value would have two positions at
+		 * the first level. If <code>l</code> refers is the address of this location,
+		 * then the valid references are: <code>l</code>, <code>l:0</code> and
+		 * <code>l:1</code> (along with the owning / non-owning variants).
 		 *
 		 * @author David J. Pearce
 		 *
 		 */
-		public class Location extends Atom {
+		public class Reference extends Atom {
+			private static final int[] OWNER = new int[0];
+			private static final int[] OTHER = new int[0];
+			/**
+			 * The location's address in the machines memory
+			 */
 			private final int address;
+			/**
+			 * Identifies the position within the location to which this reference refers.
+			 */
 			private final int[] path;
 
-			public Location(int address, Attribute... attributes) {
-				this(address, new int[0], attributes);
+			public Reference(int address, Attribute... attributes) {
+				this(address, OWNER, attributes);
 			}
 
-			public Location(int address, int[] path, Attribute... attributes) {
+			private Reference(int address, int[] path, Attribute... attributes) {
 				super(TERM_location, attributes);
 				this.address = address;
 				this.path = path;
 			}
 
 			/**
-			 * Get the base address of the allocation unit this location refers to.
+			 * Get the base address of the location this reference refers to.
 			 *
 			 * @return
 			 */
@@ -465,8 +519,43 @@ public class Syntax {
 				return address;
 			}
 
+			/**
+			 * Get the path to the position within the location which this references refers
+			 * to.
+			 *
+			 * @return
+			 */
 			public int[] getPath() {
 				return path;
+			}
+
+			/**
+			 * Determine the ownership status of this location. Specifically, whether or not
+			 * this reference is responsible for deallocating its location.
+			 *
+			 * @return
+			 */
+			public boolean owner() {
+				return path == OWNER;
+			}
+
+			@Override
+			public boolean copyable() {
+				// Owned references are not copy
+				return path != OWNER;
+			}
+
+			/**
+			 * Obtain a reference which is not an owner to which it refers.
+			 *
+			 * @return
+			 */
+			public Reference reference() {
+				if (path == OWNER) {
+					return new Reference(address, OTHER);
+				} else {
+					return this;
+				}
 			}
 
 			/**
@@ -475,10 +564,10 @@ public class Syntax {
 			 * @param offset
 			 * @return
 			 */
-			public Location at(int offset) {
+			public Reference at(int offset) {
 				int[] npath = Arrays.copyOf(path, path.length + 1);
 				npath[path.length] = offset;
-				return new Location(address,npath);
+				return new Reference(address,npath);
 			}
 
 			@Override
@@ -488,8 +577,8 @@ public class Syntax {
 
 			@Override
 			public boolean equals(Object o) {
-				if (o instanceof Location) {
-					Location l = ((Location) o);
+				if (o instanceof Reference) {
+					Reference l = ((Reference) o);
 					return l.address == address && Arrays.equals(path, l.path);
 				}
 				return false;
@@ -501,7 +590,8 @@ public class Syntax {
 				for(int i=0;i!=path.length;++i) {
 					p = p + ":" + path[i];
 				}
-				return "&" + address + p;
+				String q = owner() ? "+" : "";
+				return "&" + q + address + p;
 			}
 		}
 	}
@@ -682,7 +772,7 @@ public class Syntax {
 
 		public static class Borrow extends AbstractAtom {
 			private final boolean mut;
-			private final LVal[] items;
+			private final LVal[] lvals;
 
 			public Borrow(boolean mut, LVal item, Attribute... attributes) {
 				this(mut,new LVal[] {item}, attributes);
@@ -694,7 +784,7 @@ public class Syntax {
 					throw new IllegalArgumentException("invalid names argumetn");
 				}
 				this.mut = mut;
-				this.items = paths;
+				this.lvals = paths;
 				// Ensure sorted invariant
 				Arrays.sort(paths);
 			}
@@ -711,8 +801,8 @@ public class Syntax {
 			@Override
 			public boolean prohibitsWriting(LVal lv) {
 				// Any conflicting borrow prohibits an lval from being written.
-				for (int i = 0; i != items.length; ++i) {
-					LVal ith = items[i];
+				for (int i = 0; i != lvals.length; ++i) {
+					LVal ith = lvals[i];
 					// Check whether potential conflict
 					if (lv.conflicts(ith)) {
 						return true;
@@ -734,8 +824,8 @@ public class Syntax {
 			@Override
 			public boolean within(BorrowChecker checker, Environment R, Lifetime l) {
 				boolean r = true;
-				for (int i = 0; i != items.length; ++i) {
-					LVal ith = items[i];
+				for (int i = 0; i != lvals.length; ++i) {
+					LVal ith = lvals[i];
 					checker.check(R.get(ith.name()) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
 					Cell C = R.get(ith.name());
 					r &= C.lifetime().contains(l);
@@ -751,7 +841,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						LVal[] ps = ArrayUtils.append(items, b.items);
+						LVal[] ps = ArrayUtils.append(lvals, b.lvals);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -770,7 +860,7 @@ public class Syntax {
 					Type.Borrow b = (Type.Borrow) t;
 					if(mut == b.mut) {
 						// Append both sets of names together
-						LVal[] ps = ArrayUtils.append(items, b.items);
+						LVal[] ps = ArrayUtils.append(lvals, b.lvals);
 						// Remove any duplicates and ensure result is sorted
 						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
 						// Done
@@ -780,30 +870,30 @@ public class Syntax {
 				throw new IllegalArgumentException("invalid intersect");
 			}
 
-			public LVal[] slices() {
-				return items;
+			public LVal[] lvals() {
+				return lvals;
 			}
 
 			@Override
 			public boolean equals(Object o) {
 				if(o instanceof Borrow) {
 					Borrow b = (Borrow) o;
-					return mut == b.mut && Arrays.equals(items, b.items);
+					return mut == b.mut && Arrays.equals(lvals, b.lvals);
 				}
 				return false;
 			}
 
 			@Override
 			public int hashCode() {
-				return Boolean.hashCode(mut) ^ Arrays.hashCode(items);
+				return Boolean.hashCode(mut) ^ Arrays.hashCode(lvals);
 			}
 
 			@Override
 			public String toString() {
 				if (mut) {
-					return "&mut " + toString(items);
+					return "&mut " + toString(lvals);
 				} else {
-					return "&" + toString(items);
+					return "&" + toString(lvals);
 				}
 			}
 
@@ -1024,11 +1114,27 @@ public class Syntax {
 		 * @param state
 		 * @return
 		 */
-		public Location locate(State state) {
+		public Reference locate(State state) {
 			// Identify root of path
-			Location l = state.locate(name);
+			Reference l = state.locate(name);
 			// Apply each element in turn
 			return path.apply(l, state.store());
+		}
+
+		public LVal traverse(Path p, int i) {
+			final Path.Element[] path_elements = path.elements;
+			final Path.Element[] p_elements = p.elements;
+			// Handle common case
+			if (p_elements.length == i) {
+				return this;
+			} else {
+				final int n = path_elements.length;
+				final int m = p_elements.length - i;
+				Path.Element[] nelements = new Path.Element[n + m];
+				System.arraycopy(path_elements, 0, nelements, 0, n);
+				System.arraycopy(p_elements, i, nelements, n, m);
+				return new LVal(name, new Path(nelements));
+			}
 		}
 
 		@Override
@@ -1065,9 +1171,6 @@ public class Syntax {
 
 		public Path(Element[] elements, Attribute... attributes) {
 			super(attributes);
-			if(attributes.length == 0) {
-				throw new IllegalArgumentException();
-			}
 			this.elements = elements;
 		}
 
@@ -1099,7 +1202,7 @@ public class Syntax {
 		 * @param store
 		 * @return
 		 */
-		public Location apply(Location location, Store store) {
+		public Reference apply(Reference location, Store store) {
 			for (int i = 0; i != elements.length; ++i) {
 				location = elements[i].apply(store, location);
 			}
@@ -1188,7 +1291,7 @@ public class Syntax {
 			 * @param store
 			 * @return
 			 */
-			public Location apply(Store store, Location loc);
+			public Reference apply(Store store, Reference loc);
 
 			public String toString(String src);
 		}
@@ -1211,12 +1314,12 @@ public class Syntax {
 
 			@Override
 			public boolean conflicts(Element e) {
-				throw new IllegalArgumentException("GOT HERE");
+				return true;
 			}
 
 			@Override
-			public Location apply(Store store, Location loc) {
-				return (Location) store.read(loc);
+			public Reference apply(Store store, Reference loc) {
+				return (Reference) store.read(loc);
 			}
 
 			@Override

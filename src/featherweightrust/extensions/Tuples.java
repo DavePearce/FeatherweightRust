@@ -147,17 +147,6 @@ public class Tuples {
 					return new TupleValue(nterms);
 				}
 			}
-
-			@Override
-			public boolean copyable() {
-				for (int i = 0; i != terms.length; ++i) {
-					Value v = (Value) terms[i];
-					if (!v.copyable()) {
-						return false;
-					}
-				}
-				return true;
-			}
 		}
 
 		/**
@@ -378,7 +367,7 @@ public class Tuples {
 
 		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.TupleTerm<?> t) {
 			Term[] elements = t.terms;
-			String[] vars = fresh(elements.length);
+			String[] vars = BorrowChecker.fresh(elements.length);
 			Type[] types = new Type[elements.length];
 			Environment Rn = R1;
 			// Type each element individually
@@ -517,25 +506,6 @@ public class Tuples {
 			}
 		}
 		return -1;
-	}
-
-	private static int index = 0;
-
-	/**
-	 * Return a unique variable name everytime this is called.
-	 *
-	 * @return
-	 */
-	private static String fresh() {
-		return "?" + (index++);
-	}
-
-	public static String[] fresh(int n) {
-		String[] freshVars = new String[n];
-		for(int i=0;i!=n;++i) {
-			freshVars[i] = fresh();
-		}
-		return freshVars;
 	}
 
 	public static final BorrowChecker.Extension TYPING = new Typing();

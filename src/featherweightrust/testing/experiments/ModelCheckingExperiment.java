@@ -75,7 +75,7 @@ public class ModelCheckingExperiment {
 	 * Command-line options
 	 */
 	private static final OptArg[] OPTIONS = {
-			new OptArg("verbose","v","set expected domain size"),
+			new OptArg("verbose","v","set verbose output"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),

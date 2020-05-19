@@ -60,14 +60,23 @@ public class Parser {
 		Lifetime myLifetime = lifetime.freshWithin();
 
 		match("{");
-		ArrayList<Term> stmts = new ArrayList<>();
+		ArrayList<Term> terms = new ArrayList<>();
+		boolean separatorRequired = false;
 		while (index < tokens.size() && !(tokens.get(index) instanceof RightCurly)) {
+			if(separatorRequired) {
+				match(";");
+				// Catch empty statement
+				if(index < tokens.size() && tokens.get(index) instanceof RightCurly) {
+					break;
+				}
+			}
 			Term stmt = parseTerm(context, myLifetime, true);
-			stmts.add(stmt);
+			terms.add(stmt);
+			separatorRequired = !(stmt instanceof Term.Block);
 		}
 		match("}");
 
-		return new Term.Block(myLifetime, stmts.toArray(new Term[stmts.size()]), sourceAttr(start, index - 1));
+		return new Term.Block(myLifetime, terms.toArray(new Term[terms.size()]), sourceAttr(start, index - 1));
 	}
 
 	public static int lifetime = 0;
@@ -129,7 +138,6 @@ public class Parser {
 			// This is an assignment statement
 			match("=");
 			Term rhs = parseTerm(context, lifetime, true);
-			match(";");
 			int end = index;
 			return new Term.Assignment(lhs.operand(), rhs, sourceAttr(start, end - 1));
 		} else {
@@ -157,7 +165,6 @@ public class Parser {
 		// expression.
 		match("=");
 		Term initialiser = parseTerm(context, lifetime, true);
-		match(";");
 		// Done.
 		return new Term.Let(variable, initialiser, sourceAttr(start, index - 1));
 	}
@@ -257,7 +264,7 @@ public class Parser {
 				lv = parseLVal(context, lifetime);
 			}
 			// Done
-			return new LVal(lv.name(), append(lv.path(), Syntax.Path.DEREF), sourceAttr(start, index - 1));
+			return new LVal(lv.name(), append(lv.path(), Syntax.Path.DEREF_ELEMENT), sourceAttr(start, index - 1));
 		} else {
 			// Parse variable identifier
 			Identifier var = matchIdentifier();

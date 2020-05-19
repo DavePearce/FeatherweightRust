@@ -17,8 +17,10 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 
+import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.*;
@@ -107,10 +109,8 @@ public class ProgramSpace {
 		Lifetime lifetime = ROOT.freshWithin();
 		// The specialised domain for creating statements
 		Domain.Small<String> variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, maxVariables));
-		// Construct domain of expressions over *declared* variables
-		Domain.Big<Term> expressions = Syntax.toBigDomain(1, ints, variables);
 		// Construct domain of statements
-		Domain.Big<Term> stmts = Syntax.toBigDomain(maxBlockDepth - 1, maxBlockWidth, lifetime, expressions, variables,
+		Domain.Big<Term> stmts = Syntax.toBigDomain(maxBlockDepth, maxBlockWidth, lifetime, ints, variables,
 				variables);
 		// Construct outer block
 		return Term.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
@@ -160,6 +160,9 @@ public class ProgramSpace {
 
 		@Override
 		public Walker<Term> construct() {
+			// Construct adaptor to convert from variable names to lvals.
+			Domain.Big<LVal> lvals = LVal.toBigDomain(declared);
+			// Construct domain of "expressions"
 			Domain.Big<Term> expressions = Syntax.toBigDomain(1, ints, declared);
 			Domain.Big<Let> lets;
 			int size = declared.bigSize().intValue();
@@ -171,11 +174,9 @@ public class ProgramSpace {
 				lets = Domains.EMPTY;
 			}
 			// Assignments can only use declared variables
-			Domain.Big<Assignment> assigns = Term.Assignment.toBigDomain(declared, expressions);
-			// Indirect assignments can only use declared variables
-			Domain.Big<IndirectAssignment> indirects = Term.IndirectAssignment.toBigDomain(declared, expressions);
+			Domain.Big<Assignment> assigns = Term.Assignment.toBigDomain(lvals, expressions);
 			// Create walker for unit statements
-			Walker<Term> units = Walkers.Adaptor(Domains.Union(lets, assigns, indirects));
+			Walker<Term> units = Walkers.Adaptor(Domains.Union(lets, assigns));
 			//
 			if (depth == 0 || blocks <= 0) {
 				return units;
@@ -218,6 +219,20 @@ public class ProgramSpace {
 		}
 	}
 
+	public static void print(ProgramSpace p) {
+		Domain.Big<Term.Block> domain = p.domain();
+		for(long i=0;i!=domain.bigSize().longValue();++i) {
+			System.out.println(domain.get(BigInteger.valueOf(i)));
+		}
+	}
+
+	public static void print(ProgramSpace p, int max) {
+		Walker<Term.Block> programs = p.definedVariableWalker(max);
+		for(Term.Block b : programs) {
+			System.out.println(b);
+		}
+	}
+
 	public static void count(ProgramSpace p) {
 		Domain.Big<Term.Block> domain = p.domain();
 		System.out.println("|" + p + "| = " + domain.bigSize().doubleValue());
@@ -233,49 +248,47 @@ public class ProgramSpace {
 	}
 
 	public static void main(String[] args) {
-		// Print some statistics about various domains
-		ProgramSpace[] spaces = {
-				new ProgramSpace(1,1,1,1),
-				new ProgramSpace(1,1,1,2),
-				new ProgramSpace(1,1,2,2),
-				new ProgramSpace(1,2,2,2),
-				new ProgramSpace(2,2,2,2),
-				new ProgramSpace(1,2,2,3),
-				new ProgramSpace(1,2,3,3),
-				new ProgramSpace(1,3,2,3),
-				new ProgramSpace(1,3,3,2),
-				new ProgramSpace(1,3,3,3),
-		};
-		// Determine exhaustive sizes
 		count(new ProgramSpace(1,1,1,1));
-		count(new ProgramSpace(1,1,1,2));
-		count(new ProgramSpace(1,1,2,2));
-		count(new ProgramSpace(1,2,2,2));
-		count(new ProgramSpace(2,2,2,2));
-		count(new ProgramSpace(1,2,2,3));
-		count(new ProgramSpace(1,2,3,3));
-		count(new ProgramSpace(1,3,2,3));
-		count(new ProgramSpace(1,3,3,2));
-		count(new ProgramSpace(1,3,3,3));
-		// Determine constrained sizes
-		count(new ProgramSpace(1,1,1,1),2);
-		count(new ProgramSpace(1,1,1,2),2);
-		count(new ProgramSpace(1,1,2,2),2);
+		//count(new ProgramSpace(1,1,2,1));
+		//count(new ProgramSpace(1,1,1,2));
 		count(new ProgramSpace(1,2,2,2),2);
-		count(new ProgramSpace(2,2,2,2),2);
-		count(new ProgramSpace(1,2,2,3),2);
-		count(new ProgramSpace(1,2,3,3),2);
-		count(new ProgramSpace(1,3,2,3),2);
-		count(new ProgramSpace(1,3,3,3),2);
-		// Determine constrained sizes
-		count(new ProgramSpace(1,1,1,1),3);
-		count(new ProgramSpace(1,1,1,2),3);
-		count(new ProgramSpace(1,1,2,2),3);
-		count(new ProgramSpace(1,2,2,2),3);
-		count(new ProgramSpace(2,2,2,2),3);
-		count(new ProgramSpace(1,2,2,3),3); // <----
-		count(new ProgramSpace(1,2,3,3),3);
-		count(new ProgramSpace(1,3,2,3),3);
-		count(new ProgramSpace(1,3,3,3),3);
+		//count(new ProgramSpace(1,1,1,2),2);
+		//count(new ProgramSpace(1,1,2,2),2);
+		print(new ProgramSpace(1,2,2,2),2);
+
+
+		// Determine exhaustive sizes
+//		count(new ProgramSpace(1,1,1,1));
+//		count(new ProgramSpace(1,1,2,1));
+//		count(new ProgramSpace(1,1,1,2));
+		//
+//		count(new ProgramSpace(1,1,2,2));
+//		count(new ProgramSpace(1,2,2,2));
+//		count(new ProgramSpace(2,2,2,2));
+//		count(new ProgramSpace(1,2,2,3));
+//		count(new ProgramSpace(1,2,3,3));
+//		count(new ProgramSpace(1,3,2,3));
+//		count(new ProgramSpace(1,3,3,2));
+//		count(new ProgramSpace(1,3,3,3));
+//		// Determine constrained sizes
+//		count(new ProgramSpace(1,1,1,1),2);
+//		count(new ProgramSpace(1,1,1,2),2);
+//		count(new ProgramSpace(1,1,2,2),2);
+//		count(new ProgramSpace(1,2,2,2),2);
+//		count(new ProgramSpace(2,2,2,2),2);
+//		count(new ProgramSpace(1,2,2,3),2);
+//		count(new ProgramSpace(1,2,3,3),2);
+//		count(new ProgramSpace(1,3,2,3),2);
+//		count(new ProgramSpace(1,3,3,3),2);
+//		// Determine constrained sizes
+//		count(new ProgramSpace(1,1,1,1),3);
+//		count(new ProgramSpace(1,1,1,2),3);
+//		count(new ProgramSpace(1,1,2,2),3);
+//		count(new ProgramSpace(1,2,2,2),3);
+//		count(new ProgramSpace(2,2,2,2),3);
+//		count(new ProgramSpace(1,2,2,3),3); // <----
+//		count(new ProgramSpace(1,2,3,3),3);
+//		count(new ProgramSpace(1,3,2,3),3);
+//		count(new ProgramSpace(1,3,3,3),3);
 	}
 }

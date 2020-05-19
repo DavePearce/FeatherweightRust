@@ -45,7 +45,7 @@ import featherweightrust.util.Pair;
  *
  */
 public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 
 	public OperationalSemantics(Extension... extensions) {
 		super(extensions);

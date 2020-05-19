@@ -52,7 +52,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	/**
 	 * Enable or disable debugging output.
 	 */
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
@@ -497,7 +497,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				return true;
 			}
 		} else {
-			throw new IllegalArgumentException("unknown type encountered: " + T);
+			return false;
 		}
 	}
 

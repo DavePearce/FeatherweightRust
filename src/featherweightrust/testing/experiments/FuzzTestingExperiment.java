@@ -291,13 +291,9 @@ public class FuzzTestingExperiment {
 	public static void check(Term.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
 		if(!isCanonical(b)) {
 			stats.notCanonical++;
-		} else if(hasCopy(b)) {
-			stats.hasCopy++;
 		} else {
-			// Infer copy expressions
-			Term.Block nb = inferVariableClones(b);
 			// Check using calculus
-			SyntaxError FR_err = calculusCheckProgram(nb);
+			SyntaxError FR_err = calculusCheckProgram(b);
 			boolean FR_status = (FR_err == null);
 			// Construct rust program
 			String program = toRustProgram(b);
@@ -314,29 +310,19 @@ public class FuzzTestingExperiment {
 			boolean rustc_status = p.first();
 			String rustc_err = p.third();
 			// Delete source and binary files
-			new File(srcFilename).delete();
+			//new File(srcFilename).delete();
 			new File(binFilename).delete();
 			// Analysis output
 			if (FR_status != rustc_status) {
 				stats.record(rustc_err);
 				// Attempt to execute program
-				reportFailure(nb, program, FR_err, rustc_err);
+				reportFailure(b, program, FR_err, rustc_err);
 				if (rustc_status) {
 					// Rust says yes, FR says no
-					if(hasUnsoundness(nb)) {
-						stats.inconsistentUnsound++;
-					} else if(hasBoxDerefMoveLimitation(nb)) {
-						stats.inconsistentBoxDerefLimitation++;
-					} else {
-						stats.inconsistentInvalid++;
-					}
+					stats.inconsistentInvalid++;
 				} else {
 					// Rust says no, FR says yes.
-					if(hasSelfAssignment(nb)) {
-						stats.inconsistentPossibleBug++;
-					} else {
-						stats.inconsistentValid++;
-					}
+					stats.inconsistentPossibleBug++;
 				}
 			} else if (FR_status) {
 				stats.valid++;
@@ -364,9 +350,6 @@ public class FuzzTestingExperiment {
 			System.out.println("PROGRAM: " + program);
 			System.out.println("HASH: " + getHash(program));
 			System.out.println("RUSTC: " + (FR_err != null));
-			System.out.println("HAS UNSOUNDNESS: " + hasUnsoundness(b));
-			System.out.println("POSSIBLE BUG: " + hasSelfAssignment
-					(b));
 			if(rustc_err != null) {
 				System.out.println(rustc_err);
 			}
@@ -408,129 +391,6 @@ public class FuzzTestingExperiment {
 	}
 
 	/**
-	 * The purpose of this method is to perform a "clone analysis". That is, to
-	 * determine where we are copying items versus moving them.
-	 *
-	 * @param stmt
-	 * @return
-	 */
-	public static Term.Block inferVariableClones(Term.Block stmt) {
-		return (Term.Block) inferVariableClones(stmt, new HashSet<>());
-	}
-
-	/**
-	 * Infer variable clones for a given statement using a known set of variables
-	 * which have copy semantics (hence, can and should be copied). The key here is
-	 * to reduce work by only allocating new objects when things change.
-	 *
-	 * @param term
-	 * @param copyables
-	 * @return
-	 */
-	private static Term inferVariableClones(Term term, HashSet<String> copyables) {
-		if (term instanceof Term.Block) {
-			copyables = new HashSet<>(copyables);
-			Term.Block block = (Term.Block) term;
-			final Term[] stmts = block.toArray();
-			Term[] nstmts = stmts;
-			for (int i = 0; i != block.size(); ++i) {
-				Term s = block.get(i);
-				Term n = inferVariableClones(s, copyables);
-				if (s != n) {
-					if (stmts == nstmts) {
-						nstmts = Arrays.copyOf(stmts, stmts.length);
-					}
-					nstmts[i] = n;
-				}
-				// Update copyables
-				inferCopyables(s, copyables);
-			}
-			if (stmts == nstmts) {
-				return term;
-			} else {
-				return new Term.Block(block.lifetime(), nstmts, term.attributes());
-			}
-		} else if (term instanceof Term.Let) {
-			Term.Let s = (Term.Let) term;
-			Term e = s.initialiser();
-			Term ne = inferVariableClones(e, copyables);
-			if (e == ne) {
-				return term;
-			} else {
-				return new Term.Let(s.variable(), ne, term.attributes());
-			}
-		} else if (term instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) term;
-			Term e = s.rightOperand();
-			Term ne = inferVariableClones(e, copyables);
-			if (e == ne) {
-				return term;
-			} else {
-				return new Term.Assignment(s.leftOperand(), ne, term.attributes());
-			}
-		} else if (term instanceof Term.IndirectAssignment) {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) term;
-			Term e = s.rightOperand();
-			Term ne = inferVariableClones(e, copyables);
-			if (e == ne) {
-				return term;
-			} else {
-				return new Term.IndirectAssignment(s.leftOperand(), ne, term.attributes());
-			}
-		} else if (term instanceof Term.Variable) {
-			Term.Variable v = (Term.Variable) term;
-			if (copyables.contains(v.name())) {
-				return new Term.Copy(v, term.attributes());
-			}
-		} else {
-			Term.Box b = (Term.Box) term;
-			Term e = b.operand();
-			Term ne = inferVariableClones(e, copyables);
-			if (e != ne) {
-				return new Term.Box(ne, term.attributes());
-			}
-		}
-		return term;
-	}
-
-	/**
-	 * Determine variables which have copy semantics at this point.
-	 *
-	 * @param stmt
-	 * @param copyables
-	 */
-	public static void inferCopyables(Term stmt, HashSet<String> copyables) {
-		if(stmt instanceof Term.Let) {
-			Term.Let s = (Term.Let) stmt;
-			if(isCopyable(s.initialiser(),copyables)) {
-				copyables.add(s.variable().name());
-			}
-		}
-	}
-
-	/**
-	 * Check whether the result of a given expression should have copy semantics of
-	 * not. For example, expressions which return integers should exhibit copy
-	 * semantics.
-	 *
-	 * @param expr
-	 * @param copyables
-	 * @return
-	 */
-	public static boolean isCopyable(Term expr, HashSet<String> copyables) {
-		if (expr instanceof Term.Box) {
-			return false;
-		} else if (expr instanceof Term.Borrow) {
-			Term.Borrow b = (Term.Borrow) expr;
-			return !b.isMutable();
-		} else if (expr instanceof Term.Variable) {
-			Term.Variable v = (Term.Variable) expr;
-			return copyables.contains(v.name());
-		}
-		return true;
-	}
-
-	/**
 	 * Determine whether a given program is canonical or not. Canonical programs
 	 * have their variables declared in a specific order. The purpose of this is
 	 * just to eliminate isomorphs with respect to variable renaming.
@@ -558,7 +418,7 @@ public class FuzzTestingExperiment {
 			return declared;
 		} else if(stmt instanceof Term.Let) {
 			Term.Let s = (Term.Let) stmt;
-			String var = s.variable().name();
+			String var = s.variable();
 			if(!ProgramSpace.VARIABLE_NAMES[declared].equals(var)) {
 				// Program is not canonical
 				throw new IllegalArgumentException();
@@ -567,46 +427,6 @@ public class FuzzTestingExperiment {
 		}
 		return declared;
 	}
-
-	/**
-	 * Check whether the given program attempts to copy a variable that is no longer
-	 * live. Such programs are ignored because such expressions will be treated
-	 * differently by the rust compiler (i.e. treated as moves).
-	 *
-	 * @param term
-	 * @return
-	 */
-	private static boolean hasCopy(Term term) {
-		if (term instanceof Term.Block) {
-			Term.Block b = (Term.Block) term;
-			// Go backwards through the block for obvious reasons.
-			for (int i = 0; i != b.size(); ++i) {
-				if (hasCopy(b.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		} else if (term instanceof Term.Let) {
-			Term.Let s = (Term.Let) term;
-			return hasCopy(s.initialiser());
-		} else if (term instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) term;
-			return hasCopy(s.rightOperand());
-		} else if (term instanceof Term.IndirectAssignment) {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) term;
-			return hasCopy(s.leftOperand()) || hasCopy(s.rightOperand());
-		} else if (term instanceof Term.Copy) {
-			return true;
-		} else if (term instanceof Term.Box) {
-			Term.Box e = (Term.Box) term;
-			return hasCopy(e.operand());
-		}
-		return false;
-	}
-
-	/**
-	 *
-	 */
 
 	/**
 	 * Given a statement block in the calculus, generate a syntactically correct
@@ -629,7 +449,7 @@ public class FuzzTestingExperiment {
 				contents += toRustString(s, live) + " ";
 				if (s instanceof Term.Let) {
 					Term.Let l = (Term.Let) s;
-					declared.add(l.variable().name());
+					declared.add(l.variable());
 				}
 			}
 			// Remove declared variables
@@ -651,172 +471,14 @@ public class FuzzTestingExperiment {
 			String init = toRustString(s.initialiser());
 			updateLiveness(s.initialiser(),live);
 			// By definition variable is live after assignment
-			live.add(s.variable().name());
-			return "let mut " + s.variable().name() + " = " + init + ";";
-		} else if(stmt instanceof Term.Assignment) {
+			live.add(s.variable());
+			return "let mut " + s.variable() + " = " + init + ";";
+		} else {
 			Term.Assignment s = (Term.Assignment) stmt;
 			updateLiveness(s.rightOperand(),live);
 			// By definition variable is live after assignment
 			live.add(s.leftOperand().name());
-			return s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
-		} else {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) stmt;
-			updateLiveness(s.rightOperand(),live);
-			return "*" + s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
-		}
-	}
-
-	/**
-	 * Check for statements of the form <code>y = y</code>. These are incorrectly
-	 * rejected by the original borrow checker (e.g. Rust 1.35.0 edition 2015).
-	 * However, they are accepted (for the most part) by the new borrow checker.
-	 *
-	 * @param stmt
-	 * @return
-	 */
-	private static boolean hasSelfAssignment(Term stmt) {
-		if(stmt instanceof Term.Block) {
-			Term.Block b = (Term.Block) stmt;
-			for (int i = 0; i != b.size(); ++i) {
-				if(hasSelfAssignment(b.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		} else if(stmt instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) stmt;
-			if(s.rhs instanceof Term.Variable) {
-				Term.Variable rhs = (Term.Variable) s.rhs;
-				return s.lhs.name().equals(rhs.name());
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Look for programs which contain statements of the following form:
-	 *
-	 * <pre>
-	 * y = &y
-	 * y = &mut y
-	 * y = box &y
-	 * y = box &mut y
-	 * *y = &y
-	 * *y = &mut y
-	 * *y = box &y
-	 * *y = box &mut y
-	 * </pre>
-	 *
-	 * Statements such as this are unsound, but were accepted by the original borrow
-	 * checker (e.g. Rust v1.35.0 edition 2015). The new borrow checker (e.g. Rust
-	 * v1.36.0 edition 2015) reports a warning for such programs and notes that this
-	 * is for backwards compatibility reasons and will be upgraded in the future to
-	 * an error.
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static boolean hasUnsoundness(Term stmt) {
-		if (stmt instanceof Term.Block) {
-			Term.Block b = (Term.Block) stmt;
-			for (int i = 0; i != b.size(); ++i) {
-				if (hasUnsoundness(b.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		} else if (stmt instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) stmt;
-			return hasUnsoundBorrow(s.lhs.name(), s.rhs);
-		} else if (stmt instanceof Term.IndirectAssignment) {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) stmt;
-			return hasUnsoundBorrow(s.leftOperand().name(), s.rightOperand());
-		} else {
-			return false;
-		}
-	}
-
-	/**
-	 * Check whether an expression attempts to borrow a given variable which, in the
-	 * context this function is used, indicates the enclosing statement is unsound.
-	 *
-	 * @param var
-	 * @param e
-	 * @return
-	 */
-	private static boolean hasUnsoundBorrow(String var, Term e) {
-		if (e instanceof Term.Box) {
-			Term.Box b = (Term.Box) e;
-			return hasUnsoundBorrow(var, b.operand());
-		} else if (e instanceof Term.Borrow) {
-			Term.Borrow b = (Term.Borrow) e;
-			return b.operand().name().equals(var);
-		} else {
-			return false;
-		}
-	}
-
-	/**
-	 * <p>
-	 * This determines whether this block exposes a known limitation in the current
-	 * BorrowChecker for FR. Specifically, it does not currently support moving
-	 * through a dereference. For example, the following program is incorrectly
-	 * rejected by FR:
-	 * </p>
-	 *
-	 * <pre>
-	 * { let mut x = box 0; x = x; { let mut y = box x; y = box *y; *y = box 0; } }
-	 * </pre>
-	 *
-	 * <p>
-	 * The current borrow checker for FR reports incorrectly that, in the statement
-	 * <code>y = box *y</code>, the expression <code>*y</code> cannot be copied.
-	 * This is because the current rule T-BoxDeref requires the type in question be
-	 * copyable. In fact, it's possible to destructively update the variable being
-	 * dereferenced as we know it owns the location in question.
-	 * </p>
-	 * <p>
-	 * This rule simply employs an updated borrow checker to determine whether or
-	 * not the program would borrow check if the more flexible rule was supported.
-	 * </p>
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static boolean hasBoxDerefMoveLimitation(Term.Block b) {
-		// Extended borrow checker with a more flexible interpretation of T-BoxDeref.
-		BorrowChecker checker = new BorrowChecker(b.toString()) {
-			@Override
-			public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Dereference e) {
-				String x = e.operand().name();
-				Cell Cx = R1.get(x);
-				// Check variable is declared
-				check(Cx != null, UNDECLARED_VARIABLE, e);
-				// Check variable not moved
-				check(!Cx.moved(), LVAL_MOVED, e);
-				// Locate operand type
-				Cell C1 = R1.get(x);
-				// Check operand has reference type
-				if (C1.type() instanceof Type.Box) {
-					// T-BoxDeref
-					Type T = ((Type.Box) C1.type()).element();
-					//
-					if (!T.copyable() && !borrowed(R1, x)) {
-						// Implement destructive update
-						Environment R2 = R1.move(x);
-						//
-						return new Pair<>(R2, T);
-					}
-				}
-				// default back to original
-				return super.apply(R1, l, e);
-			}
-		};
-		try {
-			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
-			return true;
-		} catch (SyntaxError e) {
-			return false;
+			return s.leftOperand() + " = " + toRustString(s.rightOperand()) + ";";
 		}
 	}
 
@@ -827,13 +489,13 @@ public class FuzzTestingExperiment {
 	 * @return
 	 */
 	private static String toRustString(Term expr) {
-		if (expr instanceof Term.Copy) {
-			Term.Copy v = (Term.Copy) expr;
-			return v.operand().name();
-		} else if (expr instanceof Term.Box) {
+		if (expr instanceof Term.Box) {
 			Term.Box b = (Term.Box) expr;
 			return "Box::new(" + toRustString(b.operand()) + ")";
-		} else {
+		} else if(expr instanceof Term.Dereference) {
+			Term.Dereference d = (Term.Dereference) expr;
+			return d.operand().toString();
+		}else {
 			return expr.toString();
 		}
 	}
@@ -845,10 +507,10 @@ public class FuzzTestingExperiment {
 	 * @param liveness
 	 */
 	private static void updateLiveness(Term expr, HashSet<String> liveness) {
-		if (expr instanceof Term.Variable) {
+		if (expr instanceof Term.Dereference) {
 			// Variable move
-			Term.Variable b = (Term.Variable) expr;
-			liveness.remove(b.name());
+			Term.Dereference b = (Term.Dereference) expr;
+			liveness.remove(b.operand().name());
 		} else if (expr instanceof Term.Box) {
 			Term.Box b = (Term.Box) expr;
 			updateLiveness(b.operand(), liveness);
@@ -923,13 +585,10 @@ public class FuzzTestingExperiment {
 		public long valid = 0;
 		public long invalid = 0;
 		public long notCanonical = 0;
-		public long hasCopy = 0;
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
-		public long inconsistentUnsound = 0;
 		public long inconsistentPossibleBug = 0;
-		public long inconsistentBoxDerefLimitation = 0;
 		private final HashMap<String,Integer> errors;
 		private final HashMap<String,Integer> warnings;
 
@@ -940,21 +599,18 @@ public class FuzzTestingExperiment {
 		}
 
 		public long total() {
-			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentUnsound
-					+ inconsistentPossibleBug + inconsistentBoxDerefLimitation + notCanonical + hasCopy + invalidPrefix;
+			return valid + invalid + inconsistentValid + inconsistentInvalid +
+					+ inconsistentPossibleBug +  notCanonical + invalidPrefix;
 		}
 
 		public void join(Stats stats) {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
 			this.notCanonical += stats.notCanonical;
-			this.hasCopy += stats.hasCopy;
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
-			this.inconsistentUnsound += stats.inconsistentUnsound;
 			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
-			this.inconsistentBoxDerefLimitation += stats.inconsistentBoxDerefLimitation;
 			// Join error classifications
 			join(errors,stats.errors);
 			join(warnings,stats.warnings);
@@ -1003,13 +659,10 @@ public class FuzzTestingExperiment {
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
 			System.out.println("\tIGNORED (NOT CANONICAL): " + notCanonical);
-			System.out.println("\tIGNORED (HAS COPY): " + hasCopy);
 			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
-			System.out.println("\tINCONSISTENT (ACTUAL BUG): " + inconsistentUnsound);
 			System.out.println("\tINCONSISTENT (POSSIBLE BUG): " + inconsistentPossibleBug);
-			System.out.println("\tINCONSISTENT (BOXDEREF LIMITATIONS): " + inconsistentBoxDerefLimitation);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());
 			}

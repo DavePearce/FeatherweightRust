@@ -184,6 +184,13 @@ public class CoreTests {
 	}
 
 	@Test
+	public void test_0x0018() throws IOException {
+		String input = "{ let mut x = 123; let mut y = 1 }";
+		check(input,Value.Unit);
+	}
+
+
+	@Test
 	public void test_0x0050() throws IOException {
 		String input = "{ let mut x = 123; let mut y = x; x }";
 		checkInvalid(input);
@@ -236,6 +243,14 @@ public class CoreTests {
 		String input = "{ let mut x = 123; let mut y = &mut x; !y }";
 		checkInvalid(input);
 	}
+
+	@Test
+	public void test_0x0059() throws IOException {
+		String input = "{ let mut x = 0 ; *x = 0 }";
+		checkInvalid(input);
+	}
+
+
 
 	// ==============================================================
 	// Allocation Examples

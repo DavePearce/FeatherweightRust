@@ -17,20 +17,17 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
 
 
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
-import featherweightrust.core.Syntax.LVal;
-import featherweightrust.core.Syntax.Path;
-import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
 import featherweightrust.util.ArrayUtils;
-import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Walker;
@@ -116,7 +113,7 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return "let mut " + variable + " = " + initialiser + ";";
+				return "let mut " + variable + " = " + initialiser;
 			}
 
 			public static Let construct(String variable, Term initialiser) {
@@ -158,16 +155,16 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				return lhs + " = " + rhs + ";";
+				return lhs + " = " + rhs;
 			}
 
-//			public static Assignment construct(String variable, Term initialiser) {
-//				return new Assignment(new Term.Variable(variable), initialiser);
-//			}
-//
-//			public static Domain.Big<Assignment> toBigDomain(Domain.Small<String> first, Domain.Big<Term> second) {
-//				return Domains.Product(first, second, Assignment::construct);
-//			}
+			public static Assignment construct(LVal lhs, Term rhs) {
+				return new Assignment(lhs, rhs);
+			}
+
+			public static Domain.Big<Assignment> toBigDomain(Domain.Big<LVal> first, Domain.Big<Term> second) {
+				return Domains.Product(first, second, Assignment::construct);
+			}
 		}
 
 		/**
@@ -210,9 +207,12 @@ public class Syntax {
 			public String toString() {
 				String contents = "";
 				for (int i = 0; i != stmts.length; ++i) {
-					contents += stmts[i] + " ";
+					if(i != 0) {
+						contents += " ; ";
+					}
+					contents += stmts[i];
 				}
-				return "{ " + contents + "}";
+				return "{ " + contents + " }";
 			}
 
 			public static Block construct(Lifetime lifetime, List<Term> items) {
@@ -247,10 +247,10 @@ public class Syntax {
 			private final Kind kind;
 			private final LVal slice;
 
-			public Dereference(Kind kind, LVal slice, Attribute... attributes) {
+			public Dereference(Kind kind, LVal lv, Attribute... attributes) {
 				super(TERM_dereference, attributes);
 				this.kind = kind;
-				this.slice = slice;
+				this.slice = lv;
 			}
 
 			public boolean copy() {
@@ -273,14 +273,15 @@ public class Syntax {
 					return slice.toString();
 				}
 			}
-//
-//			public static Term.Dereference construct(String name) {
-//				return new Term.Dereference(new Term.Variable(name));
-//			}
-//
-//			public static Domain.Big<Dereference> toBigDomain(Domain.Small<String> subdomain) {
-//				return Domains.Adaptor(subdomain, Dereference::construct);
-//			}
+
+			public static Term.Dereference construct(LVal lv, Boolean b) {
+				Kind kind = b ? Kind.MOVE : Kind.COPY;
+				return new Term.Dereference(kind,lv);
+			}
+
+			public static Domain.Big<Dereference> toBigDomain(Domain.Big<LVal> subdomain) {
+				return Domains.Product(subdomain, Domains.BOOL, Dereference::construct);
+			}
 		}
 
 		public class Borrow extends AbstractTerm implements Term {
@@ -310,12 +311,11 @@ public class Syntax {
 				}
 			}
 
-			public static Term.Borrow construct(String path, Boolean mutable) {
-				//return new Term.Borrow(new Term.Variable(path), mutable);
-				throw new RuntimeException("fix me");
+			public static Term.Borrow construct(LVal operand, Boolean mutable) {
+				return new Term.Borrow(operand, mutable);
 			}
 
-			public static Domain.Big<Borrow> toBigDomain(Domain.Small<String> subdomain) {
+			public static Domain.Big<Borrow> toBigDomain(Domain.Big<LVal> subdomain) {
 				return Domains.Product(subdomain, Domains.BOOL, Borrow::construct);
 			}
 		}
@@ -337,12 +337,16 @@ public class Syntax {
 				return "box " + operand;
 			}
 
-			public static Term.Box construct(Term operand) {
-				return new Term.Box(operand);
+			public static Term.Box construct(int dimension, Term operand) {
+				Term.Box b = new Term.Box(operand);
+				for(int i=1;i<=dimension;++i) {
+					b = new Term.Box(b);
+				}
+				return b;
 			}
 
-			public static Domain.Big<Box> toBigDomain(Domain.Big<Term> subdomain) {
-				return Domains.Adaptor(subdomain, Box::construct);
+			public static Domain.Big<Box> toBigDomain(int i, Domain.Big<Term> subdomain) {
+				return Domains.Adaptor(subdomain, t -> construct(i,t));
 			}
 		}
 	}
@@ -1150,6 +1154,15 @@ public class Syntax {
 		public String toString() {
 			return path.toString(name);
 		}
+
+		public static LVal construct(String name, boolean flag) {
+			Path path = flag ? Path.EMPTY : Path.DEREF;
+			return new LVal(name,path);
+		}
+
+		public static Domain.Big<LVal> toBigDomain(Domain.Small<String> vars) {
+			return Domains.Product(vars, Domains.BOOL, LVal::construct);
+		}
 	}
 
 	/**
@@ -1160,6 +1173,10 @@ public class Syntax {
 	 *
 	 */
 	public static class Path extends SyntacticElement.Impl implements Comparable<Path> {
+		public static Element DEREF_ELEMENT = new Deref();
+		public final static Path EMPTY = new Path();
+		public final static Path DEREF = new Path(new Path.Element[] {DEREF_ELEMENT});
+
 		/**
 		 * The sequence of elements making up this path
 		 */
@@ -1296,8 +1313,6 @@ public class Syntax {
 			public String toString(String src);
 		}
 
-		public static Element DEREF = new Deref();
-
 		/**
 		 * Represents a dereference path element
 		 */
@@ -1305,7 +1320,7 @@ public class Syntax {
 
 			@Override
 			public int compareTo(Element arg0) {
-				if (arg0 == DEREF) {
+				if (arg0 == DEREF_ELEMENT) {
 					return 0;
 				} else {
 					// FIXME: do something here?
@@ -1331,7 +1346,7 @@ public class Syntax {
 	}
 
 	/**
-	 * Construct a domain for statements with a maximum level of nesting.
+	 * Construct a domain for terms with a maximum level of nesting.
 	 *
 	 * @param depth
 	 *            The maximum depth of block nesting.
@@ -1339,8 +1354,8 @@ public class Syntax {
 	 *            The maximum width of a block.
 	 * @param lifetime
 	 *            The lifetime of the enclosing block
-	 * @param expressions
-	 *            The domain of expressions to use
+	 * @param ints
+	 *            The domain of integers to use
 	 * @param declared
 	 *            The set of variable names for variables which have already been
 	 *            declared.
@@ -1348,43 +1363,74 @@ public class Syntax {
 	 *        already been declared.
 	 * @return
 	 */
-//	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Big<Term> expressions,
-//			Domain.Small<String> declared, Domain.Small<String> undeclared) {
-//		// Let statements can only be constructed from undeclared variables
-//		Domain.Big<Term.Let> lets = Term.Let.toBigDomain(undeclared, expressions);
-//		// Assignments can only use declared variables
-//		Domain.Big<Term.Assignment> assigns = Term.Assignment.toBigDomain(declared, expressions);
-//		// Indirect assignments can only use declared variables
-//		Domain.Big<Term.IndirectAssignment> indirects = Term.IndirectAssignment.toBigDomain(declared, expressions);
-//		if (depth == 0) {
-//			return Domains.Union(lets, assigns, indirects);
-//		} else {
-//			// Determine lifetime for blocks at this level
-//			lifetime = lifetime.freshWithin();
-//			// Recursively construct subdomain generator
-//			Domain.Big<Term> subdomain = toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
-//			// Using this construct the block generator
-//			Domain.Big<Term.Block> blocks = Term.Block.toBigDomain(lifetime, 1, width, subdomain);
-//			// Done
-//			return Domains.Union(lets, assigns, indirects, blocks);
-//		}
-//	}
-//
-//	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> names) {
-//		Domain.Big<Value.Integer> integers = Value.Integer.toBigDomain(ints);
-//		Domain.Big<Term.Variable> vars = Term.Variable.toBigDomain(names);
-//		Domain.Big<Term.Borrow> borrows = Term.Borrow.toBigDomain(names);
-//		Domain.Big<Term.Dereference> derefs = Term.Dereference.toBigDomain(names);
-//		if (depth == 0) {
-//			return Domains.Union(integers, vars, borrows, derefs);
-//		} else {
-//			Domain.Big<Term> subdomain = toBigDomain(depth - 1, ints, names);
-//			Domain.Big<Term.Box> boxes = Term.Box.toBigDomain(subdomain);
-//			return Domains.Union(integers, vars, borrows, derefs, boxes);
-//		}
-//	}
+	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Small<Integer> ints,
+			Domain.Small<String> declared, Domain.Small<String> undeclared) {
+		// Construct expressions
+		Domain.Big<Term> expressions = toBigDomain(1, ints, declared);
+		// Construct statements
+		return toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
+	}
 
+	/**
+	 * Construct a domain of statements.
+	 *
+	 * @param depth
+	 * @param width
+	 * @param lifetime
+	 * @param expressions
+	 * @param declared
+	 * @param undeclared
+	 * @return
+	 */
+	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Big<Term> expressions,
+			Domain.Small<String> declared, Domain.Small<String> undeclared) {
+		// Construct adaptor to convert from variable names to lvals.
+		Domain.Big<LVal> lvals = LVal.toBigDomain(declared);
+		// Let statements can only be constructed from undeclared variables
+		Domain.Big<Term.Let> lets = Term.Let.toBigDomain(undeclared, expressions);
+		// Assignments can only use declared variables
+		Domain.Big<Term.Assignment> assigns = Term.Assignment.toBigDomain(lvals, expressions);
+		if (depth <= 0) {
+			return Domains.Union(lets, assigns);
+		} else {
+			// Determine lifetime for blocks at this level
+			lifetime = lifetime.freshWithin();
+			// Recursively construct subdomain generator
+			Domain.Big<Term> terms = toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
+			// Using this construct the block generator
+			Domain.Big<Term.Block> blocks = Term.Block.toBigDomain(lifetime, 1, width, terms);
+			// Done
+			return Domains.Union(lets, assigns, blocks);
+		}
+	}
 
+	/**
+	 * Construct a domain of expressions.
+	 *
+	 * @param ints
+	 * @param declared
+	 * @return
+	 */
+	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> declared) {
+		// Construct adaptor to convert from variable names to lvals.
+		Domain.Big<LVal> lvals = LVal.toBigDomain(declared);
+		// Terminals
+		Domain.Big<? extends Term> integers = Value.Integer.toBigDomain(ints);
+		Domain.Big<? extends Term> borrows = Term.Borrow.toBigDomain(lvals);
+		Domain.Big<? extends Term> derefs = Term.Dereference.toBigDomain(lvals);
+		Domain.Big<Term> terminals = Domains.Union(integers, derefs, borrows);
+		//
+		Domain.Big<? extends Term>[] domains = new Domain.Big[depth+3];
+		domains[0] = integers;
+		domains[1] = derefs;
+		domains[2] = borrows;
+		//
+		for(int i=0;i<depth;++i) {
+			domains[i+3] = Term.Box.toBigDomain(i,terminals);
+		}
+		//
+		return Domains.Union(domains);
+	}
 
 	/**
 	 * Implements the concept of a lifetime which permits the creation of fresh
@@ -1458,6 +1504,14 @@ public class Syntax {
 	}
 
 	public static void main(String[] args) {
-
+		Lifetime root = new Lifetime();
+		Domain.Small<Integer> ints = Domains.Int(0, 0);
+		Domain.Small<String> declared = Domains.Finite("x");
+		Domain.Big<Term> terms = toBigDomain(2, 1, root, ints, declared, declared);
+		//
+		for(int i=0;i!=terms.bigSize().intValue();++i) {
+			Term t = terms.get(BigInteger.valueOf(i));
+			System.out.println("[" + i + "] " + t);
+		}
 	}
 }

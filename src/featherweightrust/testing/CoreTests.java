@@ -31,6 +31,7 @@ import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
+import featherweightrust.testing.experiments.Algorithms;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
@@ -45,6 +46,12 @@ import featherweightrust.util.SyntaxError;
 public class CoreTests {
 	private static Value.Integer One = new Value.Integer(1);
 	private static Value.Integer OneTwoThree = new Value.Integer(123);
+
+	@Test
+	public void test_0x0000() throws IOException {
+		String input = "{ let mut x = 0 ; let mut y = &x ; y = &y }";
+		check(input,Value.Unit);
+	}
 
 	// ==============================================================
 	// Straightforward Examples

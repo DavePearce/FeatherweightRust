@@ -227,19 +227,19 @@ public class Parser {
 
 	public Term.Dereference parseDereference(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
-		boolean copy = !consumed;
+		Dereference.Kind kind;
 		if (consumed && index < tokens.size() && tokens.get(index) instanceof Shreak) {
 			match("!");
-			copy = true;
+			kind = Dereference.Kind.COPY;
+		} else if (consumed && index < tokens.size() && tokens.get(index) instanceof QuestionMark) {
+			match("?");
+			kind = Dereference.Kind.UNSPECIFIED;
+		} else if(consumed) {
+			kind = Dereference.Kind.TEMP;
+		} else {
+			kind = Dereference.Kind.MOVE;
 		}
 		LVal operand = parseLVal(context, lifetime);
-		//
-		Dereference.Kind kind = Dereference.Kind.MOVE;
-		if(!consumed) {
-			kind = Dereference.Kind.TEMP;
-		} else if(copy) {
-			kind = Dereference.Kind.COPY;
-		}
 		return new Term.Dereference(kind, operand, sourceAttr(start, index - 1));
 	}
 

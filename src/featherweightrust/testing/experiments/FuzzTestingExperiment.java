@@ -319,7 +319,11 @@ public class FuzzTestingExperiment {
 				reportFailure(b, program, FR_err, rustc_err);
 				if (rustc_status) {
 					// Rust says yes, FR says no
-					stats.inconsistentInvalid++;
+					if(Algorithms.failsWithoutDerefCoercion(b)) {
+						stats.inconsistentDerefCoercion++;
+					} else {
+						stats.inconsistentInvalid++;
+					}
 				} else {
 					// Rust says no, FR says yes.
 					stats.inconsistentPossibleBug++;
@@ -494,7 +498,12 @@ public class FuzzTestingExperiment {
 			return "Box::new(" + toRustString(b.operand()) + ")";
 		} else if(expr instanceof Term.Dereference) {
 			Term.Dereference d = (Term.Dereference) expr;
-			return d.operand().toString();
+			String r = d.operand().toString();
+			if(d.copy()) {
+				return "*&" + r;
+			} else {
+				return r;
+			}
 		}else {
 			return expr.toString();
 		}
@@ -510,7 +519,9 @@ public class FuzzTestingExperiment {
 		if (expr instanceof Term.Dereference) {
 			// Variable move
 			Term.Dereference b = (Term.Dereference) expr;
-			liveness.remove(b.operand().name());
+			if(!b.copy() && b.operand().path().size() == 0) {
+				liveness.remove(b.operand().name());
+			}
 		} else if (expr instanceof Term.Box) {
 			Term.Box b = (Term.Box) expr;
 			updateLiveness(b.operand(), liveness);
@@ -588,6 +599,7 @@ public class FuzzTestingExperiment {
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
+		public long inconsistentDerefCoercion = 0;
 		public long inconsistentPossibleBug = 0;
 		private final HashMap<String,Integer> errors;
 		private final HashMap<String,Integer> warnings;
@@ -599,8 +611,8 @@ public class FuzzTestingExperiment {
 		}
 
 		public long total() {
-			return valid + invalid + inconsistentValid + inconsistentInvalid +
-					+ inconsistentPossibleBug +  notCanonical + invalidPrefix;
+			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentDerefCoercion
+					+ +inconsistentPossibleBug + notCanonical + invalidPrefix;
 		}
 
 		public void join(Stats stats) {
@@ -610,6 +622,7 @@ public class FuzzTestingExperiment {
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
+			this.inconsistentDerefCoercion += stats.inconsistentDerefCoercion;
 			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
 			// Join error classifications
 			join(errors,stats.errors);
@@ -662,6 +675,7 @@ public class FuzzTestingExperiment {
 			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
+			System.out.println("\tINCONSISTENT (DEREF COERCION): " + inconsistentDerefCoercion);
 			System.out.println("\tINCONSISTENT (POSSIBLE BUG): " + inconsistentPossibleBug);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());

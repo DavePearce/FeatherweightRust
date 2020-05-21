@@ -242,9 +242,13 @@ public class Syntax {
 				/**
 				 * Represents neither copy nor move!
 				 */
-				TEMP
+				TEMP,
+				/**
+				 * Represents unknown status (i.e. to be inferred)
+				 */
+				UNSPECIFIED
 			}
-			private final Kind kind;
+			private Kind kind;
 			private final LVal slice;
 
 			public Dereference(Kind kind, LVal lv, Attribute... attributes) {
@@ -253,12 +257,31 @@ public class Syntax {
 				this.slice = lv;
 			}
 
+			/**
+			 * Determine whether this term is demarked as performing a copy of the value in
+			 * question.
+			 *
+			 * @return
+			 */
 			public boolean copy() {
 				return kind != Kind.MOVE;
 			}
 
+			/**
+			 * Determine whether this term is for a short-lived (i.e. temporary) value.
+			 *
+			 * @return
+			 */
 			public boolean temporary() {
 				return kind == Kind.TEMP;
+			}
+
+			/**
+			 * Determines whether the copy / move status of this term is unspecified (i.e.
+			 * can be inferred).
+			 */
+			public boolean unspecified() {
+				return kind == Kind.UNSPECIFIED;
 			}
 
 			public LVal operand() {
@@ -267,8 +290,10 @@ public class Syntax {
 
 			@Override
 			public String toString() {
-				if(kind == Kind.COPY) {
+				if (kind == Kind.COPY) {
 					return "!" + slice;
+				} else if (kind == Kind.UNSPECIFIED) {
+					return "?" + slice;
 				} else {
 					return slice.toString();
 				}

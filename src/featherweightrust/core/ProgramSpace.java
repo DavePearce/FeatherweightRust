@@ -42,16 +42,24 @@ import jmodelgen.util.Walkers;
  * |P{2}{2}{2}{2}| = 2217_326_832
  *
  * |P{1}{1}{1}{1}_inf| = 42
- * |P{1}{1}{1}{2}_inf| = ?
+ * |P{1}{1}{1}{2}_inf| = 1806
  * |P{1}{1}{2}{2}_inf| = 3_416_952
  * |P{1}{2}{2}{2}_inf| = 607_548_552
  * |P{2}{2}{2}{2}_inf| = 815_702_160
  *
+ * |P{1,1,1,2}_def(2)| = 74
+ * |P{1,1,2,2}_def(2)| = 2960
+ * |P{1,2,2,2}_def(2)| = 9332
  * |P{2}{2}{2}{2}_def{2}| = 22824
- * |P{1}{2}{2}{3}_def{2}| =
+ * |P{1}{2}{2}{3}_def{2}| = 182401748
  * |P{1}{3}{2}{3}_def{2}| = 418_496_660
  *
+ * |P{1,1,1,2}_def(2)_inf| = 58
+ * |P{1,1,2,2}_def(2)_inf| = 1856
+ * |P{1,2,2,2}_inf_def(2)| = 5692
  * |P{2}{2}{2}{2}_def{2}_inf| = 14680
+ * |P{2}{2}{2}{3}_def{2}_inf| = 64619500
+ * |P{1}{3}{2}{3}_def{2}_inf| = 146_566_092
  *
  * |P{1}{1}{2}{2}_def{3}| =
  * |P{1}{2}{2}{2}_def{3}| =
@@ -155,9 +163,9 @@ public class ProgramSpace {
 		// Return the name of this particular space
 		String c = "";
 		if(copyInference) {
-			c = ",inf";
+			c = "_inf";
 		}
-		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + c + "}";
+		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "}" + c;
 	}
 
 	private static class UseDefState implements Walker.State<Term> {
@@ -277,6 +285,7 @@ public class ProgramSpace {
 		count(new ProgramSpace(1,1,2,1,false));
 		count(new ProgramSpace(1,1,2,1,true));
 		count(new ProgramSpace(1,1,1,2,false));
+		count(new ProgramSpace(1,1,1,2,true));
 		//
 		count(new ProgramSpace(1,1,2,2,false));
 		count(new ProgramSpace(1,1,2,2,true));
@@ -297,18 +306,18 @@ public class ProgramSpace {
 		// Determine constrained sizes
 //		count(new ProgramSpace(1,1,1,1,false),2);
 //		count(new ProgramSpace(1,1,1,1,true),2);
-//		count(new ProgramSpace(1,1,1,2,false),2);
-//		count(new ProgramSpace(1,1,1,2,true),2);
-//		count(new ProgramSpace(1,1,2,2,false),2);
-//		count(new ProgramSpace(1,1,2,2,true),2);
-//		count(new ProgramSpace(1,2,2,2,false),2);
-//		count(new ProgramSpace(1,2,2,2,true),2);
+		count(new ProgramSpace(1,1,1,2,false),2);
+		count(new ProgramSpace(1,1,1,2,true),2);
+		count(new ProgramSpace(1,1,2,2,false),2);
+		count(new ProgramSpace(1,1,2,2,true),2);
+		count(new ProgramSpace(1,2,2,2,false),2);
+		count(new ProgramSpace(1,2,2,2,true),2);
 //		count(new ProgramSpace(2,2,2,2,false),2);
 //		count(new ProgramSpace(2,2,2,2,true),2);
-//		count(new ProgramSpace(1,2,2,3,false),2);
-//		count(new ProgramSpace(1,2,2,3,true),2);
-//		count(new ProgramSpace(1,2,3,3,false),2);
-//		count(new ProgramSpace(1,2,3,3,true),2);
+		count(new ProgramSpace(1,2,2,3,false),2);
+		count(new ProgramSpace(1,2,2,3,true),2);
+		count(new ProgramSpace(1,2,3,3,false),2);
+		count(new ProgramSpace(1,2,3,3,true),2);
 		count(new ProgramSpace(1,3,2,3,false),2);
 		count(new ProgramSpace(1,3,2,3,true),2);
 		count(new ProgramSpace(1,3,3,3,false),2);

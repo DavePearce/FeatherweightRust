@@ -137,7 +137,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Type T2 = p.second();
 		check(available(R2, lv, true), LVAL_NOT_WRITEABLE, t.leftOperand());
 		// Write prohibited check
-		check(!writeProhibited(R2, lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
+		check(!writeProhibited(R2.put(fresh(), T2, l), lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
 		// Write the type
 		Environment R3 = write(R2, lv, T2, true);
 		//

@@ -96,8 +96,8 @@ public class Util {
 	 * @param b
 	 * @return
 	 */
-	public static String toRustProgram(Term.Block b) {
-		return "fn main() " + toRustString(b, new HashSet<>());
+	public static String toRustProgram(Term.Block b, String name) {
+		return "fn " + name + "() " + toRustString(b, new HashSet<>());
 	}
 
 	private static String toRustString(Term stmt, HashSet<String> live) {

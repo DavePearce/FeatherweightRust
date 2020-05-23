@@ -59,7 +59,7 @@ public class ModelCheckingExperiment {
 	 * tune this a little to maximum performance, which makes a real difference on
 	 * the big domains.
 	 */
-	private static final int BATCHSIZE = 10000;
+	private static int BATCHSIZE = 10000;
 
 	/**
 	 * Flag whether to report failures to the console or not.
@@ -79,12 +79,14 @@ public class ModelCheckingExperiment {
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
+			new OptArg("batch","b",OptArg.INT,"set batch size (default 10000)",10000),
 			new OptArg("copyinf","i","enable copy inference"),
 			new OptArg("range", "r", OptArg.LONGARRAY(2, 2), "set index range of domain to iterate",
 					null)
 	};
 
 	public static void main(String[] _args) throws Exception {
+		System.err.println("Creating " + NTHREADS + " worker threads");
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
 		if(args.size() == 0) {
 			System.out.println("usage: java Main <options> target");
@@ -98,6 +100,7 @@ public class ModelCheckingExperiment {
 			long[] range = (long[]) options.get("range");
 			boolean cinf = options.containsKey("copyinference");
 			//
+			BATCHSIZE = (int) options.get("batch");
 			VERBOSE = options.containsKey("verbose");
 			//
 			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3], cinf);

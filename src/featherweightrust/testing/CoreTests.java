@@ -556,6 +556,7 @@ public class CoreTests {
 
 	@Test
 	public void test_0x030C() throws IOException {
+		// NOTE: this is accepted by rust!
 		String input = "{ let mut x = 0 ; let mut y = &mut x ; y = &mut x }";
 		check(input,Value.Unit);
 	}
@@ -1014,7 +1015,6 @@ public class CoreTests {
 		check(input,Value.Unit);
 	}
 
-
 	@Test
 	public void test_0x0450() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &*y; *z }";
@@ -1081,6 +1081,14 @@ public class CoreTests {
 		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; let mut w = &mut *z; *w }";
 		checkInvalid(input);
 	}
+
+	@Test
+	public void test_0x045B() throws IOException {
+		// NOTE: this is accepted by rust!
+		String input = "{ let mut x = 0 ; { let mut y = &mut x ; y = &mut *y ; x = *y } }";
+		checkInvalid(input);
+	}
+
 
 	// ==============================================================
 	// Helpers

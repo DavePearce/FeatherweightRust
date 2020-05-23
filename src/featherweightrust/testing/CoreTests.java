@@ -31,7 +31,7 @@ import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
-import featherweightrust.testing.experiments.Algorithms;
+import featherweightrust.testing.experiments.Util;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntaxError;
@@ -46,12 +46,6 @@ import featherweightrust.util.SyntaxError;
 public class CoreTests {
 	private static Value.Integer One = new Value.Integer(1);
 	private static Value.Integer OneTwoThree = new Value.Integer(123);
-
-	@Test
-	public void test_0x0000() throws IOException {
-		String input = "{ let mut x = 0 ; let mut y = &x ; y = &y }";
-		check(input,Value.Unit);
-	}
 
 	// ==============================================================
 	// Straightforward Examples
@@ -256,8 +250,6 @@ public class CoreTests {
 		String input = "{ let mut x = 0 ; *x = 0 }";
 		checkInvalid(input);
 	}
-
-
 
 	// ==============================================================
 	// Allocation Examples
@@ -563,6 +555,12 @@ public class CoreTests {
 	}
 
 	@Test
+	public void test_0x030C() throws IOException {
+		String input = "{ let mut x = 0 ; let mut y = &mut x ; y = &mut x }";
+		check(input,Value.Unit);
+	}
+
+	@Test
 	public void test_0x0350() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &mut x; { let mut w = 123; let mut z = &w; *z } }";
 		checkInvalid(input);
@@ -698,7 +696,7 @@ public class CoreTests {
 
 	@Test
 	public void test_0x0366() throws IOException {
-		String input = "{ let mut x = box 0; let mut y = x!; let mut z = x; }";
+		String input = "{ let mut x = box 0; let mut y = !x; let mut z = x; }";
 		checkInvalid(input);
 	}
 
@@ -1009,6 +1007,13 @@ public class CoreTests {
 		String input = "{ let mut x = box 1; { let mut y = &mut *x; *y = 123; } *x }";
 		check(input,OneTwoThree);
 	}
+
+	@Test
+	public void test_0x0408() throws IOException {
+		String input = "{ let mut x = box 1; let mut y = box &*x ; *y = &*x;}";
+		check(input,Value.Unit);
+	}
+
 
 	@Test
 	public void test_0x0450() throws IOException {

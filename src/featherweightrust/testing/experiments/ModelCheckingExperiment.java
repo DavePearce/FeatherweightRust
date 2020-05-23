@@ -79,6 +79,7 @@ public class ModelCheckingExperiment {
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
+			new OptArg("copyinf","i","enable copy inference"),
 			new OptArg("range", "r", OptArg.LONGARRAY(2, 2), "set index range of domain to iterate",
 					null)
 	};
@@ -95,10 +96,11 @@ public class ModelCheckingExperiment {
 			int c = (Integer) options.get("constrained");
 			long expected = (Long) options.get("expected");
 			long[] range = (long[]) options.get("range");
+			boolean cinf = options.containsKey("copyinference");
 			//
 			VERBOSE = options.containsKey("verbose");
 			//
-			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
+			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3], cinf);
 			Iterator<Term.Block> iterator;
 			String label;
 			// Create iterator

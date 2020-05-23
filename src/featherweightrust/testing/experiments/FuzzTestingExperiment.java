@@ -95,10 +95,10 @@ public class FuzzTestingExperiment {
 	private static boolean NIGHTLY;
 
 	/**
-	 * Signal whether the rustc supports Non-Lexical Lifetimes or not. And, if so,
-	 * attempt to work around them.
+	 * Signal whether or not to enable copy inference for FR. Generally speaking,
+	 * this should be enabled so that FR conforms more closely with Rust.
 	 */
-	private static boolean NLL;
+	private static boolean COPYINFERENCE;
 
 	/**
 	 * Indicate which edition of Rust is being used (e.g. 2015 or 2018).
@@ -128,7 +128,6 @@ public class FuzzTestingExperiment {
 			new OptArg("verbose","v","set verbose output"),
 			new OptArg("quiet","q","disable progress reporting"),
 			new OptArg("nightly","specify rust nightly available"),
-			new OptArg("nll","specify non-lexical lifetimes in play"),
 			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space"),
@@ -149,7 +148,7 @@ public class FuzzTestingExperiment {
 		QUIET = options.containsKey("quiet");
 		NIGHTLY = options.containsKey("nightly");
 		EDITION = (String) options.get("edition");
-		NLL = options.containsKey("nll");
+		COPYINFERENCE = true;
 		// Extract version string
 		RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
 		//
@@ -159,7 +158,7 @@ public class FuzzTestingExperiment {
 		if (options.containsKey("pspace")) {
 			long[] ivdw = (long[]) options.get("pspace");
 			int c = (Integer) options.get("constrained");
-			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
+			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3], COPYINFERENCE);
 			// Create iterator
 			if (c >= 0) {
 				iterator = space.definedVariableWalker(c).iterator();
@@ -296,7 +295,7 @@ public class FuzzTestingExperiment {
 			SyntaxError FR_err = calculusCheckProgram(b);
 			boolean FR_status = (FR_err == null);
 			// Construct rust program
-			String program = toRustProgram(b);
+			String program = Util.toRustProgram(b);
 			// Determine hash of program for naming
 			String hash = getHash(program);
 			// Determine filename based on hash
@@ -315,17 +314,17 @@ public class FuzzTestingExperiment {
 			// Analysis output
 			if (FR_status != rustc_status) {
 				stats.record(rustc_err);
-				// Attempt to execute program
-				reportFailure(b, program, FR_err, rustc_err);
 				if (rustc_status) {
 					// Rust says yes, FR says no
-					if(Algorithms.failsWithoutDerefCoercion(b)) {
+					if(Util.requiresDerefCoercions(b)) {
 						stats.inconsistentDerefCoercion++;
 					} else {
+						reportFailure(b, program, FR_err, rustc_err);
 						stats.inconsistentInvalid++;
 					}
 				} else {
 					// Rust says no, FR says yes.
+					reportFailure(b, program, FR_err, rustc_err);
 					stats.inconsistentPossibleBug++;
 				}
 			} else if (FR_status) {
@@ -430,102 +429,6 @@ public class FuzzTestingExperiment {
 			declared = declared+1;
 		}
 		return declared;
-	}
-
-	/**
-	 * Given a statement block in the calculus, generate a syntactically correct
-	 * Rust program.
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static String toRustProgram(Term.Block b) {
-		return "fn main() " + toRustString(b, new HashSet<>());
-	}
-
-	private static String toRustString(Term stmt, HashSet<String> live) {
-		if (stmt instanceof Term.Block) {
-			Term.Block block = (Term.Block) stmt;
-			String contents = "";
-			ArrayList<String> declared = new ArrayList<>();
-			for (int i = 0; i != block.size(); ++i) {
-				Term s = block.get(i);
-				contents += toRustString(s, live) + " ";
-				if (s instanceof Term.Let) {
-					Term.Let l = (Term.Let) s;
-					declared.add(l.variable());
-				}
-			}
-			// Remove declared variables
-			if(NLL) {
-				// Attempt to work around non-lexical lifetimes
-				for (int i=declared.size()-1;i>=0;--i) {
-					String var = declared.get(i);
-					if (live.contains(var)) {
-						// declared live variable
-						contents = contents + var + "; ";
-						live.remove(var);
-					}
-				}
-			}
-			//
-			return "{ " + contents + "}";
-		} else if(stmt instanceof Term.Let) {
-			Term.Let s = (Term.Let) stmt;
-			String init = toRustString(s.initialiser());
-			updateLiveness(s.initialiser(),live);
-			// By definition variable is live after assignment
-			live.add(s.variable());
-			return "let mut " + s.variable() + " = " + init + ";";
-		} else {
-			Term.Assignment s = (Term.Assignment) stmt;
-			updateLiveness(s.rightOperand(),live);
-			// By definition variable is live after assignment
-			live.add(s.leftOperand().name());
-			return s.leftOperand() + " = " + toRustString(s.rightOperand()) + ";";
-		}
-	}
-
-	/**
-	 * Convert an expression into a Rust-equivalent string.
-	 *
-	 * @param expr
-	 * @return
-	 */
-	private static String toRustString(Term expr) {
-		if (expr instanceof Term.Box) {
-			Term.Box b = (Term.Box) expr;
-			return "Box::new(" + toRustString(b.operand()) + ")";
-		} else if(expr instanceof Term.Dereference) {
-			Term.Dereference d = (Term.Dereference) expr;
-			String r = d.operand().toString();
-			if(d.copy()) {
-				return "*&" + r;
-			} else {
-				return r;
-			}
-		}else {
-			return expr.toString();
-		}
-	}
-
-	/**
-	 * Update the set of live variables by removing any which are moved.
-	 *
-	 * @param expr
-	 * @param liveness
-	 */
-	private static void updateLiveness(Term expr, HashSet<String> liveness) {
-		if (expr instanceof Term.Dereference) {
-			// Variable move
-			Term.Dereference b = (Term.Dereference) expr;
-			if(!b.copy() && b.operand().path().size() == 0) {
-				liveness.remove(b.operand().name());
-			}
-		} else if (expr instanceof Term.Box) {
-			Term.Box b = (Term.Box) expr;
-			updateLiveness(b.operand(), liveness);
-		}
 	}
 
 	private static <T> int copyToArray(T[] array, Iterator<T> b) {

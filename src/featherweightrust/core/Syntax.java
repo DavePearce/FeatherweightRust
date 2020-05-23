@@ -24,9 +24,12 @@ import java.util.List;
 
 import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
+import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
+import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
@@ -264,7 +267,7 @@ public class Syntax {
 			 * @return
 			 */
 			public boolean copy() {
-				return kind != Kind.MOVE;
+				return kind == Kind.COPY;
 			}
 
 			/**
@@ -288,6 +291,15 @@ public class Syntax {
 				return slice;
 			}
 
+			/**
+			 * Infer the kind of operation this dereference corresponds to.
+			 *
+			 * @param kind
+			 */
+			public void infer(Kind kind) {
+				this.kind = kind;
+			}
+
 			@Override
 			public String toString() {
 				if (kind == Kind.COPY) {
@@ -299,13 +311,21 @@ public class Syntax {
 				}
 			}
 
+			public static Term.Dereference construct(LVal lv) {
+				return new Term.Dereference(Kind.UNSPECIFIED,lv);
+			}
+
 			public static Term.Dereference construct(LVal lv, Boolean b) {
 				Kind kind = b ? Kind.MOVE : Kind.COPY;
 				return new Term.Dereference(kind,lv);
 			}
 
-			public static Domain.Big<Dereference> toBigDomain(Domain.Big<LVal> subdomain) {
-				return Domains.Product(subdomain, Domains.BOOL, Dereference::construct);
+			public static Domain.Big<Dereference> toBigDomain(boolean inference, Domain.Big<LVal> subdomain) {
+				if(inference) {
+					return Domains.Adaptor(subdomain, Dereference::construct);
+				} else {
+					return Domains.Product(subdomain, Domains.BOOL, Dereference::construct);
+				}
 			}
 		}
 
@@ -1276,6 +1296,15 @@ public class Syntax {
 			return true;
 		}
 
+		public Path append(Path rhs) {
+			final int n = elements.length;
+			final int m = rhs.elements.length;
+			Element[] es = new Element[n + m];
+			System.arraycopy(elements, 0, es, 0, n);
+			System.arraycopy(rhs.elements, 0, es, n, m);
+			return new Path(es);
+		}
+
 		@Override
 		public boolean equals(Object o) {
 			if(o instanceof Path) {
@@ -1377,6 +1406,8 @@ public class Syntax {
 	 *            The maximum depth of block nesting.
 	 * @param width
 	 *            The maximum width of a block.
+	 * @param inference
+	 *            Use copy inference or not
 	 * @param lifetime
 	 *            The lifetime of the enclosing block
 	 * @param ints
@@ -1388,10 +1419,10 @@ public class Syntax {
 	 *        already been declared.
 	 * @return
 	 */
-	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Small<Integer> ints,
-			Domain.Small<String> declared, Domain.Small<String> undeclared) {
+	public static Domain.Big<Term> toBigDomain(int depth, int width, boolean inference, Lifetime lifetime,
+			Domain.Small<Integer> ints, Domain.Small<String> declared, Domain.Small<String> undeclared) {
 		// Construct expressions
-		Domain.Big<Term> expressions = toBigDomain(1, ints, declared);
+		Domain.Big<Term> expressions = toBigDomain(1, inference, ints, declared);
 		// Construct statements
 		return toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
 	}
@@ -1436,13 +1467,13 @@ public class Syntax {
 	 * @param declared
 	 * @return
 	 */
-	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> declared) {
+	public static Domain.Big<Term> toBigDomain(int depth, boolean inference, Domain.Small<Integer> ints, Domain.Small<String> declared) {
 		// Construct adaptor to convert from variable names to lvals.
 		Domain.Big<LVal> lvals = LVal.toBigDomain(declared);
 		// Terminals
 		Domain.Big<? extends Term> integers = Value.Integer.toBigDomain(ints);
 		Domain.Big<? extends Term> borrows = Term.Borrow.toBigDomain(lvals);
-		Domain.Big<? extends Term> derefs = Term.Dereference.toBigDomain(lvals);
+		Domain.Big<? extends Term> derefs = Term.Dereference.toBigDomain(inference,lvals);
 		Domain.Big<Term> terminals = Domains.Union(integers, derefs, borrows);
 		//
 		Domain.Big<? extends Term>[] domains = new Domain.Big[depth+3];
@@ -1532,7 +1563,7 @@ public class Syntax {
 		Lifetime root = new Lifetime();
 		Domain.Small<Integer> ints = Domains.Int(0, 0);
 		Domain.Small<String> declared = Domains.Finite("x");
-		Domain.Big<Term> terms = toBigDomain(2, 1, root, ints, declared, declared);
+		Domain.Big<Term> terms = toBigDomain(2, 1, true, root, ints, declared, declared);
 		//
 		for(int i=0;i!=terms.bigSize().intValue();++i) {
 			Term t = terms.get(BigInteger.valueOf(i));

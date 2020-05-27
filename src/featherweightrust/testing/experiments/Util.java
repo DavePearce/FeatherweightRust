@@ -1,7 +1,14 @@
 package featherweightrust.testing.experiments;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
@@ -9,10 +16,90 @@ import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
+import featherweightrust.io.Lexer;
+import featherweightrust.io.Parser;
+import featherweightrust.util.OptArg;
+import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
+import featherweightrust.util.Triple;
+import jmodelgen.core.Domain;
 
 public class Util {
 	private static final String DEREF_COERCION_REQUIRED = "Deref coercion required";
+
+	protected static Triple<Iterator<Term.Block>,Long,String> parseDefaultConfiguration(Map<String, Object> options)
+			throws IOException {
+		Iterator<Term.Block> iterator;
+		String label;
+		long expected = (Long) options.get("expected");
+		long[] batch = (long[]) options.get("batch");
+		boolean copyInference = (Boolean) options.containsKey("copyinf");
+		if (options.containsKey("pspace")) {
+			long[] ivdw = (long[]) options.get("pspace");
+			int c = (Integer) options.get("constrained");
+			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3],
+					copyInference);
+			// Create iterator
+			if (c >= 0) {
+				iterator = space.definedVariableWalker(c).iterator();
+				label = space.toString() + "{def," + c + "}";
+			} else {
+				// Get domain
+				Domain.Big<Term.Block> domain = space.domain();
+				// Determine expected size
+				expected = domain.bigSize().longValueExact();
+				// Get iterator
+				iterator = domain.iterator();
+				//
+				label = space.toString();
+			}
+		} else {
+			// Read from stdin line by line
+			List<Term.Block> inputs = readAll(System.in);
+			iterator = inputs.iterator();
+			expected = inputs.size();
+			label = "STDIN";
+		}
+		// Slice iterator (if applicable)
+		if (batch != null) {
+			long[] range = determineIndexRange(batch[0], batch[1], expected);
+			label += "[" + range[0] + ".." + range[1] + "]";
+			// Create sliced iterator
+			iterator = new SliceIterator(iterator, range[0], range[1]);
+			// Update expected
+			expected = range[1] - range[0];
+		}
+		return new Triple<>(iterator, expected, label);
+	}
+
+	private static long[] determineIndexRange(long index, long count, long n) {
+		if (count > n) {
+			return new long[] { 0, n };
+		} else {
+			long size = (n / count) + 1;
+			long start = index * size;
+			long end = Math.min(n, (index + 1) * size);
+			return new long[] { start, end };
+		}
+	}
+
+	private static List<Term.Block> readAll(InputStream in) throws IOException {
+		ArrayList<Term.Block> inputs = new ArrayList<>();
+		Scanner stdin = new Scanner(in);
+		while (stdin.hasNext()) {
+		    String input = stdin.nextLine();
+		    // Tokenize input program
+		    List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
+			// Parse block
+			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), ProgramSpace.ROOT);
+			// Record it
+		    inputs.add(stmt);
+		}
+		//
+		stdin.close();
+		// Done
+		return inputs;
+	}
 
 	/**
 	 * Check whether a give term fails type checking because it requires a "deref

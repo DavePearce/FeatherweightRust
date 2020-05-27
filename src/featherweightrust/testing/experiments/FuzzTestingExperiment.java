@@ -21,8 +21,6 @@ import java.util.List;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -31,23 +29,14 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Scanner;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Term;
-import featherweightrust.io.Lexer;
-import featherweightrust.io.Parser;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.OptArg;
-import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;
-import jmodelgen.core.Domain;
 
 /**
  * The purpose of this experiment is to fuzz test the Rust compiler using a
@@ -58,24 +47,18 @@ import jmodelgen.core.Domain;
  */
 public class FuzzTestingExperiment {
 	/**
+	 * Flag whether to report failures to the console or not.
+	 */
+	private static boolean VERBOSE;
+	/**
 	 * The command to use for executing the rust compiler.
 	 */
-	private static String RUSTC = "rustc";
+	private static String RUSTC;
 
 	/**
 	 * Extracted version tag from RUSTC;
 	 */
 	private static String RUST_VERSION;
-
-	/**
-	 * Flag whether to report failures to the console or not.
-	 */
-	private static boolean VERBOSE;
-
-	/**
-	 * Flag whether to report progress or not.
-	 */
-	private static boolean QUIET;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
@@ -85,26 +68,9 @@ public class FuzzTestingExperiment {
 	private static boolean NIGHTLY;
 
 	/**
-	 * Signal whether or not to enable copy inference for FR. Generally speaking,
-	 * this should be enabled so that FR conforms more closely with Rust.
-	 */
-	private static boolean COPYINFERENCE;
-
-	/**
 	 * Indicate which edition of Rust is being used (e.g. 2015 or 2018).
 	 */
 	private static String EDITION;
-
-	/**
-	 * Configure number of threads to use.
-	 */
-	private static final int NTHREADS = Runtime.getRuntime().availableProcessors();
-
-	/**
-	 * Number of programs each thread to process in one go. This can make a real
-	 * difference to the overall performance.
-	 */
-	private static final int BATCHSIZE = 50;
 
 	/**
 	 * Number of programs to pass into RUSTC in one go.
@@ -112,146 +78,47 @@ public class FuzzTestingExperiment {
 	private static final int RUSTC_BATCHSIZE = 10;
 
 	/**
-	 * Construct a thread pool to use for parallel processing.
-	 */
-	private static final ExecutorService executor = Executors.newCachedThreadPool();
-
-	/**
 	 * Command-line options
 	 */
 	private static final OptArg[] OPTIONS = {
+			// Standard options
 			new OptArg("verbose","v","set verbose output"),
 			new OptArg("quiet","q","disable progress reporting"),
-			new OptArg("nightly","specify rust nightly available"),
-			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space"),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
 			new OptArg("batch", "b", OptArg.LONGARRAY(2, 2), "set batch index and batch count", null),
-			new OptArg("rustc", "r", OptArg.STRING, "specify rustc binary to use", RUSTC),
+			// Fuzzing specific
+			new OptArg("rustc", "r", OptArg.STRING, "specify rustc binary to use", "rustc"),
+			new OptArg("nightly","specify rust nightly available"),
+			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 	};
 	//
 	public static void main(String[] _args) throws Exception {
-		System.out.println("NUM THREADS: " + NTHREADS);
-		System.out.println("BETA6");
-
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
 		Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
-		long expected = (Long) options.get("expected");
-		long[] batch = (long[]) options.get("batch");
-		//
+		// Extract Fuzzing specific command-line arguments
 		VERBOSE = options.containsKey("verbose");
-		QUIET = options.containsKey("quiet");
 		NIGHTLY = options.containsKey("nightly");
 		EDITION = (String) options.get("edition");
-		String rustc = (String) options.get("rustc");
-		COPYINFERENCE = true;
+		RUSTC = (String) options.get("rustc");
+		// Process generic command-line arguments
+		boolean quiet = options.containsKey("quiet");
+		// Always enable copy inference because this most closely follows
+		options.put("copyinf", true);
+		Triple<Iterator<Term.Block>,Long,String> config = Util.parseDefaultConfiguration(options);
 		// Extract version string
-		RUST_VERSION = new RustCompiler(rustc, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
+		RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
+		// Construct and configure experiment
+		ParallelExperiment<Term.Block> experiment = new ParallelExperiment<>(config.first());
+		// Set expected items
+		experiment = experiment.setExpected(config.second()).setQuiet(quiet);
+		// Run the MapReduce experiment
+		Stats result = experiment.run(new Stats(config.third()), FuzzTestingExperiment::check, (r1,r2) -> r1.join(r2));
 		//
-		Iterator<Term.Block> iterator;
-		String label;
-		//
-		if (options.containsKey("pspace")) {
-			long[] ivdw = (long[]) options.get("pspace");
-			int c = (Integer) options.get("constrained");
-			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3], COPYINFERENCE);
-			// Create iterator
-			if (c >= 0) {
-				iterator = space.definedVariableWalker(c).iterator();
-				label = space.toString() + "{def," + c + "}";
-			} else {
-				// Get domain
-				Domain.Big<Term.Block> domain = space.domain();
-				// Determine expected size
-				expected = domain.bigSize().longValueExact();
-				// Get iterator
-				iterator = domain.iterator();
-				//
-				label = space.toString();
-			}
-		} else {
-			// Read from stdin line by line
-			List<Term.Block> inputs = readAll(System.in);
-			iterator = inputs.iterator();
-			expected = inputs.size();
-			label = "STDIN";
-		}
-		// Slice iterator (if applicable)
-		if (batch != null) {
-			long[] range = determineIndexRange(batch[0], batch[1], expected);
-			label += "[" + range[0] + ".." + range[1] + "]";
-			System.out.println("LABEL: " + label);
-			// Create sliced iterator
-			iterator = new SliceIterator(iterator, range[0], range[1]);
-			// Update expected
-			expected = range[1] - range[0];
-		}
-		// Done
-		check(iterator, expected, label);
+		result.print();
 		// Done
 		System.exit(1);
-	}
-
-	/**
-	 * Space a space of statements using n threads with a given batch size.
-	 *
-	 * @param space
-	 * @param nthreads
-	 * @param batch
-	 * @param expected
-	 * @param label
-	 * @throws NoSuchAlgorithmException
-	 * @throws IOException
-	 * @throws InterruptedException
-	 * @throws ExecutionException
-	 */
-	public static void check(Iterator<Term.Block> iterator, long expected, String label)
-			throws NoSuchAlgorithmException, IOException, InterruptedException, ExecutionException {
-		// Construct temporary memory areas
-		Term.Block[][] arrays = new Term.Block[NTHREADS][BATCHSIZE];
-		Future<Stats>[] threads = new Future[NTHREADS];
-		Stats stats = new Stats(label);
-		//
-		while(iterator.hasNext()) {
-			// Create next batch
-			for (int i = 0; i != NTHREADS; ++i) {
-				copyToArray(arrays[i], iterator);
-			}
-			// Submit next batch for process
-			for (int i = 0; i != NTHREADS; ++i) {
-				final Term.Block[] batch = arrays[i];
-				threads[i] = executor.submit(() -> check(batch));
-			}
-			// Join all back together
-			for (int i = 0; i != NTHREADS; ++i) {
-				stats.join(threads[i].get());
-			}
-			// Report
-			reportProgress(stats,expected);
-		}
-		//
-		stats.print();
-	}
-
-	public static void reportProgress(Stats stats, long expected) {
-		if(!QUIET) {
-			long count = stats.total();
-			long time = System.currentTimeMillis() - stats.start;
-			//
-			if(expected < 0) {
-				System.err.print("\r(" + count + ")");
-			} else {
-				double rate = ((double) time) / count;
-				double remainingMS = (expected - count) * rate;
-				long remainingS = ((long)remainingMS/1000) % 60;
-				long remainingM = ((long)remainingMS/(60*1000)) % 60;
-				long remainingH = ((long)remainingMS/(60*60*1000));
-				long percent = (long) (100D * (count) / expected);
-				String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-				System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
-			}
-		}
 	}
 
 	/**
@@ -265,7 +132,7 @@ public class FuzzTestingExperiment {
 	 * @throws InterruptedException
 	 * @throws JSONException
 	 */
-	public static Stats check(Term.Block[] batch) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static Stats check(Term.Block[] batch) {
 		Stats stats = new Stats(null);
 		// First, strip out any which are not canonical
 		for(int i=0;i!=batch.length;++i) {
@@ -413,7 +280,7 @@ public class FuzzTestingExperiment {
 			String ith = lines[i];
 			if(ith.length() > 0) {
 				String[] cols = ith.split(":");
-				if(cols.length == 5) {
+				if(cols.length >= 5) {
 					int line = Integer.parseInt(cols[1]);
 					String type = cols[3].trim();
 					String message = cols[4].trim();
@@ -547,31 +414,6 @@ public class FuzzTestingExperiment {
 		return declared;
 	}
 
-	private static <T> int copyToArray(T[] array, Iterator<T> b) {
-		int i = 0;
-		// Read items into array
-		while (b.hasNext() && i < array.length) {
-			array[i++] = b.next();
-		}
-		// Reset any trailing items
-		for (; i < array.length; ++i) {
-			array[i] = null;
-		}
-		// Done
-		return i;
-	}
-
-	private static long[] determineIndexRange(long index, long count, long n) {
-		if (count > n) {
-			return new long[] { 0, n };
-		} else {
-			long size = (n / count) + 1;
-			long start = index * size;
-			long end = Math.min(n, (index + 1) * size);
-			return new long[] { start, end };
-		}
-	}
-
 	/**
 	 * Get the SHA-256 hash for a given string. This is helpful for generating a
 	 * unique ID for each filename
@@ -589,24 +431,6 @@ public class FuzzTestingExperiment {
 			hexString.append(String.format("%02X", hash[i]));
 		}
 		return hexString.toString();
-	}
-
-	private static List<Term.Block> readAll(InputStream in) throws IOException {
-		ArrayList<Term.Block> inputs = new ArrayList<>();
-		Scanner stdin = new Scanner(in);
-		while (stdin.hasNext()) {
-		    String input = stdin.nextLine();
-		    // Tokenize input program
-		    List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-			// Parse block
-			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), ProgramSpace.ROOT);
-			// Record it
-		    inputs.add(stmt);
-		}
-		//
-		stdin.close();
-		// Done
-		return inputs;
 	}
 
 	private final static class Stats {
@@ -632,7 +456,7 @@ public class FuzzTestingExperiment {
 					+ +inconsistentPossibleBug + notCanonical + invalidPrefix;
 		}
 
-		public void join(Stats stats) {
+		public Stats join(Stats stats) {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
 			this.notCanonical += stats.notCanonical;
@@ -643,6 +467,8 @@ public class FuzzTestingExperiment {
 			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
 			// Join error classifications
 			join(errors,stats.errors);
+			//
+			return this;
 		}
 
 		/**

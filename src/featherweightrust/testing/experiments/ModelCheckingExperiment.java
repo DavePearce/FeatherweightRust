@@ -22,9 +22,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
@@ -33,9 +30,8 @@ import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.OptArg;
-import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
-import jmodelgen.core.Domain;
+import featherweightrust.util.Triple;
 
 /**
  * The purpose of this experiment is to check soundness of the calculus with
@@ -47,139 +43,49 @@ import jmodelgen.core.Domain;
  *
  */
 public class ModelCheckingExperiment {
-
-	/**
-	 * Configure number of threads to use. You may need to hand tune this a little
-	 * to maximum performance, which makes a real difference on the big domains.
-	 */
-	private static final int NTHREADS = (Runtime.getRuntime().availableProcessors());
-
-	/**
-	 * Number of programs each thread to process in one go. You may need to hand
-	 * tune this a little to maximum performance, which makes a real difference on
-	 * the big domains.
-	 */
-	private static int BATCHSIZE = 10000;
-
 	/**
 	 * Flag whether to report failures to the console or not.
 	 */
 	private static boolean VERBOSE;
 
 	/**
-	 * Construct a thread pool to use for parallel processing.
-	 */
-	private static final ExecutorService executor = Executors.newCachedThreadPool();
-
-	/**
 	 * Command-line options
 	 */
 	private static final OptArg[] OPTIONS = {
+			// Standard options
 			new OptArg("verbose","v","set verbose output"),
+			new OptArg("quiet","q","disable progress reporting"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
-			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space", new int[] { 1, 1, 1, 1 }),
+			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space"),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
-			new OptArg("batch","b",OptArg.INT,"set batch size (default 10000)",10000),
+			new OptArg("batch", "b", OptArg.LONGARRAY(2, 2), "set batch index and batch count", null),
 			new OptArg("copyinf","i","enable copy inference"),
-			new OptArg("range", "r", OptArg.LONGARRAY(2, 2), "set index range of domain to iterate",
-					null)
+			// Specific options
+			new OptArg("batchsize", "s", OptArg.INT, "set batch size", 10000),
 	};
 
 	public static void main(String[] _args) throws Exception {
-		System.err.println("Creating " + NTHREADS + " worker threads");
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
-		if(args.size() == 0) {
-			System.out.println("usage: java Main <options> target");
-			System.out.println();
-			OptArg.usage(System.out, OPTIONS);
-		} else {
-			Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
-			long[] ivdw = (long[]) options.get("pspace");
-			int c = (Integer) options.get("constrained");
-			long expected = (Long) options.get("expected");
-			long[] range = (long[]) options.get("range");
-			boolean cinf = options.containsKey("copyinference");
-			//
-			BATCHSIZE = (int) options.get("batch");
-			VERBOSE = options.containsKey("verbose");
-			//
-			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3], cinf);
-			Iterator<Term.Block> iterator;
-			String label;
-			// Create iterator
-			if(c >= 0) {
-				iterator = space.definedVariableWalker(c).iterator();
-				label = space.toString() + "{def," + c + "}";
-			} else {
-				// Get domain
-				Domain.Big<Term.Block> domain = space.domain();
-				// Determine expected size
-				expected = domain.bigSize().longValueExact();
-				// Get iterator
-				iterator = domain.iterator();
-				//
-				label = space.toString();
-			}
-			// Slice iterator (if applicable)
-			if (range != null) {
-				// Create sliced iterator
-				iterator = new SliceIterator(iterator, range[0], range[1]);
-				// Update expected
-				expected = range[1] - range[0];
-			}
-			// Done
-			check(iterator, expected, label);
-		}
+		Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
+		// Extract Fuzzing specific command-line arguments
+		VERBOSE = options.containsKey("verbose");
+		// Process generic command-line arguments
+		boolean quiet = options.containsKey("quiet");
+		Triple<Iterator<Term.Block>,Long,String> config = Util.parseDefaultConfiguration(options);
+		// Construct and configure experiment
+		ParallelExperiment<Term.Block> experiment = new ParallelExperiment<>(config.first());
+		// Set expected items
+		experiment = experiment.setExpected(config.second()).setQuiet(quiet);
+		// Run the MapReduce experiment
+		Stats result = experiment.run(new Stats(config.third()), ModelCheckingExperiment::check, (r1,r2) -> r1.join(r2));
+		//
+		result.print();
+		// Done
 		System.exit(1);
 	}
 
-	public static void check(Iterator<Term.Block> iterator, long expected, String label) throws Exception {
-		// Construct temporary memory areas
-		Term.Block[][] arrays = new Term.Block[NTHREADS][BATCHSIZE];
-		Future<Stats>[] threads = new Future[NTHREADS];
-		//
-		Stats stats = new Stats(label);
-		//
-		while (iterator.hasNext()) {
-			// Create next batch
-			for (int i = 0; i != NTHREADS; ++i) {
-				copyToArray(arrays[i], iterator);
-			}
-			// Submit next batch for process
-			for (int i = 0; i != NTHREADS; ++i) {
-				final Term.Block[] batch = arrays[i];
-				threads[i] = executor.submit(() -> check(batch, ProgramSpace.ROOT));
-			}
-			// Join all back together
-			for (int i = 0; i != NTHREADS; ++i) {
-				stats.join(threads[i].get());
-			}
-			// Report
-			reportProgress(stats, expected);
-		}
-		//
-		stats.print();
-	}
-
-	public static void reportProgress(Stats stats, long expected) {
-		long count = stats.total();
-		long time = System.currentTimeMillis() - stats.start;
-		//
-		if(expected < 0) {
-			System.err.print("\r(" + count + ")");
-		} else {
-			double rate = ((double) time) / count;
-			double remainingMS = (expected - count) * rate;
-			long remainingS = ((long)remainingMS/1000) % 60;
-			long remainingM = ((long)remainingMS/(60*1000)) % 60;
-			long remainingH = ((long)remainingMS/(60*60*1000));
-			long percent = (long) (100D * (count) / expected);
-			String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-			System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
-		}
-	}
-
-	public static Stats check(Term.Block[] batch, Lifetime lifetime) throws Exception {
+	public static Stats check(Term.Block[] batch) {
+		Lifetime lifetime = ProgramSpace.ROOT;
 		Stats stats = new Stats(null);
 		for(int i=0;i!=batch.length;++i) {
 			Term.Block block = batch[i];
@@ -229,20 +135,6 @@ public class ModelCheckingExperiment {
 		}
 	}
 
-	private static <T> int copyToArray(T[] array, Iterator<T> b) {
-		int i = 0;
-		// Read items into array
-		while (b.hasNext() && i < array.length) {
-			array[i++] = b.next();
-		}
-		// Reset any trailing items
-		for (; i < array.length; ++i) {
-			array[i] = null;
-		}
-		// Done
-		return i;
-	}
-
 	private final static class Stats {
 		private final long start = System.currentTimeMillis();
 
@@ -257,11 +149,12 @@ public class ModelCheckingExperiment {
 			this.label = label;
 		}
 
-		public void join(Stats stats) {
+		public Stats join(Stats stats) {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
 			this.falsepos += stats.falsepos;
 			this.falseneg += stats.falseneg;
+			return this;
 		}
 
 		public long total() { return valid + invalid + falsepos; }

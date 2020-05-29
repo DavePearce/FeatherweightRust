@@ -18,46 +18,25 @@
 package featherweightrust.testing.experiments;
 
 import java.util.List;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.RandomAccessFile;
-import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Scanner;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import featherweightrust.core.BorrowChecker;
-import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.ProgramSpace;
-import featherweightrust.core.BorrowChecker.Cell;
-import featherweightrust.core.BorrowChecker.Environment;
-import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
-import featherweightrust.core.Syntax.Type;
-import featherweightrust.io.Lexer;
-import featherweightrust.io.Parser;
-import featherweightrust.util.AbstractMachine;
+import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.OptArg;
-import featherweightrust.util.Pair;
-import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;
-import jmodelgen.core.Domain;
 
 /**
  * The purpose of this experiment is to fuzz test the Rust compiler using a
@@ -68,24 +47,18 @@ import jmodelgen.core.Domain;
  */
 public class FuzzTestingExperiment {
 	/**
+	 * Flag whether to report failures to the console or not.
+	 */
+	private static boolean VERBOSE;
+	/**
 	 * The command to use for executing the rust compiler.
 	 */
-	private static String RUSTC = "rustc";
+	private static String RUSTC;
 
 	/**
 	 * Extracted version tag from RUSTC;
 	 */
 	private static String RUST_VERSION;
-
-	/**
-	 * Flag whether to report failures to the console or not.
-	 */
-	private static boolean VERBOSE;
-
-	/**
-	 * Flag whether to report progress or not.
-	 */
-	private static boolean QUIET;
 
 	/**
 	 * Indicate whether Rust nightly is being used. This offers better performance
@@ -95,167 +68,57 @@ public class FuzzTestingExperiment {
 	private static boolean NIGHTLY;
 
 	/**
-	 * Signal whether the rustc supports Non-Lexical Lifetimes or not. And, if so,
-	 * attempt to work around them.
-	 */
-	private static boolean NLL;
-
-	/**
 	 * Indicate which edition of Rust is being used (e.g. 2015 or 2018).
 	 */
 	private static String EDITION;
 
 	/**
-	 * Configure number of threads to use.
+	 * Number of programs to pass into RUSTC in one go.
 	 */
-	private static final int NTHREADS = Runtime.getRuntime().availableProcessors();
-
-	/**
-	 * Number of programs each thread to process in one go. This can make a real
-	 * difference to the overall performance.
-	 */
-	private static final int BATCHSIZE = 10;
-
-	/**
-	 * Construct a thread pool to use for parallel processing.
-	 */
-	private static final ExecutorService executor = Executors.newCachedThreadPool();
+	private static final int RUSTC_BATCHSIZE = 10;
 
 	/**
 	 * Command-line options
 	 */
 	private static final OptArg[] OPTIONS = {
+			// Standard options
 			new OptArg("verbose","v","set verbose output"),
 			new OptArg("quiet","q","disable progress reporting"),
-			new OptArg("nightly","specify rust nightly available"),
-			new OptArg("nll","specify non-lexical lifetimes in play"),
-			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 			new OptArg("expected","n",OptArg.LONG,"set expected domain size",-1L),
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space"),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
 			new OptArg("batch", "b", OptArg.LONGARRAY(2, 2), "set batch index and batch count", null),
+			// Fuzzing specific
+			new OptArg("rustc", "r", OptArg.STRING, "specify rustc binary to use", "rustc"),
+			new OptArg("nightly","specify rust nightly available"),
+			new OptArg("edition", "e", OptArg.STRING, "set rust edition to use", "2018"),
 	};
 	//
 	public static void main(String[] _args) throws Exception {
-		System.out.println("NUM THREADS: " + NTHREADS);
-		System.out.println("BETA5");
-
 		List<String> args = new ArrayList<>(Arrays.asList(_args));
 		Map<String, Object> options = OptArg.parseOptions(args, OPTIONS);
-		long expected = (Long) options.get("expected");
-		long[] batch = (long[]) options.get("batch");
-		//
+		// Extract Fuzzing specific command-line arguments
 		VERBOSE = options.containsKey("verbose");
-		QUIET = options.containsKey("quiet");
 		NIGHTLY = options.containsKey("nightly");
 		EDITION = (String) options.get("edition");
-		NLL = options.containsKey("nll");
+		RUSTC = (String) options.get("rustc");
+		// Process generic command-line arguments
+		boolean quiet = options.containsKey("quiet");
+		// Always enable copy inference because this most closely follows
+		options.put("copyinf", true);
+		Triple<Iterator<Term.Block>,Long,String> config = Util.parseDefaultConfiguration(options);
 		// Extract version string
 		RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
+		// Construct and configure experiment
+		ParallelExperiment<Term.Block> experiment = new ParallelExperiment<>(config.first());
+		// Set expected items
+		experiment = experiment.setExpected(config.second()).setQuiet(quiet);
+		// Run the MapReduce experiment
+		Stats result = experiment.run(new Stats(config.third()), FuzzTestingExperiment::check, (r1,r2) -> r1.join(r2));
 		//
-		Iterator<Term.Block> iterator;
-		String label;
-		//
-		if (options.containsKey("pspace")) {
-			long[] ivdw = (long[]) options.get("pspace");
-			int c = (Integer) options.get("constrained");
-			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
-			// Create iterator
-			if (c >= 0) {
-				iterator = space.definedVariableWalker(c).iterator();
-				label = space.toString() + "{def," + c + "}";
-			} else {
-				// Get domain
-				Domain.Big<Term.Block> domain = space.domain();
-				// Determine expected size
-				expected = domain.bigSize().longValueExact();
-				// Get iterator
-				iterator = domain.iterator();
-				//
-				label = space.toString();
-			}
-		} else {
-			// Read from stdin line by line
-			List<Term.Block> inputs = readAll(System.in);
-			iterator = inputs.iterator();
-			expected = inputs.size();
-			label = "STDIN";
-		}
-		// Slice iterator (if applicable)
-		if (batch != null) {
-			long[] range = determineIndexRange(batch[0], batch[1], expected);
-			label += "[" + range[0] + ".." + range[1] + "]";
-			System.out.println("LABEL: " + label);
-			// Create sliced iterator
-			iterator = new SliceIterator(iterator, range[0], range[1]);
-			// Update expected
-			expected = range[1] - range[0];
-		}
-		// Done
-		check(iterator, expected, label);
+		result.print();
 		// Done
 		System.exit(1);
-	}
-
-	/**
-	 * Space a space of statements using n threads with a given batch size.
-	 *
-	 * @param space
-	 * @param nthreads
-	 * @param batch
-	 * @param expected
-	 * @param label
-	 * @throws NoSuchAlgorithmException
-	 * @throws IOException
-	 * @throws InterruptedException
-	 * @throws ExecutionException
-	 */
-	public static void check(Iterator<Term.Block> iterator, long expected, String label)
-			throws NoSuchAlgorithmException, IOException, InterruptedException, ExecutionException {
-		// Construct temporary memory areas
-		Term.Block[][] arrays = new Term.Block[NTHREADS][BATCHSIZE];
-		Future<Stats>[] threads = new Future[NTHREADS];
-		Stats stats = new Stats(label);
-		//
-		while(iterator.hasNext()) {
-			// Create next batch
-			for (int i = 0; i != NTHREADS; ++i) {
-				copyToArray(arrays[i], iterator);
-			}
-			// Submit next batch for process
-			for (int i = 0; i != NTHREADS; ++i) {
-				final Term.Block[] batch = arrays[i];
-				threads[i] = executor.submit(() -> check(batch));
-			}
-			// Join all back together
-			for (int i = 0; i != NTHREADS; ++i) {
-				stats.join(threads[i].get());
-			}
-			// Report
-			reportProgress(stats,expected);
-		}
-		//
-		stats.print();
-	}
-
-	public static void reportProgress(Stats stats, long expected) {
-		if(!QUIET) {
-			long count = stats.total();
-			long time = System.currentTimeMillis() - stats.start;
-			//
-			if(expected < 0) {
-				System.err.print("\r(" + count + ")");
-			} else {
-				double rate = ((double) time) / count;
-				double remainingMS = (expected - count) * rate;
-				long remainingS = ((long)remainingMS/1000) % 60;
-				long remainingM = ((long)remainingMS/(60*1000)) % 60;
-				long remainingH = ((long)remainingMS/(60*60*1000));
-				long percent = (long) (100D * (count) / expected);
-				String remaining = remainingH + "h " + remainingM + "m " + remainingS + "s";
-				System.err.print("\r(" + percent +  "%, " + String.format("%.0f",(1000/rate)) +  "/s, remaining " + remaining + ")           ");
-			}
-		}
 	}
 
 	/**
@@ -267,13 +130,31 @@ public class FuzzTestingExperiment {
 	 * @throws NoSuchAlgorithmException
 	 * @throws IOException
 	 * @throws InterruptedException
+	 * @throws JSONException
 	 */
-	public static Stats check(Term.Block[] batch) throws NoSuchAlgorithmException, IOException, InterruptedException {
+	public static Stats check(Term.Block[] batch) {
 		Stats stats = new Stats(null);
+		// First, strip out any which are not canonical
 		for(int i=0;i!=batch.length;++i) {
-			Term.Block block = batch[i];
-			if(block != null) {
-				check(block,stats);
+			if(!isCanonical(batch[i])) {
+				stats.notCanonical++;
+				batch[i] = null;
+			}
+		}
+		batch = ArrayUtils.removeAll(batch, null);
+		//
+		for (int i = 0; i < batch.length; i += RUSTC_BATCHSIZE) {
+			Term.Block[] ps = Arrays.copyOfRange(batch, i, Math.min(batch.length, i + RUSTC_BATCHSIZE));
+			try {
+				check(stats, ps);
+			} catch(Exception e) {
+				System.out.println("=================================================================");
+				System.out.println("Exception");
+				System.out.println("=================================================================");
+				for (int j = 0; j != ps.length; ++j) {
+					System.out.println("[" + j + "] " + ps[j]);
+				}
+				e.printStackTrace(System.out);
 			}
 		}
 		return stats;
@@ -287,61 +168,144 @@ public class FuzzTestingExperiment {
 	 * @throws NoSuchAlgorithmException
 	 * @throws IOException
 	 * @throws InterruptedException
+	 * @throws JSONException
 	 */
-	public static void check(Term.Block b, Stats stats) throws NoSuchAlgorithmException, IOException, InterruptedException {
-		if(!isCanonical(b)) {
-			stats.notCanonical++;
-		} else if(hasCopy(b)) {
-			stats.hasCopy++;
-		} else {
-			// Infer copy expressions
-			Term.Block nb = inferVariableClones(b);
-			// Check using calculus
-			SyntaxError FR_err = calculusCheckProgram(nb);
-			boolean FR_status = (FR_err == null);
-			// Construct rust program
-			String program = toRustProgram(b);
-			// Determine hash of program for naming
-			String hash = getHash(program);
-			// Determine filename based on hash
-			String prefix = File.separator + hash;
-			// Create temporary file
-			String srcFilename = createTemporaryFile(prefix, ".rs", program);
-			String binFilename = srcFilename.replace(".rs", "");
-			// Run the rust compile
-			RustCompiler rustc = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION);
-			Triple<Boolean, String, String> p = rustc.compile(srcFilename, binFilename);
-			boolean rustc_status = p.first();
-			String rustc_err = p.third();
-			// Delete source and binary files
-			new File(srcFilename).delete();
-			new File(binFilename).delete();
-			// Analysis output
-			if (FR_status != rustc_status) {
-				stats.record(rustc_err);
-				// Attempt to execute program
-				reportFailure(nb, program, FR_err, rustc_err);
-				if (rustc_status) {
-					// Rust says yes, FR says no
-					if(hasUnsoundness(nb)) {
-						stats.inconsistentUnsound++;
-					} else if(hasBoxDerefMoveLimitation(nb)) {
-						stats.inconsistentBoxDerefLimitation++;
-					} else {
-						stats.inconsistentInvalid++;
-					}
+	public static void check(Stats stats, Term.Block[] programs) throws NoSuchAlgorithmException, IOException, InterruptedException {
+		// Check using calculus
+		SyntaxError[] FR_errs = calculusCheckPrograms(programs);
+		// Construct Rust version of programs
+		String[] rustPrograms = new String[programs.length];
+		for(int i=0;i!=programs.length;++i) {
+			rustPrograms[i] = Util.toRustProgram(programs[i],"f_" + i);
+		}
+		// Iterate batch until no errors returned. This is necessary to extract all
+		// errors from the batch because some errors hide others.
+		String rustc_err;
+		List<String>[] rustcErrors = new List[programs.length];
+		List<String>[] rustcWarnings = new List[programs.length];
+		while((rustc_err = runRustc(rustPrograms)) != null) {
+			// Determine which lines gave errors
+			analyseRustErrors(rustc_err, rustcErrors, rustcWarnings, rustPrograms);
+			// Remove any program for which an error has been produced. This is necessary to
+			// prevent it from being recompiled again.
+			for(int i=0;i!=rustcErrors.length;++i) {
+				if(rustcErrors[i] != null) {
+					rustPrograms[i] = null;
+				}
+			}
+		}
+		// Updated statistic accordingly
+		for(int i=0;i!=programs.length;++i) {
+			Term.Block b = programs[i];
+			updateStats(stats, b,  FR_errs[i], rustcErrors[i], rustcWarnings[i]);
+		}
+	}
+
+	public static String runRustc(String[] rustPrograms) throws NoSuchAlgorithmException, IOException, InterruptedException {
+		String rustSourceCode = toRustSourceCode(rustPrograms);
+		// Determine hash of program for naming
+		String hash = getHash(rustSourceCode);
+		// Determine filename based on hash
+		String prefix = File.separator + hash;
+		// Create temporary file
+		String srcFilename = createTemporaryFile(prefix, ".rs", rustSourceCode);
+		String binFilename = srcFilename.replace(".rs", "");
+		// Run the rust compile
+		RustCompiler rustc = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION);
+		Triple<Boolean, String, String> p = rustc.compile(srcFilename, binFilename);
+		// Delete source and binary files
+		new File(srcFilename).delete();
+		new File(binFilename).delete();
+		// Done
+		return p.first() ? null : p.third();
+	}
+
+	public static String toRustSourceCode(String[] rustPrograms) {
+		// Compact all rust programs into a source code string
+		StringBuilder builder = new StringBuilder();
+		for(int i=0;i!=rustPrograms.length;++i) {
+			String ith = rustPrograms[i];
+			if(ith != null) {
+				builder.append(ith);
+			}
+			builder.append('\n');
+		}
+		builder.append("fn main() {}");
+		// Done
+		return builder.toString();
+	}
+
+	public static void updateStats(Stats stats, Term.Block program, SyntaxError FR_err,
+			List<String> rustcErrors, List<String> rustcWarnings) throws IOException, NoSuchAlgorithmException {
+		boolean FR_status = (FR_err == null);
+		boolean rustc_status = (rustcErrors == null);
+		// Analysis output
+		if (FR_status != rustc_status) {
+			// FIXME: might want to put that back
+			stats.record(rustcErrors);
+			stats.record(rustcWarnings);
+			if (rustc_status) {
+				// Rust says yes, FR says no
+				if (Util.requiresDerefCoercions(program)) {
+					stats.inconsistentDerefCoercion++;
 				} else {
-					// Rust says no, FR says yes.
-					if(hasSelfAssignment(nb)) {
-						stats.inconsistentPossibleBug++;
+					reportFailure(program, FR_err, rustcErrors);
+					stats.inconsistentInvalid++;
+				}
+			} else {
+				// Rust says no, FR says yes.
+				reportFailure(program, FR_err, rustcErrors);
+				stats.inconsistentPossibleBug++;
+			}
+		} else if (FR_status) {
+			stats.valid++;
+		} else {
+			stats.invalid++;
+		}
+	}
+
+	/**
+	 * Parse the output from the rust compiler (which is in short form) and
+	 * associate each error message with the line on which it was generated. The
+	 * line number corresponds, of course, directly to the program in question.
+	 *
+	 * @param err
+	 * @param n
+	 * @return
+	 * @throws JSONException
+	 */
+	public static void analyseRustErrors(String err, List<String>[] errors, List<String>[] warnings, String[] rustPrograms) {
+		String[] lines = err.split("\n");
+		for(int i=0;i!=lines.length;++i) {
+			String ith = lines[i];
+			if(ith.length() > 0) {
+				String[] cols = ith.split(":");
+				if(cols.length >= 5) {
+					int line = Integer.parseInt(cols[1]);
+					String type = cols[3].trim();
+					String message = cols[4].trim();
+					// Line numbers start from 1, programs start from 0
+					line = line - 1;
+					//
+					if(type.startsWith("warning")) {
+						// Register warning
+						List<String> e = warnings[line];
+						if (e == null) {
+							e = new ArrayList<>();
+							warnings[line] = e;
+						}
+						e.add(type + ":" + message);
+
 					} else {
-						stats.inconsistentValid++;
+						// Register error
+						List<String> e = errors[line];
+						if (e == null) {
+							e = new ArrayList<>();
+							errors[line] = e;
+						}
+						e.add(type + ":" + message);
 					}
 				}
-			} else if (FR_status) {
-				stats.valid++;
-			} else {
-				stats.invalid++;
 			}
 		}
 	}
@@ -356,19 +320,20 @@ public class FuzzTestingExperiment {
 	 * @throws IOException
 	 * @throws NoSuchAlgorithmException
 	 */
-	public static void reportFailure(Term.Block b, String program, SyntaxError FR_err, String rustc_err) throws IOException, NoSuchAlgorithmException {
+	public static void reportFailure(Term.Block b, SyntaxError FR_err, List<String> rustc_errs) throws IOException, NoSuchAlgorithmException {
 		if(VERBOSE) {
+			// Reconstruct the rust program
+			String program = Util.toRustProgram(b,"f_?");
 			// Determine hash of program for naming
 			System.out.println("********* FAILURE");
 			System.out.println("BLOCK: " + b.toString());
 			System.out.println("PROGRAM: " + program);
 			System.out.println("HASH: " + getHash(program));
 			System.out.println("RUSTC: " + (FR_err != null));
-			System.out.println("HAS UNSOUNDNESS: " + hasUnsoundness(b));
-			System.out.println("POSSIBLE BUG: " + hasSelfAssignment
-					(b));
-			if(rustc_err != null) {
-				System.out.println(rustc_err);
+			if(rustc_errs != null) {
+				for(int i=0;i!=rustc_errs.size();++i) {
+					System.out.println("> " + rustc_errs.get(i));
+				}
 			}
 			if(FR_err != null) {
 				FR_err.outputSourceError(System.out);
@@ -377,21 +342,25 @@ public class FuzzTestingExperiment {
 	}
 
 	/**
-	 * Borrow check the program using the borrow checker which is part of this
+	 * Borrow check zer or more programs using the borrow checker which is part of this
 	 * calculs.
 	 *
 	 * @param b
 	 * @param l
 	 * @return
 	 */
-	public static SyntaxError calculusCheckProgram(Term.Block b) {
-		BorrowChecker checker = new BorrowChecker(b.toString());
-		try {
-			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
-			return null;
-		} catch (SyntaxError e) {
-			return e;
+	public static SyntaxError[] calculusCheckPrograms(Term.Block[] programs) {
+		SyntaxError[] errs = new SyntaxError[programs.length];
+		for(int i=0;i!=programs.length;++i) {
+			Term.Block b = programs[i];
+			BorrowChecker checker = new BorrowChecker(b.toString());
+			try {
+				checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
+			} catch (SyntaxError e) {
+				errs[i] = e;
+			}
 		}
+		return errs;
 	}
 
 	public static String createTemporaryFile(String prefix, String suffix, String contents) throws IOException, InterruptedException {
@@ -405,129 +374,6 @@ public class FuzzTestingExperiment {
 		writer.close();
 		//
 		return f.getAbsolutePath();
-	}
-
-	/**
-	 * The purpose of this method is to perform a "clone analysis". That is, to
-	 * determine where we are copying items versus moving them.
-	 *
-	 * @param stmt
-	 * @return
-	 */
-	public static Term.Block inferVariableClones(Term.Block stmt) {
-		return (Term.Block) inferVariableClones(stmt, new HashSet<>());
-	}
-
-	/**
-	 * Infer variable clones for a given statement using a known set of variables
-	 * which have copy semantics (hence, can and should be copied). The key here is
-	 * to reduce work by only allocating new objects when things change.
-	 *
-	 * @param term
-	 * @param copyables
-	 * @return
-	 */
-	private static Term inferVariableClones(Term term, HashSet<String> copyables) {
-		if (term instanceof Term.Block) {
-			copyables = new HashSet<>(copyables);
-			Term.Block block = (Term.Block) term;
-			final Term[] stmts = block.toArray();
-			Term[] nstmts = stmts;
-			for (int i = 0; i != block.size(); ++i) {
-				Term s = block.get(i);
-				Term n = inferVariableClones(s, copyables);
-				if (s != n) {
-					if (stmts == nstmts) {
-						nstmts = Arrays.copyOf(stmts, stmts.length);
-					}
-					nstmts[i] = n;
-				}
-				// Update copyables
-				inferCopyables(s, copyables);
-			}
-			if (stmts == nstmts) {
-				return term;
-			} else {
-				return new Term.Block(block.lifetime(), nstmts, term.attributes());
-			}
-		} else if (term instanceof Term.Let) {
-			Term.Let s = (Term.Let) term;
-			Term e = s.initialiser();
-			Term ne = inferVariableClones(e, copyables);
-			if (e == ne) {
-				return term;
-			} else {
-				return new Term.Let(s.variable(), ne, term.attributes());
-			}
-		} else if (term instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) term;
-			Term e = s.rightOperand();
-			Term ne = inferVariableClones(e, copyables);
-			if (e == ne) {
-				return term;
-			} else {
-				return new Term.Assignment(s.leftOperand(), ne, term.attributes());
-			}
-		} else if (term instanceof Term.IndirectAssignment) {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) term;
-			Term e = s.rightOperand();
-			Term ne = inferVariableClones(e, copyables);
-			if (e == ne) {
-				return term;
-			} else {
-				return new Term.IndirectAssignment(s.leftOperand(), ne, term.attributes());
-			}
-		} else if (term instanceof Term.Variable) {
-			Term.Variable v = (Term.Variable) term;
-			if (copyables.contains(v.name())) {
-				return new Term.Copy(v, term.attributes());
-			}
-		} else {
-			Term.Box b = (Term.Box) term;
-			Term e = b.operand();
-			Term ne = inferVariableClones(e, copyables);
-			if (e != ne) {
-				return new Term.Box(ne, term.attributes());
-			}
-		}
-		return term;
-	}
-
-	/**
-	 * Determine variables which have copy semantics at this point.
-	 *
-	 * @param stmt
-	 * @param copyables
-	 */
-	public static void inferCopyables(Term stmt, HashSet<String> copyables) {
-		if(stmt instanceof Term.Let) {
-			Term.Let s = (Term.Let) stmt;
-			if(isCopyable(s.initialiser(),copyables)) {
-				copyables.add(s.variable().name());
-			}
-		}
-	}
-
-	/**
-	 * Check whether the result of a given expression should have copy semantics of
-	 * not. For example, expressions which return integers should exhibit copy
-	 * semantics.
-	 *
-	 * @param expr
-	 * @param copyables
-	 * @return
-	 */
-	public static boolean isCopyable(Term expr, HashSet<String> copyables) {
-		if (expr instanceof Term.Box) {
-			return false;
-		} else if (expr instanceof Term.Borrow) {
-			Term.Borrow b = (Term.Borrow) expr;
-			return !b.isMutable();
-		} else if (expr instanceof Term.Variable) {
-			Term.Variable v = (Term.Variable) expr;
-			return copyables.contains(v.name());
-		}
-		return true;
 	}
 
 	/**
@@ -558,7 +404,7 @@ public class FuzzTestingExperiment {
 			return declared;
 		} else if(stmt instanceof Term.Let) {
 			Term.Let s = (Term.Let) stmt;
-			String var = s.variable().name();
+			String var = s.variable();
 			if(!ProgramSpace.VARIABLE_NAMES[declared].equals(var)) {
 				// Program is not canonical
 				throw new IllegalArgumentException();
@@ -566,318 +412,6 @@ public class FuzzTestingExperiment {
 			declared = declared+1;
 		}
 		return declared;
-	}
-
-	/**
-	 * Check whether the given program attempts to copy a variable that is no longer
-	 * live. Such programs are ignored because such expressions will be treated
-	 * differently by the rust compiler (i.e. treated as moves).
-	 *
-	 * @param term
-	 * @return
-	 */
-	private static boolean hasCopy(Term term) {
-		if (term instanceof Term.Block) {
-			Term.Block b = (Term.Block) term;
-			// Go backwards through the block for obvious reasons.
-			for (int i = 0; i != b.size(); ++i) {
-				if (hasCopy(b.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		} else if (term instanceof Term.Let) {
-			Term.Let s = (Term.Let) term;
-			return hasCopy(s.initialiser());
-		} else if (term instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) term;
-			return hasCopy(s.rightOperand());
-		} else if (term instanceof Term.IndirectAssignment) {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) term;
-			return hasCopy(s.leftOperand()) || hasCopy(s.rightOperand());
-		} else if (term instanceof Term.Copy) {
-			return true;
-		} else if (term instanceof Term.Box) {
-			Term.Box e = (Term.Box) term;
-			return hasCopy(e.operand());
-		}
-		return false;
-	}
-
-	/**
-	 *
-	 */
-
-	/**
-	 * Given a statement block in the calculus, generate a syntactically correct
-	 * Rust program.
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static String toRustProgram(Term.Block b) {
-		return "fn main() " + toRustString(b, new HashSet<>());
-	}
-
-	private static String toRustString(Term stmt, HashSet<String> live) {
-		if (stmt instanceof Term.Block) {
-			Term.Block block = (Term.Block) stmt;
-			String contents = "";
-			ArrayList<String> declared = new ArrayList<>();
-			for (int i = 0; i != block.size(); ++i) {
-				Term s = block.get(i);
-				contents += toRustString(s, live) + " ";
-				if (s instanceof Term.Let) {
-					Term.Let l = (Term.Let) s;
-					declared.add(l.variable().name());
-				}
-			}
-			// Remove declared variables
-			if(NLL) {
-				// Attempt to work around non-lexical lifetimes
-				for (int i=declared.size()-1;i>=0;--i) {
-					String var = declared.get(i);
-					if (live.contains(var)) {
-						// declared live variable
-						contents = contents + var + "; ";
-						live.remove(var);
-					}
-				}
-			}
-			//
-			return "{ " + contents + "}";
-		} else if(stmt instanceof Term.Let) {
-			Term.Let s = (Term.Let) stmt;
-			String init = toRustString(s.initialiser());
-			updateLiveness(s.initialiser(),live);
-			// By definition variable is live after assignment
-			live.add(s.variable().name());
-			return "let mut " + s.variable().name() + " = " + init + ";";
-		} else if(stmt instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) stmt;
-			updateLiveness(s.rightOperand(),live);
-			// By definition variable is live after assignment
-			live.add(s.leftOperand().name());
-			return s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
-		} else {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) stmt;
-			updateLiveness(s.rightOperand(),live);
-			return "*" + s.leftOperand().name() + " = " + toRustString(s.rightOperand()) + ";";
-		}
-	}
-
-	/**
-	 * Check for statements of the form <code>y = y</code>. These are incorrectly
-	 * rejected by the original borrow checker (e.g. Rust 1.35.0 edition 2015).
-	 * However, they are accepted (for the most part) by the new borrow checker.
-	 *
-	 * @param stmt
-	 * @return
-	 */
-	private static boolean hasSelfAssignment(Term stmt) {
-		if(stmt instanceof Term.Block) {
-			Term.Block b = (Term.Block) stmt;
-			for (int i = 0; i != b.size(); ++i) {
-				if(hasSelfAssignment(b.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		} else if(stmt instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) stmt;
-			if(s.rhs instanceof Term.Variable) {
-				Term.Variable rhs = (Term.Variable) s.rhs;
-				return s.lhs.name().equals(rhs.name());
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Look for programs which contain statements of the following form:
-	 *
-	 * <pre>
-	 * y = &y
-	 * y = &mut y
-	 * y = box &y
-	 * y = box &mut y
-	 * *y = &y
-	 * *y = &mut y
-	 * *y = box &y
-	 * *y = box &mut y
-	 * </pre>
-	 *
-	 * Statements such as this are unsound, but were accepted by the original borrow
-	 * checker (e.g. Rust v1.35.0 edition 2015). The new borrow checker (e.g. Rust
-	 * v1.36.0 edition 2015) reports a warning for such programs and notes that this
-	 * is for backwards compatibility reasons and will be upgraded in the future to
-	 * an error.
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static boolean hasUnsoundness(Term stmt) {
-		if (stmt instanceof Term.Block) {
-			Term.Block b = (Term.Block) stmt;
-			for (int i = 0; i != b.size(); ++i) {
-				if (hasUnsoundness(b.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		} else if (stmt instanceof Term.Assignment) {
-			Term.Assignment s = (Term.Assignment) stmt;
-			return hasUnsoundBorrow(s.lhs.name(), s.rhs);
-		} else if (stmt instanceof Term.IndirectAssignment) {
-			Term.IndirectAssignment s = (Term.IndirectAssignment) stmt;
-			return hasUnsoundBorrow(s.leftOperand().name(), s.rightOperand());
-		} else {
-			return false;
-		}
-	}
-
-	/**
-	 * Check whether an expression attempts to borrow a given variable which, in the
-	 * context this function is used, indicates the enclosing statement is unsound.
-	 *
-	 * @param var
-	 * @param e
-	 * @return
-	 */
-	private static boolean hasUnsoundBorrow(String var, Term e) {
-		if (e instanceof Term.Box) {
-			Term.Box b = (Term.Box) e;
-			return hasUnsoundBorrow(var, b.operand());
-		} else if (e instanceof Term.Borrow) {
-			Term.Borrow b = (Term.Borrow) e;
-			return b.operand().name().equals(var);
-		} else {
-			return false;
-		}
-	}
-
-	/**
-	 * <p>
-	 * This determines whether this block exposes a known limitation in the current
-	 * BorrowChecker for FR. Specifically, it does not currently support moving
-	 * through a dereference. For example, the following program is incorrectly
-	 * rejected by FR:
-	 * </p>
-	 *
-	 * <pre>
-	 * { let mut x = box 0; x = x; { let mut y = box x; y = box *y; *y = box 0; } }
-	 * </pre>
-	 *
-	 * <p>
-	 * The current borrow checker for FR reports incorrectly that, in the statement
-	 * <code>y = box *y</code>, the expression <code>*y</code> cannot be copied.
-	 * This is because the current rule T-BoxDeref requires the type in question be
-	 * copyable. In fact, it's possible to destructively update the variable being
-	 * dereferenced as we know it owns the location in question.
-	 * </p>
-	 * <p>
-	 * This rule simply employs an updated borrow checker to determine whether or
-	 * not the program would borrow check if the more flexible rule was supported.
-	 * </p>
-	 *
-	 * @param b
-	 * @return
-	 */
-	private static boolean hasBoxDerefMoveLimitation(Term.Block b) {
-		// Extended borrow checker with a more flexible interpretation of T-BoxDeref.
-		BorrowChecker checker = new BorrowChecker(b.toString()) {
-			@Override
-			public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Dereference e) {
-				String x = e.operand().name();
-				Cell Cx = R1.get(x);
-				// Check variable is declared
-				check(Cx != null, UNDECLARED_VARIABLE, e);
-				// Check variable not moved
-				check(!Cx.moved(), LVAL_MOVED, e);
-				// Locate operand type
-				Cell C1 = R1.get(x);
-				// Check operand has reference type
-				if (C1.type() instanceof Type.Box) {
-					// T-BoxDeref
-					Type T = ((Type.Box) C1.type()).element();
-					//
-					if (!T.copyable() && !borrowed(R1, x)) {
-						// Implement destructive update
-						Environment R2 = R1.move(x);
-						//
-						return new Pair<>(R2, T);
-					}
-				}
-				// default back to original
-				return super.apply(R1, l, e);
-			}
-		};
-		try {
-			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
-			return true;
-		} catch (SyntaxError e) {
-			return false;
-		}
-	}
-
-	/**
-	 * Convert an expression into a Rust-equivalent string.
-	 *
-	 * @param expr
-	 * @return
-	 */
-	private static String toRustString(Term expr) {
-		if (expr instanceof Term.Copy) {
-			Term.Copy v = (Term.Copy) expr;
-			return v.operand().name();
-		} else if (expr instanceof Term.Box) {
-			Term.Box b = (Term.Box) expr;
-			return "Box::new(" + toRustString(b.operand()) + ")";
-		} else {
-			return expr.toString();
-		}
-	}
-
-	/**
-	 * Update the set of live variables by removing any which are moved.
-	 *
-	 * @param expr
-	 * @param liveness
-	 */
-	private static void updateLiveness(Term expr, HashSet<String> liveness) {
-		if (expr instanceof Term.Variable) {
-			// Variable move
-			Term.Variable b = (Term.Variable) expr;
-			liveness.remove(b.name());
-		} else if (expr instanceof Term.Box) {
-			Term.Box b = (Term.Box) expr;
-			updateLiveness(b.operand(), liveness);
-		}
-	}
-
-	private static <T> int copyToArray(T[] array, Iterator<T> b) {
-		int i = 0;
-		// Read items into array
-		while (b.hasNext() && i < array.length) {
-			array[i++] = b.next();
-		}
-		// Reset any trailing items
-		for (; i < array.length; ++i) {
-			array[i] = null;
-		}
-		// Done
-		return i;
-	}
-
-	private static long[] determineIndexRange(long index, long count, long n) {
-		if (count > n) {
-			return new long[] { 0, n };
-		} else {
-			long size = (n / count) + 1;
-			long start = index * size;
-			long end = Math.min(n, (index + 1) * size);
-			return new long[] { start, end };
-		}
 	}
 
 	/**
@@ -899,65 +433,42 @@ public class FuzzTestingExperiment {
 		return hexString.toString();
 	}
 
-	private static List<Term.Block> readAll(InputStream in) throws IOException {
-		ArrayList<Term.Block> inputs = new ArrayList<>();
-		Scanner stdin = new Scanner(in);
-		while (stdin.hasNext()) {
-		    String input = stdin.nextLine();
-		    // Tokenize input program
-		    List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-			// Parse block
-			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), ProgramSpace.ROOT);
-			// Record it
-		    inputs.add(stmt);
-		}
-		//
-		stdin.close();
-		// Done
-		return inputs;
-	}
-
 	private final static class Stats {
 		private final long start = System.currentTimeMillis();
 		private final String label;
 		public long valid = 0;
 		public long invalid = 0;
 		public long notCanonical = 0;
-		public long hasCopy = 0;
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
-		public long inconsistentUnsound = 0;
+		public long inconsistentDerefCoercion = 0;
 		public long inconsistentPossibleBug = 0;
-		public long inconsistentBoxDerefLimitation = 0;
 		private final HashMap<String,Integer> errors;
-		private final HashMap<String,Integer> warnings;
 
 		public Stats(String label) {
 			this.label=label;
 			this.errors = new HashMap<>();
-			this.warnings = new HashMap<>();
 		}
 
 		public long total() {
-			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentUnsound
-					+ inconsistentPossibleBug + inconsistentBoxDerefLimitation + notCanonical + hasCopy + invalidPrefix;
+			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentDerefCoercion
+					+ +inconsistentPossibleBug + notCanonical + invalidPrefix;
 		}
 
-		public void join(Stats stats) {
+		public Stats join(Stats stats) {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
 			this.notCanonical += stats.notCanonical;
-			this.hasCopy += stats.hasCopy;
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
-			this.inconsistentUnsound += stats.inconsistentUnsound;
+			this.inconsistentDerefCoercion += stats.inconsistentDerefCoercion;
 			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
-			this.inconsistentBoxDerefLimitation += stats.inconsistentBoxDerefLimitation;
 			// Join error classifications
 			join(errors,stats.errors);
-			join(warnings,stats.warnings);
+			//
+			return this;
 		}
 
 		/**
@@ -967,25 +478,16 @@ public class FuzzTestingExperiment {
 		 * @param stderr
 		 * @throws IOException
 		 */
-		public void record(String stderr) throws IOException {
-			BufferedReader reader = new BufferedReader(new StringReader(stderr));
-			String line;
-			while ((line = reader.readLine()) != null) {
-				if (line.startsWith("error[E")) {
-					String errcode = line.substring(6, 11);
-					Integer i = errors.get(errcode);
-					if (i == null) {
-						errors.put(errcode, 1);
+		public void record(List<String> errs) throws IOException {
+			if(errs != null) {
+				for(int i=0;i!=errs.size();++i) {
+					String line = errs.get(i);
+					String code = line.split(":")[0];
+					Integer j = errors.get(code);
+					if (j == null) {
+						errors.put(code, 1);
 					} else {
-						errors.put(errcode, i + 1);
-					}
-				} else if (line.startsWith("warning[E")) {
-					String errcode = line.substring(8, 13);
-					Integer i = warnings.get(errcode);
-					if (i == null) {
-						warnings.put(errcode, 1);
-					} else {
-						warnings.put(errcode, i + 1);
+						errors.put(code, j + 1);
 					}
 				}
 			}
@@ -1003,18 +505,13 @@ public class FuzzTestingExperiment {
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
 			System.out.println("\tIGNORED (NOT CANONICAL): " + notCanonical);
-			System.out.println("\tIGNORED (HAS COPY): " + hasCopy);
 			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
-			System.out.println("\tINCONSISTENT (ACTUAL BUG): " + inconsistentUnsound);
+			System.out.println("\tINCONSISTENT (DEREF COERCION): " + inconsistentDerefCoercion);
 			System.out.println("\tINCONSISTENT (POSSIBLE BUG): " + inconsistentPossibleBug);
-			System.out.println("\tINCONSISTENT (BOXDEREF LIMITATIONS): " + inconsistentBoxDerefLimitation);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());
-			}
-			for(Map.Entry<String, Integer> e : warnings.entrySet()) {
-				System.out.println("\tWARNING (" + e.getKey().replace("E", "W") + "): " + e.getValue());
 			}
 			System.out.println("}");
 		}

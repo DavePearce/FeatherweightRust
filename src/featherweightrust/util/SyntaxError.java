@@ -135,11 +135,11 @@ public class SyntaxError extends RuntimeException {
 			}
 			lineEnd = Math.min(lineEnd, src.length());
 
-			output.println("line " + line + ": " + getMessage());
+			output.println("> line " + line + ": " + getMessage());
 			// NOTE: in the following lines I don't print characters
 			// individually. The reason for this is that it messes up the ANT
 			// task output.
-			String str = "";
+			String str = "> ";
 			for (int i = lineStart; i < lineEnd; ++i) {
 				str = str + src.charAt(i);
 			}
@@ -151,7 +151,7 @@ public class SyntaxError extends RuntimeException {
 				// Therefore, we need to provide one ourselves!
 				output.println(str);
 			}
-			str = "";
+			str = "> ";
 			for (int i = lineStart; i < start; ++i) {
 				if (src.charAt(i) == '\t') {
 					str += "\t";

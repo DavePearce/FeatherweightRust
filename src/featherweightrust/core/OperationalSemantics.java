@@ -19,7 +19,6 @@ package featherweightrust.core;
 
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.LVal;
@@ -45,7 +44,7 @@ import featherweightrust.util.Pair;
  *
  */
 public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 
 	public OperationalSemantics(Extension... extensions) {
 		super(extensions);

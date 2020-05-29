@@ -105,7 +105,7 @@ public class Lexer {
 		return new Int(r, input.substring(start, pos), start);
 	}
 
-	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', '!', '.' };
+	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', '!', '.', '?' };
 
 	public boolean isOperatorStart(char c) {
 		for (char o : opStarts) {
@@ -144,6 +144,8 @@ public class Lexer {
 			return new Star(pos++);
 		} else if (c == '.') {
 			return new Dot(pos++);
+		} else if (c == '?') {
+			return new QuestionMark(pos++);
 		} else if (c == '!') {
 			if((pos+1) < input.length() && input.charAt(pos+1) == '=' ) {
 				pos = pos + 2;
@@ -307,49 +309,42 @@ public class Lexer {
 	}
 
 	public static class LeftBrace extends Token {
-
 		public LeftBrace(int pos) {
 			super("(", pos);
 		}
 	}
 
 	public static class RightBrace extends Token {
-
 		public RightBrace(int pos) {
 			super(")", pos);
 		}
 	}
 
 	public static class LeftCurly extends Token {
-
 		public LeftCurly(int pos) {
 			super("{", pos);
 		}
 	}
 
 	public static class RightCurly extends Token {
-
 		public RightCurly(int pos) {
 			super("}", pos);
 		}
 	}
 
 	public static class Equals extends Token {
-
 		public Equals(int pos) {
 			super("=", pos);
 		}
 	}
 
 	public static class NotEquals extends Token {
-
 		public NotEquals(int pos) {
 			super("!=", pos);
 		}
 	}
 
 	public static class EqualsEquals extends Token {
-
 		public EqualsEquals(int pos) {
 			super("==", pos);
 		}
@@ -365,6 +360,12 @@ public class Lexer {
 	public static class Shreak extends Token {
 		public Shreak(int pos) {
 			super("!", pos);
+		}
+	}
+
+	public static class QuestionMark extends Token {
+		public QuestionMark(int pos) {
+			super("?", pos);
 		}
 	}
 }

@@ -52,7 +52,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	/**
 	 * Enable or disable debugging output.
 	 */
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
@@ -82,10 +82,11 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			e.self = this;
 		}
 	}
+
 	@Override
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term t) {
-		Pair<Environment,Type> p = super.apply(R1,l,t);
-		if(DEBUG) {
+		Pair<Environment, Type> p = super.apply(R1, l, t);
+		if (DEBUG) {
 			Environment R2 = p.first();
 			Type T = p.second();
 			// Debugging output
@@ -93,8 +94,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			String m = " |- " + ArrayUtils.centerPad(40, t + " : " + T) + " -| ";
 			int lw = (CONSOLE_WIDTH - m.length()) / 2;
 			int rw = (CONSOLE_WIDTH - m.length() - lw);
-			String sl = ArrayUtils.leftPad(lw,R1.toString());
-			String sr = ArrayUtils.rightPad(rw,R2.toString());
+			String sl = ArrayUtils.leftPad(lw, R1.toString());
+			String sr = ArrayUtils.rightPad(rw, R2.toString());
 			String s = sl + m + sr;
 			System.err.println(s);
 			System.err.println(ArrayUtils.pad(s.length(), '='));
@@ -129,13 +130,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		LVal lv = t.leftOperand();
 		// Declaration check
 		check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
+		// Possible strong update
 		// Type operand
 		Pair<Environment, Type> p = apply(R1, l, t.rightOperand());
 		Environment R2 = p.first();
 		Type T2 = p.second();
 		check(available(R2, lv, true), LVAL_NOT_WRITEABLE, t.leftOperand());
 		// Write prohibited check
-		check(!writeProhibited(R2,lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
+		check(!writeProhibited(R2.put(fresh(), T2, l), lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
 		// Write the type
 		Environment R3 = write(R2, lv, T2, true);
 		//
@@ -149,7 +151,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Block t) {
 		Pair<Environment, Type> p = apply(R1, t.lifetime(), t.toArray());
 		Environment R2 = p.first();
-		// FIXME: need to add phi
 		//
 		Environment R3 = drop(R2, t.lifetime());
 		//
@@ -178,7 +179,85 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
-		return read(R, t.operand(), t.copy());
+		final LVal lv = t.operand();
+		final String x = lv.name();
+		final Path path = lv.path();
+		// Extract target cell
+		Cell Cx = R.get(x);
+		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
+		Type T1 = Cx.type();
+		// Check available at least for reading
+		check(available(R, lv, false), LVAL_MOVED, lv);
+		// Determine type being read
+		Type T2 = typeOf(R, lv);
+		// Sanity check can copy this
+		check(!t.copy() || T2.copyable(), LVAL_NOT_COPY, lv);
+		// Decide if copy or move
+		if (isCopy(t, T2)) {
+			// Check variable readable (e.g. not mutably borrowed)
+			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
+			// Done
+			return new Pair<Environment, Type>(R, T2);
+		} else {
+			Lifetime m = Cx.lifetime();
+			// Check available for writing
+			check(available(R, lv, true), LVAL_MOVED, lv);
+			// Check variable writeable (e.g. not borrowed). This is necessary because we
+			// going to move this value out completely and, hence, we must have ownership to
+			// do this safely.
+			check(!writeProhibited(R, lv), LVAL_WRITE_PROHIBITED, lv);
+			// Apply destructive update
+			Environment R2 = R.put(x, new Cell(move(T1, path, 0), m));
+			// Done
+			return new Pair<Environment, Type>(R2, T2);
+		}
+	}
+
+	/**
+	 * Check whether a given dereference is copy or not. General speaking, this is
+	 * determined explicitly in the source-level syntax for Featherweight Rust.
+	 * However, it is possible to override this method in order to provide other
+	 * behaviour (e.g. copy inference).
+	 *
+	 * @param t The dereference being considered.
+	 * @param T The type of the operand being moved / copied.
+	 * @return
+	 */
+	protected boolean isCopy(Term.Dereference t, Type T) {
+		if (t.unspecified()) {
+			boolean r = T.copyable();
+			t.infer(r ? Term.Dereference.Kind.COPY : Term.Dereference.Kind.MOVE);
+			return r;
+		} else {
+			return t.copy();
+		}
+	}
+
+	/**
+	 * Move a given path out of a given type. This results in part of all of the
+	 * type becoming a shadow. If the empty path is moved out, then the type is
+	 * entirely shadowed.
+	 *
+	 * @param T
+	 * @param p
+	 * @param i
+	 * @return
+	 */
+	protected Type move(Type T, Path p, int i) {
+		if (p.size() == i) {
+			return new Type.Shadow(T);
+		} else if (T instanceof Type.Box) {
+			// In core calculus, dereferences are only valid path elements.
+			Path.Deref ith = (Path.Deref) p.get(i);
+			Type.Box B = (Type.Box) T;
+			return new Type.Box(move(B.element(), p, i + 1));
+		} else {
+			Type.Borrow b = (Type.Borrow) T;
+			// T must be Type.Borrow
+			syntaxError(CANNOT_MOVEOUT_THROUGH_BORROW, p);
+			// Deadcode
+			return null;
+		}
 	}
 
 	/**
@@ -191,12 +270,12 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Check variable is declared
 		check(Cx != null, UNDECLARED_VARIABLE, t);
 		// Check lval can be at least read
-		check(available(R,lv,false), LVAL_NOT_READABLE, lv);
+		check(available(R, lv, false), LVAL_NOT_READABLE, lv);
 		//
 		if (t.isMutable()) {
 			// T-MutBorrow
 			// Check lval can be also written
-			check(available(R,lv,true), LVAL_NOT_WRITEABLE, lv);
+			check(available(R, lv, true), LVAL_NOT_WRITEABLE, lv);
 			// Check nothing else prohibiting lval being written
 			check(!writeProhibited(R, lv), LVAL_WRITE_PROHIBITED, t.operand());
 		} else {
@@ -239,70 +318,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Reference t) {
 		// NOTE: Safe since locations not part of source level syntax.
 		throw new UnsupportedOperationException();
-	}
-
-	// ================================================================================
-	// Read
-	// ================================================================================
-
-	/**
-	 * Read the value of a given lval from the environment, leading to a potentially
-	 * updated environment. For example, if we are reading a type which is not copy,
-	 * then it is moved and this must be reflected in the updated environment.
-	 *
-	 * @param R  The environment in which the read is occuring.
-	 * @param lv The lval being read.
-	 * @return
-	 */
-	public Pair<Environment, Type> read(Environment R, LVal lv, boolean copy) {
-		final String x = lv.name();
-		final Path path = lv.path();
-		// Extract target cell
-		Cell Cx = R.get(x);
-		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
-		Type T1 = Cx.type();
-		// Check available at least for reading
-		check(available(R, lv, false), LVAL_MOVED, lv);
-		// Determine type being read
-		Type T2 = typeOf(R,lv);
-		// Sanity check can copy this
-		check(!copy || T2.copyable(), LVAL_NOT_COPY, lv);
-		// Decide if copy or move
-		if(copy) {
-			// Check variable readable (e.g. not mutably borrowed)
-			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
-			// Done
-			return new Pair<Environment, Type>(R,T2);
-		} else {
-			Lifetime m = Cx.lifetime();
-			// Check available for writing
-			check(available(R, lv, true), LVAL_MOVED, lv);
-			// Check variable writeable (e.g. not borrowed). This is necessary because we
-			// going to move this value out completely and, hence, we must have ownership to
-			// do this safely.
-			check(!writeProhibited(R, lv), LVAL_WRITE_PROHIBITED, lv);
-			// Apply destructive update
-			Environment R2 = R.put(x, new Cell(move(T1,path,0),m));
-			// Done
-			return new Pair<Environment, Type>(R2, T2);
-		}
-	}
-
-	public Type move(Type T, Path p, int i) {
-		if (p.size() == i) {
-			return new Type.Shadow(T);
-		} else if (T instanceof Type.Box) {
-			// In core calculus, dereferences are only valid path elements.
-			Path.Deref ith = (Path.Deref) p.get(i);
-			Type.Box B = (Type.Box) T;
-			return new Type.Box(move(B.element(), p, i + 1));
-		} else {
-			Type.Borrow b = (Type.Borrow) T;
-			// T must be Type.Borrow
-			syntaxError(CANNOT_MOVEOUT_THROUGH_BORROW, p);
-			// Deadcode
-			return null;
-		}
 	}
 
 	// ================================================================================
@@ -356,7 +371,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// lifetime check
 		check(T1.within(this, R1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, lv);
 		// Determine type of lval
-		Type T3 = typeOf(R1,lv);
+		Type T3 = typeOf(R1, lv);
 		// Check compatibility
 		check(compatible(R1, T3, T1, R1), INCOMPATIBLE_TYPE, lv);
 		// Apply write
@@ -369,7 +384,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 
 	public Pair<Environment, Type> write(Environment R, Type T1, Path p, int i, Type T2, boolean strong) {
 		if (i == p.size()) {
-			if(strong) {
+			if (strong) {
 				return new Pair<>(R, T2);
 			} else {
 				return new Pair<>(R, T1.intersect(T2));
@@ -386,7 +401,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	public Pair<Environment,Type> write(Environment R, Type.Borrow T1, Path p, int i, Type T2) {
+	public Pair<Environment, Type> write(Environment R, Type.Borrow T1, Path p, int i, Type T2) {
 		// T-BorrowAssign
 		Type.Borrow b = (Type.Borrow) T1;
 		LVal[] ys = b.lvals();
@@ -397,7 +412,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Consider all targets
 		for (int j = 0; j != ys.length; ++j) {
 			// Traverse remainder of path from lval.
-			LVal y = ys[j].traverse(p,i+1);
+			LVal y = ys[j].traverse(p, i + 1);
 			// NOTE: this prohibits a strong update in certain cases where it may, in fact,
 			// be possible to do this. It's not clear to me that this is always necessary or
 			// even desirable. However, at the time of writing, this mimics the Rust
@@ -464,31 +479,31 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public boolean available(Environment R, LVal lv, boolean mut) {
 		Cell Cx = R.get(lv.name());
 		// NOTE: can assume here that declaration check on lv.name() has already
-		// occurred.  Hence, Cx != null
+		// occurred. Hence, Cx != null
 		return available(R, Cx.type(), lv.path(), 0, mut);
 	}
 
 	public boolean available(Environment R, Type T, Path p, int i, boolean mut) {
-		if(p.size() == i) {
+		if (p.size() == i) {
 			// NOTE: Can always write to the top-level, but cannot read if its been moved
 			// previously.
 			return mut || T.moveable();
-		} else if(T instanceof Type.Shadow) {
+		} else if (T instanceof Type.Shadow) {
 			// Otherwise, must read value to e.g. dereference it. Hence, if has been moved,
 			// then this doesn't work.
 			return false;
-		} else if(T instanceof Type.Box) {
+		} else if (T instanceof Type.Box) {
 			Type.Box B = (Type.Box) T;
 			// Check path element is dereference
 			Path.Deref d = (Path.Deref) p.get(i);
 			// Continue writing
 			return available(R, B.element(), p, i + 1, mut);
-		} else if(T instanceof Type.Borrow) {
+		} else if (T instanceof Type.Borrow) {
 			Type.Borrow t = (Type.Borrow) T;
 			// Check path element is dereference
 			Path.Deref d = (Path.Deref) p.get(i);
 			//
-			if(!t.isMutable() && mut) {
+			if (!t.isMutable() && mut) {
 				// Cannot write through immutable borrow
 				return false;
 			} else {
@@ -497,7 +512,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				return true;
 			}
 		} else {
-			throw new IllegalArgumentException("unknown type encountered: " + T);
+			return false;
 		}
 	}
 
@@ -527,31 +542,31 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	public boolean compatible(Environment R1, Type T1, Type T2, Environment R2) {
-		if(T1 instanceof Type.Void && T2 instanceof Type.Void) {
+		if (T1 instanceof Type.Void && T2 instanceof Type.Void) {
 			return true;
-		} else if(T1 instanceof Type.Int && T2 instanceof Type.Int) {
+		} else if (T1 instanceof Type.Int && T2 instanceof Type.Int) {
 			return true;
-		} else if(T1 instanceof Type.Borrow && T2 instanceof Type.Borrow) {
+		} else if (T1 instanceof Type.Borrow && T2 instanceof Type.Borrow) {
 			Type.Borrow _T1 = (Type.Borrow) T1;
 			Type.Borrow _T2 = (Type.Borrow) T2;
 			// NOTE: follow holds because all members of a single borrow must be compatible
 			// by construction.
-			Type ti = typeOf(R1,_T1.lvals()[0]);
-			Type tj = typeOf(R2,_T2.lvals()[0]);
+			Type ti = typeOf(R1, _T1.lvals()[0]);
+			Type tj = typeOf(R2, _T2.lvals()[0]);
 			//
 			return _T1.isMutable() == _T2.isMutable() && compatible(R1, ti, tj, R2);
-		} else if(T1 instanceof Type.Box && T2 instanceof Type.Box) {
+		} else if (T1 instanceof Type.Box && T2 instanceof Type.Box) {
 			Type.Box _T1 = (Type.Box) T1;
 			Type.Box _T2 = (Type.Box) T2;
 			return compatible(R1, _T1.element(), _T2.element(), R2);
-		} else if(T1 instanceof Type.Shadow && T2 instanceof Type.Shadow) {
+		} else if (T1 instanceof Type.Shadow && T2 instanceof Type.Shadow) {
 			Type.Shadow _T1 = (Type.Shadow) T1;
 			Type.Shadow _T2 = (Type.Shadow) T2;
 			return compatible(R1, _T1.getType(), _T2.getType(), R2);
-		} else if(T1 instanceof Type.Shadow) {
+		} else if (T1 instanceof Type.Shadow) {
 			Type.Shadow _T1 = (Type.Shadow) T1;
 			return compatible(R1, _T1.getType(), T2, R2);
-		} else if(T2 instanceof Type.Shadow) {
+		} else if (T2 instanceof Type.Shadow) {
 			Type.Shadow _T2 = (Type.Shadow) T2;
 			return compatible(R1, T1, _T2.getType(), R2);
 		} else {
@@ -582,7 +597,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Process path elements (if any)
 		for (int i = 0; i != path.size(); ++i) {
 			Path.Element ith = path.get(i);
-			T = typeOf(env,T,ith);
+			T = typeOf(env, T, ith);
 		}
 		return T;
 	}
@@ -590,7 +605,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Type typeOf(Environment env, Type type, Path.Element ith) {
 		// NOTE: in the code calculys, the only form of path element is a Deref. Hence,
 		// the following is safe.
-		return typeOf(env,type,(Path.Deref) ith);
+		return typeOf(env, type, (Path.Deref) ith);
 	}
 
 	public Type typeOf(Environment env, Type type, Path.Deref d) {
@@ -731,12 +746,11 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	public static String[] fresh(int n) {
 		String[] freshVars = new String[n];
-		for(int i=0;i!=n;++i) {
+		for (int i = 0; i != n; ++i) {
 			freshVars[i] = fresh();
 		}
 		return freshVars;
 	}
-
 
 	/**
 	 * Provides a specific extension mechanism for the borrow checker.
@@ -834,7 +848,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		 */
 		public Environment remove(String... names) {
 			Environment nenv = new Environment(mapping);
-			for(int i=0;i!=names.length;++i) {
+			for (int i = 0; i != names.length; ++i) {
 				nenv.mapping.remove(names[i]);
 			}
 			return nenv;
@@ -924,7 +938,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	public void syntaxError(String msg, SyntacticElement e) {
-		if(e != null) {
+		if (e != null) {
 			Attribute.Source loc = e.attribute(Attribute.Source.class);
 			if (loc != null) {
 				throw new SyntaxError(msg, sourcefile, loc.start, loc.end);

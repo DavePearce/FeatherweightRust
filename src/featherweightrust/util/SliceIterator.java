@@ -19,6 +19,8 @@ package featherweightrust.util;
 
 import java.util.Iterator;
 
+import jmodelgen.core.Walker;
+
 /**
  * A simple iterator which slices a given range out of an existing iterator. For
  * example, we can iterate only the 1st -- 10th elements from the original
@@ -35,11 +37,18 @@ public final class SliceIterator<T> implements Iterator<T> {
 	public SliceIterator(Iterator<T> iter, long start, long end) {
 		this.count = (end - start);
 		// Skip forward
-		while (start > 0) {
+		while (start > 0 && iter.hasNext()) {
 			iter.next();
 			start = start - 1;
 		}
 		this.iter = iter;
+	}
+
+	public SliceIterator(Walker<T> walker, long start, long end) {
+		this.count = (end - start);
+		// Move quickly :)
+		walker.advance(start);
+		this.iter = walker.iterator();
 	}
 
 	@Override

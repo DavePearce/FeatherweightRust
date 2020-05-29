@@ -82,9 +82,13 @@ public final class RustCompiler {
 		command.add("-A");
 		command.add("unused-variables");
 		command.add("-A");
+		command.add("dead-code");
+		command.add("-A");
 		command.add("unused-mut");
 		command.add("-A");
 		command.add("path-statements");
+		command.add("--error-format");
+		command.add("short");
 		command.add("--edition");
 		command.add(edition);
 		//

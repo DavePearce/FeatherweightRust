@@ -17,24 +17,11 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.testing;
 
-import static org.junit.Assert.fail;
-
 import java.io.IOException;
-import java.io.StringReader;
-import java.util.List;
 import org.junit.Test;
 
-import featherweightrust.core.OperationalSemantics;
-import featherweightrust.core.BorrowChecker;
-import featherweightrust.core.Syntax.Lifetime;
-import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
-import featherweightrust.io.Lexer;
-import featherweightrust.io.Parser;
-import featherweightrust.testing.experiments.Util;
-import featherweightrust.util.AbstractMachine.State;
-import featherweightrust.util.Pair;
-import featherweightrust.util.SyntaxError;
+import static featherweightrust.testing.CoreTests.*;
 
 /**
  * Runtime test cases for the core syntax. Each test should pass borrow checking
@@ -696,70 +683,4 @@ public class InferenceTests {
 		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &mut *y; let mut w = &mut *z; ?*w }";
 		check(input, One);
 	}
-
-	// ==============================================================
-	// Helpers
-	// ==============================================================
-
-	public static void check(String input, Value output) throws IOException {
-		check(input, output, SEMANTICS, new BorrowChecker(input));
-	}
-
-	public static void check(String input, Value output, OperationalSemantics semantics, BorrowChecker typing) throws IOException {
-		// Allocate the global lifetime. This is the lifetime where all heap allocated
-		// data will reside.
-		Lifetime globalLifetime = new Lifetime();
-		//
-		try {
-			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-			// Parse block
-			Term.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
-			// Borrow Check block
-			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
-			// Execute block in outermost lifetime "*")
-			Pair<State, Term> state = new Pair<>(new State(),stmt);
-			// Execute continually until all reductions complete
-			Term result;
-			do {
-				state = semantics.apply(state.first(), globalLifetime, state.second());
-				result = state.second();
-			} while (result != null && !(result instanceof Value));
-			//
-			check(output, (Value) result);
-		} catch (SyntaxError e) {
-			e.outputSourceError(System.err);
-			e.printStackTrace();
-			fail();
-		}
-	}
-
-	public static void check(Value expected, Value actual) {
-		if(!expected.equals(actual)) {
-			// Failed
-			fail("expected: " + expected + ", got: " + actual);
-		}
-	}
-
-
-	public static void checkInvalid(String input) throws IOException {
-		checkInvalid(input, new BorrowChecker(input));
-	}
-
-	public static void checkInvalid(String input, BorrowChecker typing) throws IOException {
-		Lifetime globalLifetime = new Lifetime();
-		try {
-			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
-			// Parse block
-			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
-			// Borrow Check block
-			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
-			//
-			fail("test shouldn't have passed borrow checking");
-		} catch (SyntaxError e) {
-			// If we get here, then the borrow checker raised an exception
-			e.outputSourceError(System.out);
-		}
-	}
-
-	public static final OperationalSemantics SEMANTICS = new OperationalSemantics();
 }

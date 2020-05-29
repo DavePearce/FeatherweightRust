@@ -22,18 +22,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import featherweightrust.core.BorrowChecker.Cell;
-import featherweightrust.core.BorrowChecker.Environment;
-import featherweightrust.core.OperationalSemantics.Extension;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
-import featherweightrust.core.Syntax.Type.Box;
-import featherweightrust.core.Syntax.Type.Shadow;
-import featherweightrust.extensions.ControlFlow;
 import featherweightrust.util.AbstractTransformer;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.Pair;
@@ -53,7 +47,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * Enable or disable debugging output.
 	 */
 	private static final boolean DEBUG = false;
-
+	/**
+	 * Constant to reduce unnecessary environment instances.
+	 */
 	public final static Environment EMPTY_ENVIRONMENT = new Environment();
 	// Error messages
 	public final static String UNDECLARED_VARIABLE = "variable undeclared";
@@ -107,7 +103,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Declare
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Let t) {
+	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Let t) {
 		// Sanity check variable not already declared
 		String x = t.variable();
 		Cell C1 = R1.get(x);
@@ -126,7 +122,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Assign
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
+	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
 		LVal lv = t.leftOperand();
 		// Declaration check
 		check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
@@ -148,7 +144,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Block
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Block t) {
+	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Block t) {
 		Pair<Environment, Type> p = apply(R1, t.lifetime(), t.toArray());
 		Environment R2 = p.first();
 		//
@@ -160,7 +156,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	/**
 	 * T-Seq
 	 */
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term... ts) {
+	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term... ts) {
 		Environment Rn = R1;
 		Type Tn = Type.Void;
 		for (int i = 0; i != ts.length; ++i) {
@@ -178,7 +174,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Deref
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
+	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
 		final LVal lv = t.operand();
 		final String x = lv.name();
 		final Path path = lv.path();
@@ -264,7 +260,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-MutBorrow and T-ImmBorrow
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Term.Borrow t) {
+	protected Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Term.Borrow t) {
 		LVal lv = t.operand();
 		Cell Cx = R.get(lv.name());
 		// Check variable is declared
@@ -291,7 +287,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Box
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Box t) {
+	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Box t) {
 		// Type operand
 		Pair<Environment, Type> p = apply(R1, l, t.operand());
 		Environment R2 = p.first();
@@ -304,18 +300,18 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Const
 	 */
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Integer t) {
+	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Integer t) {
 		return new Pair<>(R, Type.Int);
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Unit t) {
+	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Unit t) {
 		// NOTE: Safe since unit not part of source level syntax.
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Reference t) {
+	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Value.Reference t) {
 		// NOTE: Safe since locations not part of source level syntax.
 		throw new UnsupportedOperationException();
 	}
@@ -359,7 +355,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 *               in Rust, these only occur when assigning directly to variables.
 	 * @return
 	 */
-	public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
+	protected Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
 		Path path = lv.path();
 		// Extract target cell
 		Cell Cx = R1.get(lv.name());
@@ -382,7 +378,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		return R2.put(lv.name(), T4, m);
 	}
 
-	public Pair<Environment, Type> write(Environment R, Type T1, Path p, int i, Type T2, boolean strong) {
+	protected Pair<Environment, Type> write(Environment R, Type T1, Path p, int i, Type T2, boolean strong) {
 		if (i == p.size()) {
 			if (strong) {
 				return new Pair<>(R, T2);
@@ -401,7 +397,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	public Pair<Environment, Type> write(Environment R, Type.Borrow T1, Path p, int i, Type T2) {
+	protected Pair<Environment, Type> write(Environment R, Type.Borrow T1, Path p, int i, Type T2) {
 		// T-BorrowAssign
 		Type.Borrow b = (Type.Borrow) T1;
 		LVal[] ys = b.lvals();
@@ -423,7 +419,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		return new Pair<>(Rn, T1);
 	}
 
-	public Pair<Environment, Type> write(Environment R, Type.Box T1, Path p, int i, Type T2) {
+	protected Pair<Environment, Type> write(Environment R, Type.Box T1, Path p, int i, Type T2) {
 		// T-BoxAssign
 		Type.Box T3 = (Type.Box) T1;
 		// NOTE: this prohibits a strong update when, in fact, it's always be possible
@@ -476,14 +472,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param mut indicates whether mutable or immutable access
 	 * @return
 	 */
-	public boolean available(Environment R, LVal lv, boolean mut) {
+	protected boolean available(Environment R, LVal lv, boolean mut) {
 		Cell Cx = R.get(lv.name());
 		// NOTE: can assume here that declaration check on lv.name() has already
 		// occurred. Hence, Cx != null
 		return available(R, Cx.type(), lv.path(), 0, mut);
 	}
 
-	public boolean available(Environment R, Type T, Path p, int i, boolean mut) {
+	protected boolean available(Environment R, Type T, Path p, int i, boolean mut) {
 		if (p.size() == i) {
 			// NOTE: Can always write to the top-level, but cannot read if its been moved
 			// previously.
@@ -588,7 +584,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param env
 	 * @return
 	 */
-	public Type typeOf(Environment env, LVal lv) {
+	protected Type typeOf(Environment env, LVal lv) {
 		final String name = lv.name();
 		final Path path = lv.path();
 		// Extract target cell
@@ -602,13 +598,13 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		return T;
 	}
 
-	public Type typeOf(Environment env, Type type, Path.Element ith) {
+	protected Type typeOf(Environment env, Type type, Path.Element ith) {
 		// NOTE: in the code calculys, the only form of path element is a Deref. Hence,
 		// the following is safe.
 		return typeOf(env, type, (Path.Deref) ith);
 	}
 
-	public Type typeOf(Environment env, Type type, Path.Deref d) {
+	protected Type typeOf(Environment env, Type type, Path.Deref d) {
 		if (type instanceof Type.Box) {
 			Type.Box b = (Type.Box) type;
 			return b.element();
@@ -650,7 +646,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param lv The lval being checked for writability
 	 * @return
 	 */
-	public static boolean writeProhibited(Environment R, LVal lv) {
+	protected static boolean writeProhibited(Environment R, LVal lv) {
 		// Look through all types to whether any prohibit writing this lval
 		for (Cell cell : R.cells()) {
 			Type type = cell.type();
@@ -681,7 +677,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param lv The lval being checked for readability
 	 * @return
 	 */
-	public static boolean readProhibited(Environment R, LVal lv) {
+	protected static boolean readProhibited(Environment R, LVal lv) {
 		// Look through all types to whether any prohibit reading this lval
 		for (Cell cell : R.cells()) {
 			Type type = cell.type();
@@ -717,7 +713,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param lifetime
 	 * @return
 	 */
-	public Environment drop(Environment env, Lifetime lifetime) {
+	protected Environment drop(Environment env, Lifetime lifetime) {
 		for (String name : env.bindings()) {
 			Cell cell = env.get(name);
 			if (cell.lifetime().equals(lifetime)) {
@@ -780,7 +776,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		 *
 		 * @param lifetime
 		 */
-		public Environment() {
+		private Environment() {
 			this.mapping = new HashMap<>();
 		}
 
@@ -937,7 +933,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	public void syntaxError(String msg, SyntacticElement e) {
+	protected void syntaxError(String msg, SyntacticElement e) {
 		if (e != null) {
 			Attribute.Source loc = e.attribute(Attribute.Source.class);
 			if (loc != null) {

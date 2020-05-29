@@ -1108,15 +1108,11 @@ public class CoreTests {
 			// Parse block
 			Term.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
+			typing.apply(BorrowChecker.EMPTY_ENVIRONMENT, globalLifetime, stmt);
 			// Execute block in outermost lifetime "*")
 			Pair<State, Term> state = new Pair<>(new State(),stmt);
-			// Execute continually until all reductions complete
-			Term result;
-			do {
-				state = semantics.apply(state.first(), globalLifetime, state.second());
-				result = state.second();
-			} while (result != null && !(result instanceof Value));
+			// Execute continually until all reductions complete (or exception)
+			Term result = semantics.execute(globalLifetime, state.second());
 			//
 			check(output, (Value) result);
 		} catch (SyntaxError e) {
@@ -1145,7 +1141,7 @@ public class CoreTests {
 			// Parse block
 			Term.Block stmt = new Parser(input,tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
 			// Borrow Check block
-			typing.apply(new BorrowChecker.Environment(), globalLifetime, stmt);
+			typing.apply(BorrowChecker.EMPTY_ENVIRONMENT, globalLifetime, stmt);
 			//
 			fail("test shouldn't have passed borrow checking");
 		} catch (SyntaxError e) {

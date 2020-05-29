@@ -28,10 +28,13 @@ import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.AbstractMachine;
+import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;
+import featherweightrust.util.Pair;
 
 /**
  * The purpose of this experiment is to check soundness of the calculus with
@@ -103,7 +106,7 @@ public class ModelCheckingExperiment {
 	public static void check(Term.Block stmt, Lifetime lifetime, Stats stats) {
 		boolean ran = false;
 		boolean checked = false;
-		Exception error = null;
+		Throwable error = null;
 		// See whether or not it borrow checks
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, lifetime, stmt);
@@ -114,9 +117,11 @@ public class ModelCheckingExperiment {
 		// See whether or not it executes
 		try {
 			// Execute block in outermost lifetime "*")
-			semantics.apply(AbstractMachine.EMPTY_STATE, lifetime, stmt);
+			semantics.execute(lifetime, stmt);
+			// Execution must have completed yielding a value. Otherwise, an exception would
+			// have necessarily been thrown.
 			ran = true;
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			error = e;
 		}
 		// Update statistics

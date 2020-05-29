@@ -33,7 +33,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 		this.extensions = extensions;
 	}
 
-	public Pair<T, S> apply(T state, Lifetime lifetime, Term term) {
+	protected Pair<T, S> apply(T state, Lifetime lifetime, Term term) {
 		switch(term.getOpcode()) {
 		case Syntax.TERM_let:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Let) term);
@@ -73,7 +73,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Assignment term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Assignment term);
 
 	/**
 	 * Apply this transformer to a given block statement.
@@ -83,7 +83,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Block term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Block term);
 
 	/**
 	 * Apply this transformer to a given let statement.
@@ -93,7 +93,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Let term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Let term);
 
 	/**
 	 * Apply this transformer to a given dereference expression.
@@ -103,7 +103,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Dereference term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Dereference term);
 
 	/**
 	 * Apply this transformer to a given borrow expression.
@@ -113,7 +113,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Borrow term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Borrow term);
 
 	/**
 	 * Apply this transformer to a given box expression.
@@ -123,7 +123,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Box term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Box term);
 
 	/**
 	 * Apply this transformer to the unit constant.
@@ -133,7 +133,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Value.Unit value);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Value.Unit value);
 
 	/**
 	 * Apply this transformer to a given integer constant.
@@ -143,7 +143,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetime, Value.Integer value);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Value.Integer value);
 
 	/**
 	 * Apply this transformer to a given assignment statement.
@@ -153,7 +153,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	public abstract Pair<T, S> apply(T state, Lifetime lifetim, Value.Reference value);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetim, Value.Reference value);
 
 	/**
 	 * Provides a mechanism by which a transformer can be extended.

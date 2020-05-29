@@ -57,6 +57,10 @@ public abstract class AbstractMachine {
 			this.heap = store;
 		}
 
+		public boolean isHeapEmpty() {
+			return heap.isEmpty();
+		}
+
 		/**
 		 * Return the current store
 		 *
@@ -210,6 +214,15 @@ public abstract class AbstractMachine {
 		}
 
 		/**
+		 * Check whether frame is empty or not.
+		 *
+		 * @return
+		 */
+		public boolean isEmpty() {
+			return locations.isEmpty();
+		}
+
+		/**
 		 * Get the location bound to a given variable name
 		 *
 		 * @param name
@@ -261,6 +274,19 @@ public abstract class AbstractMachine {
 
 		private Store(Cell[] cells) {
 			this.cells = cells;
+		}
+
+		/**
+		 * Check whether heap is empty or not
+		 * @return
+		 */
+		public boolean isEmpty() {
+			for(int i=0;i!=cells.length;++i) {
+				if(cells[i] != null) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 		/**

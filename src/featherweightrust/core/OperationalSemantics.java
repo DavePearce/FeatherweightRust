@@ -54,6 +54,23 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		}
 	}
 
+	public final Term execute(Lifetime l, Term t) {
+		// Execute block in outermost lifetime "*")
+		Pair<State, Term> state = new Pair<>(AbstractMachine.EMPTY_STATE, t);
+		// Execute continually until all reductions complete
+		Term result;
+		do {
+			state = apply(state.first(), l, state.second());
+			result = state.second();
+		} while (result != null && !(result instanceof Value));
+		//
+		if(!state.first().isHeapEmpty()) {
+			throw new RuntimeException("memory leak detected: " + state.first());
+		}
+		//
+		return result;
+	}
+
 	@Override
 	public final Pair<State, Term> apply(State S, Lifetime l, Term t) {
 		Pair<State,Term> p = super.apply(S,l,t);
@@ -68,7 +85,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Declare.
 	 */
-	public Pair<State, Term> reduceLet(State S1, Lifetime l, String x, Value v) {
+	protected Pair<State, Term> reduceLet(State S1, Lifetime l, String x, Value v) {
 		// Allocate new location
 		Pair<State, Reference> pl = S1.allocate(l, v);
 		State S2 = pl.first();
@@ -82,7 +99,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-IndAssign.
 	 */
-	public Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal lv, Value v) {
+	protected Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal lv, Value v) {
 		// Extract location, or throw exception otherwise
 		Reference lx = lv.locate(S1);
 		// Extract value being overwritten
@@ -98,7 +115,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Deref.
 	 */
-	public Pair<State, Term> reduceDereference(State S, LVal lv, boolean copy) {
+	protected Pair<State, Term> reduceDereference(State S, LVal lv, boolean copy) {
 		// Extract location, or throw exception otherwise
 		Reference lx = lv.locate(S);
 		// Read contents of cell at given location
@@ -115,7 +132,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Borrow.
 	 */
-	public Pair<State, Term> reduceBorrow(State S, LVal s) {
+	protected Pair<State, Term> reduceBorrow(State S, LVal s) {
 		// Locate operand
 		Reference lx = s.locate(S);
 		//
@@ -131,7 +148,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Box.
 	 */
-	public Pair<State, Term> reduceBox(State S1, Value v, Lifetime global) {
+	protected Pair<State, Term> reduceBox(State S1, Value v, Lifetime global) {
 		// Allocate new location
 		Pair<State, Reference> pl = S1.allocate(global, v);
 		State S2 = pl.first();
@@ -141,7 +158,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
+	protected Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
 		final int n = b.size();
 		// Save current bindings so they can be restored
 		StackFrame outerFrame = S1.frame();
@@ -178,7 +195,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Let s) {
+	final protected Pair<State, Term> apply(State S1, Lifetime l, Term.Let s) {
 		if (s.initialiser() instanceof Value) {
 			// Statement can be completely reduced
 			Value v = (Value) s.initialiser();
@@ -194,7 +211,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Assignment s) {
+	final protected Pair<State, Term> apply(State S1, Lifetime l, Term.Assignment s) {
 		if (s.rightOperand() instanceof Value) {
 			// Statement can be completely reduced
 			return reduceAssignment(S1, l, s.leftOperand(), (Value) s.rightOperand());
@@ -209,17 +226,17 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S, Lifetime l, Term.Borrow e) {
+	final protected Pair<State, Term> apply(State S, Lifetime l, Term.Borrow e) {
 		return reduceBorrow(S, e.operand());
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S, Lifetime l, Term.Dereference e) {
+	final protected Pair<State, Term> apply(State S, Lifetime l, Term.Dereference e) {
 		return reduceDereference(S, e.operand(), e.copy());
 	}
 
 	@Override
-	final public Pair<State, Term> apply(State S1, Lifetime l, Term.Box e) {
+	final protected Pair<State, Term> apply(State S1, Lifetime l, Term.Box e) {
 		if (e.operand() instanceof Value) {
 			// Statement can be completely reduced
 			return reduceBox(S1, (Value) e.operand(), l.getRoot());
@@ -234,17 +251,17 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Unit v) {
+	protected Pair<State, Term> apply(State S, Lifetime lifetime, Value.Unit v) {
 		return new Pair<>(S, v);
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Integer v) {
+	protected Pair<State, Term> apply(State S, Lifetime lifetime, Value.Integer v) {
 		return new Pair<>(S, v);
 	}
 
 	@Override
-	public Pair<State, Term> apply(State S, Lifetime lifetime, Value.Reference v) {
+	protected Pair<State, Term> apply(State S, Lifetime lifetime, Value.Reference v) {
 		return new Pair<>(S, v);
 	}
 

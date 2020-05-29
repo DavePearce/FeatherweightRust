@@ -151,7 +151,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Block t) {
 		Pair<Environment, Type> p = apply(R1, t.lifetime(), t.toArray());
 		Environment R2 = p.first();
-		// FIXME: need to add phi
 		//
 		Environment R3 = drop(R2, t.lifetime());
 		//
@@ -234,6 +233,16 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
+	/**
+	 * Move a given path out of a given type. This results in part of all of the
+	 * type becoming a shadow. If the empty path is moved out, then the type is
+	 * entirely shadowed.
+	 *
+	 * @param T
+	 * @param p
+	 * @param i
+	 * @return
+	 */
 	protected Type move(Type T, Path p, int i) {
 		if (p.size() == i) {
 			return new Type.Shadow(T);

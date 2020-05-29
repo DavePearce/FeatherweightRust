@@ -23,6 +23,7 @@ import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;
 import jmodelgen.core.Domain;
+import jmodelgen.core.Walker;
 
 public class Util {
 	private static final String DEREF_COERCION_REQUIRED = "Deref coercion required";
@@ -41,8 +42,20 @@ public class Util {
 					copyInference);
 			// Create iterator
 			if (c >= 0) {
-				iterator = space.definedVariableWalker(c).iterator();
+				Walker<Term.Block> walker = space.definedVariableWalker(c);
 				label = space.toString() + "{def," + c + "}";
+				// Slice iterator (if applicable)
+				if (batch != null) {
+					long[] range = determineIndexRange(batch[0], batch[1], expected);
+					label += "[" + range[0] + ".." + range[1] + "]";
+					// Create sliced iterator
+					iterator = new SliceIterator(walker, range[0], range[1]);
+					// Update expected
+					expected = range[1] - range[0];
+					return new Triple<>(iterator, expected, label);
+				} else {
+					iterator = walker.iterator();
+				}
 			} else {
 				// Get domain
 				Domain.Big<Term.Block> domain = space.domain();

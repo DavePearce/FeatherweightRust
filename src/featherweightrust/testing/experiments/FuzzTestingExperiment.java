@@ -154,7 +154,7 @@ public class FuzzTestingExperiment {
 				for (int j = 0; j != ps.length; ++j) {
 					System.out.println("[" + j + "] " + ps[j]);
 				}
-				e.printStackTrace();
+				e.printStackTrace(System.out);
 			}
 		}
 		return stats;

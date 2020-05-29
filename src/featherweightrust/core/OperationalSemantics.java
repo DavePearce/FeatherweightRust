@@ -19,7 +19,6 @@ package featherweightrust.core;
 
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.LVal;

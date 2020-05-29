@@ -65,6 +65,10 @@ import jmodelgen.util.Walkers;
  * |P{2}{2}{2}{2}_def{3}| = 82360
  * |P{1}{2}{2}{3}_def{3}| =
  * |P{1}{3}{2}{3}_def{3}| =
+ *
+ * |P{1}{2}{2}{2}_def{3}_inf| = 13088
+ * |P{2}{2}{2}{2}_def{3}_inf| = 53096
+ *
  * </pre>
  *
  * @author David J. Pearce
@@ -272,8 +276,8 @@ public class ProgramSpace {
 	public static void count(ProgramSpace p, int max) {
 		Walker<Term.Block> programs = p.definedVariableWalker(max);
 		long count = 0;
-		for(Term.Block b : programs) {
-			count = count + 1;
+		while(!programs.finished()) {
+			count = count + programs.advance(50000);
 		}
 		System.out.println("|" + p + "_def(" + max + ")| = " + count);
 	}
@@ -304,16 +308,16 @@ public class ProgramSpace {
 		count(new ProgramSpace(1,3,3,3,false));
 		count(new ProgramSpace(1,3,3,3,true));
 		// Determine constrained sizes
-//		count(new ProgramSpace(1,1,1,1,false),2);
-//		count(new ProgramSpace(1,1,1,1,true),2);
+		count(new ProgramSpace(1,1,1,1,false),2);
+		count(new ProgramSpace(1,1,1,1,true),2);
 		count(new ProgramSpace(1,1,1,2,false),2);
 		count(new ProgramSpace(1,1,1,2,true),2);
 		count(new ProgramSpace(1,1,2,2,false),2);
 		count(new ProgramSpace(1,1,2,2,true),2);
 		count(new ProgramSpace(1,2,2,2,false),2);
 		count(new ProgramSpace(1,2,2,2,true),2);
-//		count(new ProgramSpace(2,2,2,2,false),2);
-//		count(new ProgramSpace(2,2,2,2,true),2);
+		count(new ProgramSpace(2,2,2,2,false),2);
+		count(new ProgramSpace(2,2,2,2,true),2);
 		count(new ProgramSpace(1,2,2,3,false),2);
 		count(new ProgramSpace(1,2,2,3,true),2);
 		count(new ProgramSpace(1,2,3,3,false),2);
@@ -322,7 +326,7 @@ public class ProgramSpace {
 		count(new ProgramSpace(1,3,2,3,true),2);
 		count(new ProgramSpace(1,3,3,3,false),2);
 		count(new ProgramSpace(1,3,3,3,true),2);
-		// Determine constrained sizes
+//		// Determine constrained sizes
 		count(new ProgramSpace(1,1,1,1,false),3);
 		count(new ProgramSpace(1,1,1,1,true),3);
 		count(new ProgramSpace(1,1,1,2,false),3);

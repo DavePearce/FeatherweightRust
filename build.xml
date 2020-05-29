@@ -1,0 +1,77 @@
+<project name="wyc" default="build" xmlns:artifact="urn:maven-ant">
+
+  <!-- ================================================================== -->
+  <!-- Configuration -->
+  <!-- ================================================================== -->
+  <!-- Define coordinates -->
+  <property name="ARTIFACT_ID" value="featherweightrust"/>
+  <property name="VERSION" value="1.0.0-beta6"/>
+  <!-- Define directory structure -->  
+  <property name="SRC_DIR" location="src"/>
+  <property name="JAVA_DIR" location="${SRC_DIR}"/>
+  <property name="BIN_DIR" location="target"/>
+  <property name="CLASS_DIR" location="${BIN_DIR}/classes"/>
+  <property name="JAR_DIR" location="${BIN_DIR}/"/>
+  <!-- Define target jar files -->
+  <property name="CLASS_JAR" value="${BIN_DIR}/${ARTIFACT_ID}-${VERSION}.jar"/>
+  <property name="JAVA_JAR" value="${BIN_DIR}/${ARTIFACT_ID}-${VERSION}-sources.jar"/>
+  <!-- Misc properties -->
+  <property name="JAVA_VERSION" value="1.8"/>
+
+  <!-- ================================================================== -->
+  <!-- Setup -->
+  <!-- ================================================================== -->
+
+  <target name="setup">
+    <mkdir dir="${JAR_DIR}"/>
+    <mkdir dir="${CLASS_DIR}"/>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- Compile -->
+  <!-- ================================================================== -->
+
+  <target name="compile" depends="setup">
+    <javac includeantruntime="false"
+	   target="${JAVA_VERSION}"
+	   srcdir="${JAVA_DIR}"
+	   destdir="${CLASS_DIR}">
+      <classpath>
+	<pathelement location="lib/jmodelgen-0.4.1.jar"/>
+    </classpath>
+    </javac>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- Build -->
+  <!-- ================================================================== -->
+
+  <target name="build" depends="compile">
+    <jar destfile="${CLASS_JAR}">
+      <fileset dir="${CLASS_DIR}" includes="**/*.class"/>
+    </jar>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- Dist -->
+  <!-- ================================================================== -->
+
+  <target name="dist" depends="build">
+    <!-- build sources jar -->
+    <jar destfile="${JAVA_JAR}">
+      <fileset dir="${JAVA_DIR}" includes="**/*.java"/>
+    </jar>
+  </target>
+  
+  <!-- ================================================================== -->
+  <!-- Clean -->
+  <!-- ================================================================== -->
+
+  <target name="clean">
+    <delete includeEmptyDirs="true" failonerror="false">
+      <fileset dir="${BIN_DIR}"/>
+      <fileset dir="." includes="**/*.wyil,**/*.class"/>
+    </delete>
+  </target>
+
+</project>

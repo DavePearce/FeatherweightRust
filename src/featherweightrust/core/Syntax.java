@@ -778,7 +778,7 @@ public class Syntax {
 				} else if(equals(t)) {
 					return this;
 				} else {
-					throw new IllegalArgumentException("invalid intersect");
+					throw new IllegalArgumentException("invalid intersect (" + this + " & " + t + ")");
 				}
 			}
 		}

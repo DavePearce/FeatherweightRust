@@ -1,22 +1,8 @@
 <project name="wyc" default="build" xmlns:artifact="urn:maven-ant">
-
   <!-- ================================================================== -->
   <!-- Configuration -->
   <!-- ================================================================== -->
-  <!-- Define coordinates -->
-  <property name="ARTIFACT_ID" value="featherweightrust"/>
-  <property name="VERSION" value="1.0.0-beta6"/>
-  <!-- Define directory structure -->  
-  <property name="SRC_DIR" location="src"/>
-  <property name="JAVA_DIR" location="${SRC_DIR}"/>
-  <property name="BIN_DIR" location="target"/>
-  <property name="CLASS_DIR" location="${BIN_DIR}/classes"/>
-  <property name="JAR_DIR" location="${BIN_DIR}/"/>
-  <!-- Define target jar files -->
-  <property name="CLASS_JAR" value="${BIN_DIR}/${ARTIFACT_ID}-${VERSION}.jar"/>
-  <property name="JAVA_JAR" value="${BIN_DIR}/${ARTIFACT_ID}-${VERSION}-sources.jar"/>
-  <!-- Misc properties -->
-  <property name="JAVA_VERSION" value="1.8"/>
+  <import file="config.xml"/>
 
   <!-- ================================================================== -->
   <!-- Setup -->
@@ -37,7 +23,7 @@
 	   srcdir="${JAVA_DIR}"
 	   destdir="${CLASS_DIR}">
       <classpath>
-	<pathelement location="lib/jmodelgen-0.4.1.jar"/>
+	<path refid="MAVEN_DEPS"/>
     </classpath>
     </javac>
   </target>

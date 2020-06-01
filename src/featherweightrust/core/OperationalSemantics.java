@@ -97,7 +97,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-IndAssign.
+	 * Rule R-Assign.
 	 */
 	protected Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal lv, Value v) {
 		// Extract location, or throw exception otherwise
@@ -113,9 +113,9 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-Deref.
+	 * Rule R-Copy and R-Move.
 	 */
-	protected Pair<State, Term> reduceDereference(State S, LVal lv, boolean copy) {
+	protected Pair<State, Term> reduceAccess(State S, LVal lv, boolean copy) {
 		// Extract location, or throw exception otherwise
 		Reference lx = lv.locate(S);
 		// Read contents of cell at given location
@@ -232,7 +232,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 
 	@Override
 	final protected Pair<State, Term> apply(State S, Lifetime l, Term.Dereference e) {
-		return reduceDereference(S, e.operand(), e.copy());
+		return reduceAccess(S, e.operand(), e.copy());
 	}
 
 	@Override

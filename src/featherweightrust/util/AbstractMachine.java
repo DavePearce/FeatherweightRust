@@ -373,7 +373,8 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public Store drop(Value v) {
-			// Check whether we need to drop anything.
+			// NOTE: following is an optimisation to prevent allocating a new array when
+			// nothing is actually going to change.
 			if(containsOwnerReference(v)) {
 				// Prepare for the drop by copying all cells
 				Cell[] ncells = Arrays.copyOf(cells, cells.length);

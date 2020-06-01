@@ -171,37 +171,37 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	/**
-	 * T-Deref
+	 * T-Copy & T-Move
 	 */
 	@Override
 	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
-		final LVal lv = t.operand();
-		final String x = lv.name();
-		final Path path = lv.path();
+		final LVal w = t.operand();
+		final String x = w.name();
+		final Path path = w.path();
 		// Extract target cell
 		Cell Cx = R.get(x);
-		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
+		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, w);
 		Type T1 = Cx.type();
 		// Check available at least for reading
-		check(available(R, lv, false), LVAL_MOVED, lv);
+		check(available(R, w, false), LVAL_MOVED, w);
 		// Determine type being read
-		Type T2 = typeOf(R, lv);
+		Type T2 = typeOf(R, w);
 		// Sanity check can copy this
-		check(!t.copy() || T2.copyable(), LVAL_NOT_COPY, lv);
+		check(!t.copy() || T2.copyable(), LVAL_NOT_COPY, w);
 		// Decide if copy or move
 		if (isCopy(t, T2)) {
 			// Check variable readable (e.g. not mutably borrowed)
-			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
+			check(!readProhibited(R, w), LVAL_READ_PROHIBITED, w);
 			// Done
 			return new Pair<Environment, Type>(R, T2);
 		} else {
 			Lifetime m = Cx.lifetime();
 			// Check available for writing
-			check(available(R, lv, true), LVAL_MOVED, lv);
+			check(available(R, w, true), LVAL_MOVED, w);
 			// Check variable writeable (e.g. not borrowed). This is necessary because we
 			// going to move this value out completely and, hence, we must have ownership to
 			// do this safely.
-			check(!writeProhibited(R, lv), LVAL_WRITE_PROHIBITED, lv);
+			check(!writeProhibited(R, w), LVAL_WRITE_PROHIBITED, w);
 			// Apply destructive update
 			Environment R2 = R.put(x, new Cell(move(T1, path, 0), m));
 			// Done

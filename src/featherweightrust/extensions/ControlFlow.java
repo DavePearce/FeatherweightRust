@@ -71,7 +71,7 @@ public class ControlFlow {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class IfElse extends AbstractTerm {
+		public static class IfElse extends AbstractTerm implements Term.Compound {
 			private final boolean eq;
 			private final Term lhs;
 			private final Term rhs;
@@ -140,15 +140,20 @@ public class ControlFlow {
 		}
 	}
 
-	public static class Semantics extends OperationalSemantics.Extension {
+	public static class Semantics extends OperationalSemantics {
 
 		@Override
 		public Pair<State, Term> apply(State S, Lifetime l, Term term) {
 			if(term instanceof Syntax.IfElse) {
 				return apply(S,l,((Syntax.IfElse)term));
 			} else {
-				return null;
+				return super.apply(S, l, term);
 			}
+		}
+
+		@Override
+		final protected Pair<State, Term> apply(State S, Lifetime l, Term.Access e) {
+			return reduceAccess(S, e.operand(), e.copy() || e.temporary());
 		}
 
 		private Pair<State, Term> apply(State S1, Lifetime l, Syntax.IfElse t1) {
@@ -165,7 +170,7 @@ public class ControlFlow {
 				}
 			} else if (lhs instanceof Value) {
 				// Statement not ready to be reduced yet
-				Pair<State, Term> p = self.apply(S1, l, rhs);
+				Pair<State, Term> p = apply(S1, l, rhs);
 				State S2 = p.first();
 				Term _rhs = p.second();
 				// Construct term reduced by one step
@@ -174,7 +179,7 @@ public class ControlFlow {
 				return new Pair<State, Term>(S2, t2);
 			} else {
 				// Statement not ready to be reduced yet
-				Pair<State, Term> p = self.apply(S1, l, lhs);
+				Pair<State, Term> p = apply(S1, l, lhs);
 				State S2 = p.first();
 				Term _lhs = p.second();
 				// Construct term reduced by one step
@@ -256,8 +261,8 @@ public class ControlFlow {
 		public Pair<Environment, Type> apply(Environment R, Lifetime l, Term t) {
 			// NOTE: this is a bit sneaky as we need to intercept temporary dereference
 			// operations only.
-			if (t instanceof Term.Dereference) {
-				Term.Dereference d = (Term.Dereference) t;
+			if (t instanceof Term.Access) {
+				Term.Access d = (Term.Access) t;
 				if (d.temporary()) {
 					return readTemporary(R,d.operand());
 				}
@@ -275,18 +280,18 @@ public class ControlFlow {
 		 * @return
 		 */
 		public Pair<Environment, Type> readTemporary(Environment R, LVal lv) {
-			System.out.println(">>>> READ TEMP");
 			final String x = lv.name();
 			// Extract target cell
 			Cell Cx = R.get(x);
 			check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
-			// Check available at least for reading
-			check(available(R, lv, false), LVAL_MOVED, lv);
 			// Determine type being read
 			Type T2 = typeOf(R,lv);
+			// Sanity check type
+			check(T2 != null, LVAL_INVALID, lv);
+			// Sanity check type is moveable
+			check(T2.moveable(), LVAL_MOVED, lv);
 			// Check variable readable (e.g. not mutably borrowed)
 			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
-			System.out.println("<<<< READ TEMP");
 			// Done
 			return new Pair<Environment, Type>(R,T2);
 		}
@@ -294,5 +299,5 @@ public class ControlFlow {
 	}
 
 	public static final BorrowChecker.Extension TYPING = new Typing();
-	public static final OperationalSemantics SEMANTICS = new OperationalSemantics(new ControlFlow.Semantics());
+	public static final OperationalSemantics SEMANTICS = new Semantics();
 }

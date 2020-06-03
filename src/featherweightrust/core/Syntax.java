@@ -77,6 +77,16 @@ public class Syntax {
 		}
 
 		/**
+		 * A marker interface to indicates terms which contain other terms.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
+		public interface Compound {
+
+		}
+
+		/**
 		 * Represents a variable declaration of the form:
 		 *
 		 * <pre>
@@ -181,7 +191,7 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public class Block extends AbstractTerm {
+		public class Block extends AbstractTerm implements Compound {
 			private final Lifetime lifetime;
 			private final Term[] stmts;
 
@@ -232,7 +242,7 @@ public class Syntax {
 			}
 		}
 
-		public class Dereference extends AbstractTerm implements Term {
+		public class Access extends AbstractTerm implements Term {
 			public enum Kind {
 				/**
 				 * Forces a move
@@ -254,7 +264,7 @@ public class Syntax {
 			private Kind kind;
 			private final LVal slice;
 
-			public Dereference(Kind kind, LVal lv, Attribute... attributes) {
+			public Access(Kind kind, LVal lv, Attribute... attributes) {
 				super(TERM_dereference, attributes);
 				this.kind = kind;
 				this.slice = lv;
@@ -311,20 +321,20 @@ public class Syntax {
 				}
 			}
 
-			public static Term.Dereference construct(LVal lv) {
-				return new Term.Dereference(Kind.UNSPECIFIED,lv);
+			public static Term.Access construct(LVal lv) {
+				return new Term.Access(Kind.UNSPECIFIED,lv);
 			}
 
-			public static Term.Dereference construct(LVal lv, Boolean b) {
+			public static Term.Access construct(LVal lv, Boolean b) {
 				Kind kind = b ? Kind.MOVE : Kind.COPY;
-				return new Term.Dereference(kind,lv);
+				return new Term.Access(kind,lv);
 			}
 
-			public static Domain.Big<Dereference> toBigDomain(boolean inference, Domain.Big<LVal> subdomain) {
+			public static Domain.Big<Access> toBigDomain(boolean inference, Domain.Big<LVal> subdomain) {
 				if(inference) {
-					return Domains.Adaptor(subdomain, Dereference::construct);
+					return Domains.Adaptor(subdomain, Access::construct);
 				} else {
-					return Domains.Product(subdomain, Domains.BOOL, Dereference::construct);
+					return Domains.Product(subdomain, Domains.BOOL, Access::construct);
 				}
 			}
 		}
@@ -1305,6 +1315,11 @@ public class Syntax {
 			return new Path(es);
 		}
 
+		public Path subpath(int start) {
+			Element[] es = Arrays.copyOfRange(elements, start, elements.length);
+			return new Path(es);
+		}
+
 		@Override
 		public boolean equals(Object o) {
 			if(o instanceof Path) {
@@ -1473,7 +1488,7 @@ public class Syntax {
 		// Terminals
 		Domain.Big<? extends Term> integers = Value.Integer.toBigDomain(ints);
 		Domain.Big<? extends Term> borrows = Term.Borrow.toBigDomain(lvals);
-		Domain.Big<? extends Term> derefs = Term.Dereference.toBigDomain(inference,lvals);
+		Domain.Big<? extends Term> derefs = Term.Access.toBigDomain(inference,lvals);
 		Domain.Big<Term> terminals = Domains.Union(integers, derefs, borrows);
 		//
 		Domain.Big<? extends Term>[] domains = new Domain.Big[depth+3];

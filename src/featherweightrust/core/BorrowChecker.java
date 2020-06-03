@@ -60,10 +60,12 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public final static String INCOMPATIBLE_TYPE = "incompatible type";
 	public final static String EXPECTED_REFERENCE = "expected reference type";
 	public final static String EXPECTED_MUTABLE_BORROW = "expected mutable borrow";
+	public final static String LVAL_INVALID = "lval is invalid (e.g. incorrectly typed)";
 	public final static String LVAL_MOVED = "use of moved lval or attempt to move out of lval";
 	public final static String LVAL_NOT_WRITEABLE = "lval cannot be written (e.g. is moved in part or whole)";
 	public final static String LVAL_NOT_READABLE = "lval cannot be read (e.g. is moved in part or whole)";
 	public final static String LVAL_NOT_COPY = "lval's type cannot be copied";
+	public final static String LVAL_NOT_MUTABLE = "lval borrowed in part or whole";
 
 	public final static String LVAL_WRITE_PROHIBITED = "lval borrowed in part or whole";
 	public final static String LVAL_READ_PROHIBITED = "lval mutably borrowed in part or whole";
@@ -131,9 +133,10 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Pair<Environment, Type> p = apply(R1, l, t.rightOperand());
 		Environment R2 = p.first();
 		Type T2 = p.second();
-		check(available(R2, lv, true), LVAL_NOT_WRITEABLE, t.leftOperand());
-		// Write prohibited check
+		// Check LVal is
 		check(!writeProhibited(R2.put(fresh(), T2, l), lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
+		// Check LVal is mutable
+		check(mutable(R2, lv), LVAL_NOT_MUTABLE, t.leftOperand());
 		// Write the type
 		Environment R3 = write(R2, lv, T2, true);
 		//
@@ -174,7 +177,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * T-Copy & T-Move
 	 */
 	@Override
-	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Dereference t) {
+	protected Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Access t) {
 		final LVal w = t.operand();
 		final String x = w.name();
 		final Path path = w.path();
@@ -182,26 +185,26 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Cell Cx = R.get(x);
 		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, w);
 		Type T1 = Cx.type();
-		// Check available at least for reading
-		check(available(R, w, false), LVAL_MOVED, w);
 		// Determine type being read
 		Type T2 = typeOf(R, w);
-		// Sanity check can copy this
-		check(!t.copy() || T2.copyable(), LVAL_NOT_COPY, w);
+		// Sanity check type
+		check(T2 != null, LVAL_INVALID, w);
+		// Sanity check type is moveable
+		check(T2.moveable(), LVAL_MOVED, w);
 		// Decide if copy or move
 		if (isCopy(t, T2)) {
-			// Check variable readable (e.g. not mutably borrowed)
-			check(!readProhibited(R, w), LVAL_READ_PROHIBITED, w);
+			// Sanity check can copy this
+			check(T2.copyable(), LVAL_NOT_COPY, w);
+			// Check available for reading
+			check(!readProhibited(R, w), LVAL_NOT_READABLE, w);
 			// Done
 			return new Pair<Environment, Type>(R, T2);
 		} else {
 			Lifetime m = Cx.lifetime();
 			// Check available for writing
-			check(available(R, w, true), LVAL_MOVED, w);
-			// Check variable writeable (e.g. not borrowed). This is necessary because we
-			// going to move this value out completely and, hence, we must have ownership to
-			// do this safely.
-			check(!writeProhibited(R, w), LVAL_WRITE_PROHIBITED, w);
+			check(!writeProhibited(R, w), LVAL_NOT_WRITEABLE, w);
+			// Check LVal is mutable
+			check(mutable(R, w), LVAL_NOT_MUTABLE, t);
 			// Apply destructive update
 			Environment R2 = R.put(x, new Cell(move(T1, path, 0), m));
 			// Done
@@ -219,10 +222,10 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param T The type of the operand being moved / copied.
 	 * @return
 	 */
-	protected boolean isCopy(Term.Dereference t, Type T) {
+	protected boolean isCopy(Term.Access t, Type T) {
 		if (t.unspecified()) {
 			boolean r = T.copyable();
-			t.infer(r ? Term.Dereference.Kind.COPY : Term.Dereference.Kind.MOVE);
+			t.infer(r ? Term.Access.Kind.COPY : Term.Access.Kind.MOVE);
 			return r;
 		} else {
 			return t.copy();
@@ -265,19 +268,23 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Cell Cx = R.get(lv.name());
 		// Check variable is declared
 		check(Cx != null, UNDECLARED_VARIABLE, t);
-		// Check lval can be at least read
-		check(available(R, lv, false), LVAL_NOT_READABLE, lv);
+		// Determine type being read
+		Type T = typeOf(R, lv);
+		// Sanity check lval
+		check(T != null, LVAL_INVALID, lv);
+		// Sanity check type is moveable
+		check(T.moveable(), LVAL_MOVED, lv);
 		//
 		if (t.isMutable()) {
 			// T-MutBorrow
-			// Check lval can be also written
-			check(available(R, lv, true), LVAL_NOT_WRITEABLE, lv);
-			// Check nothing else prohibiting lval being written
-			check(!writeProhibited(R, lv), LVAL_WRITE_PROHIBITED, t.operand());
+			// Check lval can be written
+			check(!writeProhibited(R, lv), LVAL_NOT_WRITEABLE, lv);
+			// Check LVal is mutable
+			check(mutable(R, lv), LVAL_NOT_MUTABLE, lv);
 		} else {
 			// T-ImmBorrow
-			// Check nothing else prohibiting lval being read
-			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, t.operand());
+			// Check lval can be at least read
+			check(!readProhibited(R, lv), LVAL_NOT_READABLE, lv);
 		}
 		//
 		return new Pair<>(R, new Type.Borrow(t.isMutable(), lv));
@@ -432,58 +439,109 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	// ================================================================================
-	// Compatible
+	// Read Prohibited
 	// ================================================================================
 
 	/**
-	 * Check whether a given LVal is available for reading or writing. Roughly
-	 * speaking, whether or not some subcomponent has been moved. For example:
+	 * Check whether a given LVal is prohibited from being read by some other type
+	 * in the environment (e.g. a mutable borrow). For example, consider the
+	 * following:
 	 *
 	 * <pre>
-	 * let mut x = box box 1;
-	 * let mut y = *x;
-	 * let mut z = x;
+	 * let mut x = 1;
+	 * // x->int
+	 * let mut y = &mut x;
+	 * // x->int, y->&mut x
 	 * </pre>
 	 *
-	 * The above program is rejected because it attempts to perform a <i>partial
-	 * move</i> in the terminology of Rust. At the point of the final assignment,
-	 * <code>x</code> has the type <code>☐/☐int/</code> (box shadow box int). Such a
-	 * type (i.e. which contains an alias) is said to be <i>unavailable</i> for
-	 * reading. In contrast, we could actually write to this type under some
-	 * circumstances. For example, the following is acceptable:
+	 * After the second statement, the lval <code>x</code> is prohibited from being
+	 * read by the mutable borrow type <code>&mut x</code> stored in the environment
+	 * for <code>y</code>.
+	 *
+	 * @param R  The environment in which we are checking for readability.
+	 * @param lv The lval being checked for readability
+	 * @return
+	 */
+	protected boolean readProhibited(Environment R, LVal lv) {
+		// Look through all types to whether any prohibit reading this lval
+		for (Cell cell : R.cells()) {
+			Type type = cell.type();
+			if (type.prohibitsReading(lv)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// ================================================================================
+	// Write Prohibited
+	// ================================================================================
+
+	/**
+	 * Check whether a given LVal is prohibited from being written by some other
+	 * type in the environment (e.g. a borrow). For example, consider the following:
 	 *
 	 * <pre>
-	 * let mut x = box box 1;
-	 * let mut y = *x;
-	 * *x = box 2
+	 * let mut x = 1;
+	 * // x->int
+	 * let mut y = &x;
+	 * // x->int, y->&x
 	 * </pre>
 	 *
-	 * However, we need to be careful that we are not trying to "write thru" a
-	 * shadow, as the following illustrates:
+	 * After the second statement, the lval <code>x</code> is prohibited from being
+	 * written by the borrow type <code>&x</code> stored in the environment for
+	 * <code>y</code>.
+	 *
+	 * @param R  The environment in which we are checking for writability.
+	 * @param lv The lval being checked for writability
+	 * @return
+	 */
+	protected boolean writeProhibited(Environment R, LVal lv) {
+		// Check whether any type prohibits this being written
+		for (Cell cell : R.cells()) {
+			Type type = cell.type();
+			if (type.prohibitsWriting(lv)) {
+				return true;
+			}
+		}
+		// Check whether writing through mutable references
+		return false;
+	}
+
+	// ================================================================================
+	// Mutable
+	// ================================================================================
+
+	/**
+	 * Check whether a given LVal is declared as mutable. For example, the following
+	 * is prohibited:
 	 *
 	 * <pre>
-	 * let mut x = box box box 1;
-	 * let mut y = *x;
-	 * **x = box 2
+	 * let mut x = 1;
+	 * let mut y = &x;
+	 * *y = 1;
 	 * </pre>
+	 *
+	 * The problem here is that the lval <code>*y</code> is not mutable.
 	 *
 	 * @param R   Current environment
 	 * @param lv  LVal being checked for availability
 	 * @param mut indicates whether mutable or immutable access
 	 * @return
 	 */
-	protected boolean available(Environment R, LVal lv, boolean mut) {
-		Cell Cx = R.get(lv.name());
+	protected boolean mutable(Environment R, LVal lv) {
 		// NOTE: can assume here that declaration check on lv.name() has already
 		// occurred. Hence, Cx != null
-		return available(R, Cx.type(), lv.path(), 0, mut);
+		Cell Cx = R.get(lv.name());
+		//
+		return mutable(R, Cx.type(), lv.path(), 0);
 	}
 
-	protected boolean available(Environment R, Type T, Path p, int i, boolean mut) {
+	protected boolean mutable(Environment R, Type T, Path p, int i) {
 		if (p.size() == i) {
 			// NOTE: Can always write to the top-level, but cannot read if its been moved
 			// previously.
-			return mut || T.moveable();
+			return true;
 		} else if (T instanceof Type.Shadow) {
 			// Otherwise, must read value to e.g. dereference it. Hence, if has been moved,
 			// then this doesn't work.
@@ -493,19 +551,22 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// Check path element is dereference
 			Path.Deref d = (Path.Deref) p.get(i);
 			// Continue writing
-			return available(R, B.element(), p, i + 1, mut);
+			return mutable(R, B.element(), p, i + 1);
 		} else if (T instanceof Type.Borrow) {
 			Type.Borrow t = (Type.Borrow) T;
 			// Check path element is dereference
 			Path.Deref d = (Path.Deref) p.get(i);
 			//
-			if (!t.isMutable() && mut) {
+			if (!t.isMutable()) {
 				// Cannot write through immutable borrow
 				return false;
 			} else {
-				// NOTE: following is safe because of the invariant that the type of anything
-				// borrowed is available. This is because one cannot "move out" or a borrow.
-				return true;
+				LVal[] borrows = t.lvals();
+				// Determine type of first borrow
+				Type Tj = typeOf(R, borrows[0]);
+				// NOTE: is safe to ignore other lvals because every lval must have a compatible
+				// type.
+				return mutable(R, Tj, p, i + 1);
 			}
 		} else {
 			return false;
@@ -599,7 +660,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	protected Type typeOf(Environment env, Type type, Path.Element ith) {
-		// NOTE: in the code calculys, the only form of path element is a Deref. Hence,
+		// NOTE: in the code calculus, the only form of path element is a Deref. Hence,
 		// the following is safe.
 		return typeOf(env, type, (Path.Deref) ith);
 	}
@@ -619,73 +680,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			}
 			return T;
 		} else {
-			throw new IllegalArgumentException("unknown type encountered: " + type);
+			// No valid type exists when dereferencing e.g. an integer, or a shadow.
+			return null;
 		}
-	}
-
-	// ================================================================================
-	// Read / Write Probibited
-	// ================================================================================
-
-	/**
-	 * Check whether a given LVal is prohibited from being written by some other
-	 * type in the environment (e.g. a borrow). For example, consider the following:
-	 *
-	 * <pre>
-	 * let mut x = 1;
-	 * // x->int
-	 * let mut y = &x;
-	 * // x->int, y->&x
-	 * </pre>
-	 *
-	 * After the second statement, the lval <code>x</code> is prohibited from being
-	 * written by the borrow type <code>&x</code> stored in the environment for
-	 * <code>y</code>.
-	 *
-	 * @param R  The environment in which we are checking for writability.
-	 * @param lv The lval being checked for writability
-	 * @return
-	 */
-	protected static boolean writeProhibited(Environment R, LVal lv) {
-		// Look through all types to whether any prohibit writing this lval
-		for (Cell cell : R.cells()) {
-			Type type = cell.type();
-			if (type.prohibitsWriting(lv)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Check whether a given LVal is prohibited from being read by some other type
-	 * in the environment (e.g. a mutable borrow). For example, consider the
-	 * following:
-	 *
-	 * <pre>
-	 * let mut x = 1;
-	 * // x->int
-	 * let mut y = &mut x;
-	 * // x->int, y->&mut x
-	 * </pre>
-	 *
-	 * After the second statement, the lval <code>x</code> is prohibited from being
-	 * read by the mutable borrow type <code>&mut x</code> stored in the environment
-	 * for <code>y</code>.
-	 *
-	 * @param R  The environment in which we are checking for readability.
-	 * @param lv The lval being checked for readability
-	 * @return
-	 */
-	protected static boolean readProhibited(Environment R, LVal lv) {
-		// Look through all types to whether any prohibit reading this lval
-		for (Cell cell : R.cells()) {
-			Type type = cell.type();
-			if (type.prohibitsReading(lv)) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	// ================================================================================

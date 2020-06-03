@@ -963,6 +963,13 @@ public class CoreTests {
 		checkInvalid(input);
 	}
 
+
+	@Test
+	public void test_0x038B() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &x; let mut z = &mut y; **z = 1; }";
+		checkInvalid(input);
+	}
+
 	// ==============================================================
 	// Reborrowing Examples
 	// ==============================================================
@@ -1089,6 +1096,23 @@ public class CoreTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_0x045C() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &mut x; let mut z = &y; let mut w = &mut **z; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x045D() throws IOException {
+		String input = "{ let mut x = 1; let mut y = &x; let mut z = &mut y; let mut w = &mut **z; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x045E() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 1; let mut p = &x1; let mut q = &mut p; *q = &x2; let mut w = &mut **q; }";
+		checkInvalid(input);
+	}
 
 	// ==============================================================
 	// Helpers

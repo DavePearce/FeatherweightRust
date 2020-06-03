@@ -250,8 +250,8 @@ public class Util {
 		if (expr instanceof Term.Box) {
 			Term.Box b = (Term.Box) expr;
 			return "Box::new(" + toRustString(b.operand()) + ")";
-		} else if(expr instanceof Term.Dereference) {
-			Term.Dereference d = (Term.Dereference) expr;
+		} else if(expr instanceof Term.Access) {
+			Term.Access d = (Term.Access) expr;
 			String r = d.operand().toString();
 			if(d.copy()) {
 				return "*&" + r;
@@ -270,9 +270,9 @@ public class Util {
 	 * @param liveness
 	 */
 	private static void updateLiveness(Term expr, HashSet<String> liveness) {
-		if (expr instanceof Term.Dereference) {
+		if (expr instanceof Term.Access) {
 			// Variable move
-			Term.Dereference b = (Term.Dereference) expr;
+			Term.Access b = (Term.Access) expr;
 			if(!b.copy()) {
 				liveness.remove(b.operand().name());
 			}

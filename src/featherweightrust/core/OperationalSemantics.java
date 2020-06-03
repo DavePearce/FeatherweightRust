@@ -72,7 +72,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	public final Pair<State, Term> apply(State S, Lifetime l, Term t) {
+	public Pair<State, Term> apply(State S, Lifetime l, Term t) {
 		Pair<State,Term> p = super.apply(S,l,t);
 		if(DEBUG) {
 			String sl = ArrayUtils.leftPad(60,"(" + S + ", " + t + ")");
@@ -158,7 +158,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	protected Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
+	final protected Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
 		final int n = b.size();
 		// Save current bindings so they can be restored
 		StackFrame outerFrame = S1.frame();
@@ -231,7 +231,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	@Override
-	final protected Pair<State, Term> apply(State S, Lifetime l, Term.Dereference e) {
+	protected Pair<State, Term> apply(State S, Lifetime l, Term.Access e) {
 		return reduceAccess(S, e.operand(), e.copy());
 	}
 

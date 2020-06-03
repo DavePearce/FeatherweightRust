@@ -44,7 +44,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 		case Syntax.TERM_borrow:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Borrow) term);
 		case Syntax.TERM_dereference:
-			return (Pair<T, S>) apply(state, lifetime, (Term.Dereference) term);
+			return (Pair<T, S>) apply(state, lifetime, (Term.Access) term);
 		case Syntax.TERM_box:
 			return (Pair<T, S>) apply(state, lifetime, (Term.Box) term);
 		case Syntax.TERM_unit:
@@ -103,7 +103,7 @@ public abstract class AbstractTransformer<T, S, E extends AbstractTransformer.Ex
 	 * @param stmt     The term being transformed.
 	 * @return
 	 */
-	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Dereference term);
+	protected abstract Pair<T, S> apply(T state, Lifetime lifetime, Term.Access term);
 
 	/**
 	 * Apply this transformer to a given borrow expression.

@@ -436,7 +436,7 @@ public class Tuples {
 		}
 
 		@Override
-		public boolean available(Environment R, Type T, Path p, int i, boolean mut) {
+		public boolean mutable(Environment R, Type T, Path p, int i) {
 			if (i < p.size() && T instanceof Syntax.TupleType) {
 				Path.Element ith = p.get(i);
 				if (ith instanceof Syntax.Index) {
@@ -444,13 +444,13 @@ public class Tuples {
 					Type[] ts = _T.types;
 					int index = ((Syntax.Index) p.get(i)).index;
 					if (index < ts.length) {
-						return available(R, ts[index], p, i + 1, mut);
+						return mutable(R, ts[index], p, i + 1);
 					}
 				}
 				syntaxError("Invalid tuple access \"" + ith.toString(T.toString()) + "\"", null);
 			}
 			// Default fallback
-			return super.available(R, T, p, i, mut);
+			return super.mutable(R, T, p, i);
 		}
 
 		@Override

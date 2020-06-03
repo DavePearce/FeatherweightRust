@@ -26,7 +26,7 @@ import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Path.Element;
-import featherweightrust.core.Syntax.Term.Dereference;
+import featherweightrust.core.Syntax.Term.Access;
 import featherweightrust.extensions.ControlFlow;
 import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
@@ -72,7 +72,7 @@ public class Parser {
 			}
 			Term stmt = parseTerm(context, myLifetime, true);
 			terms.add(stmt);
-			separatorRequired = !(stmt instanceof Term.Block);
+			separatorRequired = !(stmt instanceof Term.Compound);
 		}
 		match("}");
 
@@ -132,7 +132,7 @@ public class Parser {
 	public Term parseAssignmentOrDereference(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
 		// Parse potential lhs
-		Term.Dereference lhs = parseDereference(context, lifetime, consumed);
+		Term.Access lhs = parseDereference(context, lifetime, consumed);
 		//
 		if (index < tokens.size() && tokens.get(index) instanceof Equals) {
 			// This is an assignment statement
@@ -225,22 +225,22 @@ public class Parser {
 		return new Term.Borrow(operand, mutable, sourceAttr(start, index - 1));
 	}
 
-	public Term.Dereference parseDereference(Context context, Lifetime lifetime, boolean consumed) {
+	public Term.Access parseDereference(Context context, Lifetime lifetime, boolean consumed) {
 		int start = index;
-		Dereference.Kind kind;
+		Access.Kind kind;
 		if (consumed && index < tokens.size() && tokens.get(index) instanceof Shreak) {
 			match("!");
-			kind = Dereference.Kind.COPY;
+			kind = Access.Kind.COPY;
 		} else if (consumed && index < tokens.size() && tokens.get(index) instanceof QuestionMark) {
 			match("?");
-			kind = Dereference.Kind.UNSPECIFIED;
-		} else if(consumed) {
-			kind = Dereference.Kind.TEMP;
+			kind = Access.Kind.UNSPECIFIED;
+		} else if(!consumed) {
+			kind = Access.Kind.TEMP;
 		} else {
-			kind = Dereference.Kind.MOVE;
+			kind = Access.Kind.MOVE;
 		}
 		LVal operand = parseLVal(context, lifetime);
-		return new Term.Dereference(kind, operand, sourceAttr(start, index - 1));
+		return new Term.Access(kind, operand, sourceAttr(start, index - 1));
 	}
 
 	public Term.Box parseBox(Context context, Lifetime lifetime, boolean consumed) {

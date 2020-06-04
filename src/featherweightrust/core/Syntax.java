@@ -678,8 +678,7 @@ public class Syntax {
 
 		/**
 		 * Check whether this type can safely live within a given lifetime. That is, the
-		 * lifetime of any reachable object through this type does not outlive the
-		 * lifetime.
+		 * lifetime does not outlive any object reachable through this type.
 		 *
 		 * @param self
 		 * @param R
@@ -689,14 +688,14 @@ public class Syntax {
 		public boolean within(BorrowChecker self, Environment R, Lifetime l);
 
 		/**
-		 * Check whether a type can be moved or not. Most types can be moved (e.g. both
-		 * primitive integers and mutable references) can be moved; however, types with
-		 * certain effects (e.g. shadow effect) cannot.
+		 * Check whether a type is defined. That is, ensure it doesn't contain a shadow.
+		 * Primitive types and references are always defined. However, boxes depend on
+		 * their element type, whilst shadows are clearly not.
 		 *
 		 * @param t
 		 * @return
 		 */
-		public boolean moveable();
+		public boolean defined();
 
 		/**
 		 * Check whether this type can be copied or not. Some types (e.g. primitive
@@ -740,7 +739,7 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean moveable() {
+			public boolean defined() {
 				return true;
 			}
 		}
@@ -1004,8 +1003,8 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean moveable() {
-				return element.moveable();
+			public boolean defined() {
+				return element.defined();
 			}
 
 			public Type element() {
@@ -1088,7 +1087,7 @@ public class Syntax {
 			}
 
 			@Override
-			public boolean moveable() {
+			public boolean defined() {
 				return false;
 			}
 

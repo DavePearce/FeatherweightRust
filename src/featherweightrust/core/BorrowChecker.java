@@ -133,10 +133,18 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Pair<Environment, Type> p = apply(R1, l, t.rightOperand());
 		Environment R2 = p.first();
 		Type T2 = p.second();
+		// Determine lval type
+		Type T1 = typeOf(R1,lv);
+		// Determine lval lifetime
+		Lifetime m = lifetimeOf(R1,lv);
+		// Check type compatibility
+		check(compatible(R1, T1, T2, R1), INCOMPATIBLE_TYPE, lv);
+		// lifetime check
+		check(T2.within(this, R1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, lv);
 		// Check LVal is
 		check(!writeProhibited(R2.put(fresh(), T2, l), lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
 		// Check LVal is mutable
-		check(mutable(R2, lv), LVAL_NOT_MUTABLE, t.leftOperand());
+		check(owner(R2, lv), LVAL_NOT_MUTABLE, t.leftOperand());
 		// Write the type
 		Environment R3 = write(R2, lv, T2, true);
 		//
@@ -190,7 +198,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Sanity check type
 		check(T2 != null, LVAL_INVALID, w);
 		// Sanity check type is moveable
-		check(T2.moveable(), LVAL_MOVED, w);
+		check(T2.defined(), LVAL_MOVED, w);
 		// Decide if copy or move
 		if (isCopy(t, T2)) {
 			// Sanity check can copy this
@@ -204,7 +212,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// Check available for writing
 			check(!writeProhibited(R, w), LVAL_NOT_WRITEABLE, w);
 			// Check LVal is mutable
-			check(mutable(R, w), LVAL_NOT_MUTABLE, t);
+			check(owner(R, w), LVAL_NOT_MUTABLE, t);
 			// Apply destructive update
 			Environment R2 = R.put(x, new Cell(move(T1, path, 0), m));
 			// Done
@@ -273,14 +281,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// Sanity check lval
 		check(T != null, LVAL_INVALID, lv);
 		// Sanity check type is moveable
-		check(T.moveable(), LVAL_MOVED, lv);
+		check(T.defined(), LVAL_MOVED, lv);
 		//
 		if (t.isMutable()) {
 			// T-MutBorrow
 			// Check lval can be written
 			check(!writeProhibited(R, lv), LVAL_NOT_WRITEABLE, lv);
 			// Check LVal is mutable
-			check(mutable(R, lv), LVAL_NOT_MUTABLE, lv);
+			check(owner(R, lv), LVAL_NOT_MUTABLE, lv);
 		} else {
 			// T-ImmBorrow
 			// Check lval can be at least read
@@ -366,17 +374,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Path path = lv.path();
 		// Extract target cell
 		Cell Cx = R1.get(lv.name());
-		// Declaration check
-		check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
 		// Destructure
 		Type T2 = Cx.type();
 		Lifetime m = Cx.lifetime();
-		// lifetime check
-		check(T1.within(this, R1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, lv);
-		// Determine type of lval
-		Type T3 = typeOf(R1, lv);
-		// Check compatibility
-		check(compatible(R1, T3, T1, R1), INCOMPATIBLE_TYPE, lv);
 		// Apply write
 		Pair<Environment, Type> p = write(R1, T2, path, 0, T1, strong);
 		Environment R2 = p.first();
@@ -408,8 +408,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		// T-BorrowAssign
 		Type.Borrow b = (Type.Borrow) T1;
 		LVal[] ys = b.lvals();
-		// Mutability check
-		check(b.isMutable(), EXPECTED_MUTABLE_BORROW, p);
 		//
 		Environment Rn = R;
 		// Consider all targets
@@ -420,7 +418,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// be possible to do this. It's not clear to me that this is always necessary or
 			// even desirable. However, at the time of writing, this mimics the Rust
 			// compiler.
-			Rn = write(R, y, T2, false);
+			Rn = write(Rn, y, T2, false);
 		}
 		//
 		return new Pair<>(Rn, T1);
@@ -509,7 +507,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	}
 
 	// ================================================================================
-	// Mutable
+	// Owner
 	// ================================================================================
 
 	/**
@@ -529,7 +527,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param mut indicates whether mutable or immutable access
 	 * @return
 	 */
-	protected boolean mutable(Environment R, LVal lv) {
+	protected boolean owner(Environment R, LVal lv) {
 		// NOTE: can assume here that declaration check on lv.name() has already
 		// occurred. Hence, Cx != null
 		Cell Cx = R.get(lv.name());
@@ -628,6 +626,73 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			return compatible(R1, T1, _T2.getType(), R2);
 		} else {
 			return false;
+		}
+	}
+
+
+	// ================================================================================
+	// lifetimeOf
+	// ================================================================================
+
+	/**
+	 * Determine the lifetime of a given lval. For example, consider the following:
+	 *
+	 * <pre>
+	 * {
+	 *   let mut x = 1;
+	 *   let mut y = &mut x;
+	 *   {
+	 * 	   let mut z = &mut y;
+	 *   }^m
+	 * }^l
+	 * </pre>
+	 *
+	 * The lifetime of <code>x</code> and <code>*y</code> is <code>l</code>.
+	 * Likewise, <code>*z</code> and <code>**z</code> have lifetime <code>l</code>
+	 * whilst <code>z</code> has lifetime <code>m</code>.
+	 *
+	 * @param env
+	 * @param lv
+	 * @return
+	 */
+	protected Lifetime lifetimeOf(Environment env, LVal lv) {
+		final String name = lv.name();
+		final Path path = lv.path();
+		// Extract target cell
+		Cell Cx = env.get(name);
+		Type T = Cx.type();
+		// Process path elements (if any)
+		return lifetimeOf(env, Cx.lifetime(), T, path, 0);
+	}
+
+	protected Lifetime lifetimeOf(Environment env, Lifetime l, Type type, Path p, int i) {
+		// NOTE: in the code calculus, the only form of path element is a Deref. Hence,
+		// the following is safe.
+		if (p.size() == i) {
+			return l;
+		} else if (type instanceof Type.Box) {
+			Type.Box b = (Type.Box) type;
+			return lifetimeOf(env, l, b.element(), p, i + 1);
+		} else if (type instanceof Type.Borrow) {
+			Type.Borrow b = (Type.Borrow) type;
+			LVal[] lvals = b.lvals();
+			Lifetime m = null;
+			for (int k = 0; k != lvals.length; ++k) {
+				LVal kth = lvals[k];
+				Cell Ck = env.get(kth.name());
+				Type Tk = typeOf(env, kth);
+				Lifetime ith = lifetimeOf(env, Ck.lifetime(), Tk, p, i + 1);
+				// Determine smallest lifetime
+				if(m != null && m.contains(ith)) {
+					m = ith;
+				} else if(m == null) {
+					m = ith;
+				}
+			}
+			return m;
+		} else {
+			// No valid type exists when dereferencing e.g. an integer, or a shadow.
+			return null;
 		}
 	}
 

@@ -289,7 +289,7 @@ public class ControlFlow {
 			// Sanity check type
 			check(T2 != null, LVAL_INVALID, lv);
 			// Sanity check type is moveable
-			check(T2.moveable(), LVAL_MOVED, lv);
+			check(T2.defined(), LVAL_MOVED, lv);
 			// Check variable readable (e.g. not mutably borrowed)
 			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
 			// Done

@@ -188,9 +188,9 @@ public class Tuples {
 			}
 
 			@Override
-			public boolean moveable() {
+			public boolean defined() {
 				for(int i=0;i!=types.length;++i) {
-					if(!types[i].moveable()) {
+					if(!types[i].defined()) {
 						return false;
 					}
 				}

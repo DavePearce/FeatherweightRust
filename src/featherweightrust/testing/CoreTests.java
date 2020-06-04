@@ -1114,6 +1114,53 @@ public class CoreTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_0x045F() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 1; let mut p = &mut x1; { let mut q = &mut p; *q = &mut x2; **q = 123; } x2 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0460() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut x3 = 3; let mut p = &mut x1; { let mut q = &mut p; *q = &mut x2; *q = &mut x3; } x2 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0461() throws IOException {
+		String input = "{" +
+					"let mut x1 = 1;" +
+					"let mut x2 = 2;" +
+					"let mut x3 = 3;" +
+					"let mut x4 = 4;" +
+					"let mut p1 = &mut x1;" +
+					"let mut p2 = &mut x2;" +
+					"let mut p3 = &mut x3;" +
+					"let mut q = &mut p1;" +
+					"{ let mut w = &mut q; *w = &mut p2; *w = &mut p3; }" +
+					"*q = &mut x4 ; x4 }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x0462() throws IOException {
+		String input = "{" +
+					"let mut x1 = 1;" +
+					"let mut x2 = 2;" +
+					"let mut x3 = 3;" +
+					"let mut x4 = 4;" +
+					"let mut p1 = &mut x1;" +
+					"let mut p2 = &mut x2;" +
+					"{" +
+					"let mut p3 = &mut x3;" +
+					"let mut q = &mut p1;" +
+					"{ let mut w = &mut q; *w = &mut p2; *w = &mut p3; }" +
+					"*q = &mut x4;" +
+					"}" +
+					"x4 }";
+		checkInvalid(input);
+	}
+
 	// ==============================================================
 	// Helpers
 	// ==============================================================

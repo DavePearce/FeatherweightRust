@@ -321,21 +321,13 @@ public class Syntax {
 				}
 			}
 
-			public static Term.Access construct(LVal lv) {
-				return new Term.Access(Kind.UNSPECIFIED,lv);
-			}
-
 			public static Term.Access construct(LVal lv, Boolean b) {
 				Kind kind = b ? Kind.MOVE : Kind.COPY;
 				return new Term.Access(kind,lv);
 			}
 
-			public static Domain.Big<Access> toBigDomain(boolean inference, Domain.Big<LVal> subdomain) {
-				if(inference) {
-					return Domains.Adaptor(subdomain, Access::construct);
-				} else {
-					return Domains.Product(subdomain, Domains.BOOL, Access::construct);
-				}
+			public static Domain.Big<Access> toBigDomain(Domain.Big<LVal> subdomain) {
+				return Domains.Product(subdomain, Domains.BOOL, Access::construct);
 			}
 		}
 
@@ -888,6 +880,7 @@ public class Syntax {
 					LVal ith = lvals[i];
 					checker.check(R.get(ith.name()) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
 					Cell C = R.get(ith.name());
+					// FIXME: this differs from the presentation.
 					r &= C.lifetime().contains(l);
 				}
 				return r;
@@ -1420,8 +1413,6 @@ public class Syntax {
 	 *            The maximum depth of block nesting.
 	 * @param width
 	 *            The maximum width of a block.
-	 * @param inference
-	 *            Use copy inference or not
 	 * @param lifetime
 	 *            The lifetime of the enclosing block
 	 * @param ints
@@ -1433,10 +1424,10 @@ public class Syntax {
 	 *        already been declared.
 	 * @return
 	 */
-	public static Domain.Big<Term> toBigDomain(int depth, int width, boolean inference, Lifetime lifetime,
+	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime,
 			Domain.Small<Integer> ints, Domain.Small<String> declared, Domain.Small<String> undeclared) {
 		// Construct expressions
-		Domain.Big<Term> expressions = toBigDomain(1, inference, ints, declared);
+		Domain.Big<Term> expressions = toBigDomain(1, ints, declared);
 		// Construct statements
 		return toBigDomain(depth - 1, width, lifetime, expressions, declared, undeclared);
 	}
@@ -1481,13 +1472,13 @@ public class Syntax {
 	 * @param declared
 	 * @return
 	 */
-	public static Domain.Big<Term> toBigDomain(int depth, boolean inference, Domain.Small<Integer> ints, Domain.Small<String> declared) {
+	public static Domain.Big<Term> toBigDomain(int depth, Domain.Small<Integer> ints, Domain.Small<String> declared) {
 		// Construct adaptor to convert from variable names to lvals.
 		Domain.Big<LVal> lvals = LVal.toBigDomain(declared);
 		// Terminals
 		Domain.Big<? extends Term> integers = Value.Integer.toBigDomain(ints);
 		Domain.Big<? extends Term> borrows = Term.Borrow.toBigDomain(lvals);
-		Domain.Big<? extends Term> derefs = Term.Access.toBigDomain(inference,lvals);
+		Domain.Big<? extends Term> derefs = Term.Access.toBigDomain(lvals);
 		Domain.Big<Term> terminals = Domains.Union(integers, derefs, borrows);
 		//
 		Domain.Big<? extends Term>[] domains = new Domain.Big[depth+3];
@@ -1577,7 +1568,7 @@ public class Syntax {
 		Lifetime root = new Lifetime();
 		Domain.Small<Integer> ints = Domains.Int(0, 0);
 		Domain.Small<String> declared = Domains.Finite("x");
-		Domain.Big<Term> terms = toBigDomain(2, 1, true, root, ints, declared, declared);
+		Domain.Big<Term> terms = toBigDomain(2, 1, root, ints, declared, declared);
 		//
 		for(int i=0;i!=terms.bigSize().intValue();++i) {
 			Term t = terms.get(BigInteger.valueOf(i));

@@ -41,12 +41,6 @@ import jmodelgen.util.Walkers;
  * |P{1}{2}{2}{2}| = 1766_058_600
  * |P{2}{2}{2}{2}| = 2217_326_832
  *
- * |P{1}{1}{1}{1}_inf| = 42
- * |P{1}{1}{1}{2}_inf| = 1806
- * |P{1}{1}{2}{2}_inf| = 3_416_952
- * |P{1}{2}{2}{2}_inf| = 607_548_552
- * |P{2}{2}{2}{2}_inf| = 815_702_160
- *
  * |P{1,1,1,2}_def(2)| = 74
  * |P{1,1,2,2}_def(2)| = 2960
  * |P{1,2,2,2}_def(2)| = 9332
@@ -55,25 +49,11 @@ import jmodelgen.util.Walkers;
  * |P{1}{3}{2}{3}_def{2}| = 418_496_660
  * |P{1}{3}{3}{3}_def{2}| = 418_496_660
  *
- * |P{1,1,1,2}_def(2)_inf| = 58
- * |P{1,1,2,2}_def(2)_inf| = 1856
- * |P{1,2,2,2}_inf_def(2)| = 5692
- * |P{2}{2}{2}{2}_def{2}_inf| = 14680
- * |P{1}{2}{2}{3}_def{2}_inf| = 64619500
- * |P{1}{3}{2}{3}_def{2}_inf| = 146_566_092
- * |P{1}{3}{3}{3}_def{2}_inf| = 146_566_092
- *
  * |P{1}{1}{2}{2}_def{3}| = 21432
  * |P{2}{2}{2}{2}_def{3}| = 82360
  * |P{1}{2}{2}{3}_def{3}| = 500_246_168_816
  * |P{1}{2}{3}{3}_def{3}| = 886_907_481_224
  * |P{1}{3}{2}{3}_def{3}| = 1_248_940_792_352
- *
- * |P{1}{2}{2}{2}_def{3}_inf| = 13088
- * |P{2}{2}{2}{2}_def{3}_inf| = 53096
- * |P{1}{2}{2}{3}_def{3}_inf| = 106_368_095_672
- * |P{1}{2}{3}{3}_def{3}_inf| = 1_836_510_205_414
- * |P{1}{3}{2}{3}_def{3}_inf| = 262_670_209_640
  *
  * </pre>
  *
@@ -115,13 +95,6 @@ public class ProgramSpace {
 	private final int maxBlockWidth;
 
 	/**
-	 * Specify whether or not to use copy inference. When copy inference is enabled,
-	 * all dereferences (e.g. variable accesses) have their copy/move status
-	 * inferred based on the type of the operand.
-	 */
-	private final boolean copyInference;
-
-	/**
 	 * The parameter names here coincide with those in the definition of a program
 	 * space.
 	 *
@@ -131,13 +104,12 @@ public class ProgramSpace {
 	 * @param w The maximum width of a statement block.
 	 * @param inf Whether or not to enable copy inference.
 	 */
-	public ProgramSpace(int i, int v, int d, int w, boolean inf) {
+	public ProgramSpace(int i, int v, int d, int w) {
 		// Generate appropriately sized set of integer values
 		this.ints = Domains.Int(0,i-1);
 		this.maxVariables = v;
 		this.maxBlockDepth = d;
 		this.maxBlockWidth = w;
-		this.copyInference = inf;
 	}
 
 	public Domain.Big<Term.Block> domain() {
@@ -145,7 +117,7 @@ public class ProgramSpace {
 		// The specialised domain for creating statements
 		Domain.Small<String> variables = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, maxVariables));
 		// Construct domain of statements
-		Domain.Big<Term> stmts = Syntax.toBigDomain(maxBlockDepth, maxBlockWidth, copyInference, lifetime, ints,
+		Domain.Big<Term> stmts = Syntax.toBigDomain(maxBlockDepth, maxBlockWidth, lifetime, ints,
 				variables, variables);
 		// Construct outer block
 		return Term.Block.toBigDomain(lifetime, 1, maxBlockWidth, stmts);
@@ -162,7 +134,7 @@ public class ProgramSpace {
 	public Walker<Term.Block> definedVariableWalker(int maxBlocks) {
 		Lifetime lifetime = ROOT.freshWithin();
 		// Construct domain of expressions over *declared* variables
-		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables, copyInference,
+		UseDefState seed = new UseDefState(maxBlockDepth - 1, maxBlocks - 1, maxBlockWidth, maxVariables,
 				lifetime, ints, Domains.EMPTY);
 		// Construct outer block
 		return Term.Block.toWalker(lifetime, 1, maxBlockWidth, seed);
@@ -172,9 +144,6 @@ public class ProgramSpace {
 	public String toString() {
 		// Return the name of this particular space
 		String c = "";
-		if(copyInference) {
-			c = "_inf";
-		}
 		return "P{" + ints.bigSize() + "," + maxVariables + "," + maxBlockDepth + "," + maxBlockWidth + "}" + c;
 	}
 
@@ -183,17 +152,15 @@ public class ProgramSpace {
 		private final int blocks;
 		private final int width;
 		private final int vars;
-		private final boolean copyInference;
 		private final Lifetime lifetime;
 		private final Domain.Small<Integer> ints;
 		private final Domain.Small<String> declared;
 
-		public UseDefState(int depth, int blocks, int width, int vars, boolean copyInference, Lifetime lifetime, Domain.Small<Integer> ints, Domain.Small<String> declared) {
+		public UseDefState(int depth, int blocks, int width, int vars, Lifetime lifetime, Domain.Small<Integer> ints, Domain.Small<String> declared) {
 			this.depth = depth;
 			this.blocks = blocks;
 			this.width = width;
 			this.vars = vars;
-			this.copyInference = copyInference;
 			this.lifetime = lifetime;
 			this.ints = ints;
 			this.declared = declared;
@@ -204,7 +171,7 @@ public class ProgramSpace {
 			// Construct adaptor to convert from variable names to lvals.
 			Domain.Big<LVal> lvals = LVal.toBigDomain(declared);
 			// Construct domain of "expressions"
-			Domain.Big<Term> expressions = Syntax.toBigDomain(1, copyInference, ints, declared);
+			Domain.Big<Term> expressions = Syntax.toBigDomain(1, ints, declared);
 			Domain.Big<Let> lets;
 			int size = declared.bigSize().intValue();
 			if(size < vars) {
@@ -226,7 +193,7 @@ public class ProgramSpace {
 				final Lifetime l = lifetime.freshWithin();
 				// Using this construct the block generator
 				Walker<Block> blks = Block.toWalker(l, 1, width,
-						new UseDefState(depth - 1, blocks - 1, width, vars, copyInference, l, ints, declared));
+						new UseDefState(depth - 1, blocks - 1, width, vars, l, ints, declared));
 				// Done
 				return Walkers.Union(units, blks);
 			}
@@ -237,10 +204,10 @@ public class ProgramSpace {
 			if (item instanceof Term.Let) {
 				int size = declared.bigSize().intValue() + 1;
 				Domain.Small<String> d = Domains.Finite(Arrays.copyOfRange(VARIABLE_NAMES, 0, size));
-				return new UseDefState(depth, blocks, width, vars, copyInference, lifetime, ints, d);
+				return new UseDefState(depth, blocks, width, vars, lifetime, ints, d);
 			} else if(item instanceof Term.Block) {
 				int nblocks = blocks - count(item);
-				return new UseDefState(depth, nblocks, width, vars, copyInference, lifetime, ints, declared);
+				return new UseDefState(depth, nblocks, width, vars, lifetime, ints, declared);
 			} else {
 				return this;
 			}
@@ -290,66 +257,37 @@ public class ProgramSpace {
 
 	public static void main(String[] args) {
 		// Determine exhaustive sizes
-		count(new ProgramSpace(1,1,1,1,false));
-		count(new ProgramSpace(1,1,1,1,true));
-		count(new ProgramSpace(1,1,2,1,false));
-		count(new ProgramSpace(1,1,2,1,true));
-		count(new ProgramSpace(1,1,1,2,false));
-		count(new ProgramSpace(1,1,1,2,true));
+		count(new ProgramSpace(1,1,1,1));
+		count(new ProgramSpace(1,1,2,1));
+		count(new ProgramSpace(1,1,1,2));
 		//
-		count(new ProgramSpace(1,1,2,2,false));
-		count(new ProgramSpace(1,1,2,2,true));
-		count(new ProgramSpace(1,2,2,2,false));
-		count(new ProgramSpace(1,2,2,2,true));
-		count(new ProgramSpace(2,2,2,2,false));
-		count(new ProgramSpace(2,2,2,2,true));
-		count(new ProgramSpace(1,2,2,3,false));
-		count(new ProgramSpace(1,2,2,3,true));
-		count(new ProgramSpace(1,2,3,3,false));
-		count(new ProgramSpace(1,2,3,3,true));
-		count(new ProgramSpace(1,3,2,3,false));
-		count(new ProgramSpace(1,3,2,3,true));
-		count(new ProgramSpace(1,3,3,2,false));
-		count(new ProgramSpace(1,3,3,2,true));
-		count(new ProgramSpace(1,3,3,3,false));
-		count(new ProgramSpace(1,3,3,3,true));
+		count(new ProgramSpace(1,1,2,2));
+		count(new ProgramSpace(1,2,2,2));
+		count(new ProgramSpace(2,2,2,2));
+		count(new ProgramSpace(1,2,2,3));
+		count(new ProgramSpace(1,2,3,3));
+		count(new ProgramSpace(1,3,2,3));
+		count(new ProgramSpace(1,3,3,2));
+		count(new ProgramSpace(1,3,3,3));
 		// Determine constrained sizes
-		count(new ProgramSpace(1,1,1,1,false),2);
-		count(new ProgramSpace(1,1,1,1,true),2);
-		count(new ProgramSpace(1,1,1,2,false),2);
-		count(new ProgramSpace(1,1,1,2,true),2);
-		count(new ProgramSpace(1,1,2,2,false),2);
-		count(new ProgramSpace(1,1,2,2,true),2);
-		count(new ProgramSpace(1,2,2,2,false),2);
-		count(new ProgramSpace(1,2,2,2,true),2);
-		count(new ProgramSpace(2,2,2,2,false),2);
-		count(new ProgramSpace(2,2,2,2,true),2);
-		count(new ProgramSpace(1,2,2,3,false),2);
-		count(new ProgramSpace(1,2,2,3,true),2);
-		count(new ProgramSpace(1,2,3,3,false),2);
-		count(new ProgramSpace(1,2,3,3,true),2);
-		count(new ProgramSpace(1,3,2,3,false),2);
-		count(new ProgramSpace(1,3,2,3,true),2);
-		count(new ProgramSpace(1,3,3,3,false),2);
-		count(new ProgramSpace(1,3,3,3,true),2);
-//		// Determine constrained sizes
-		count(new ProgramSpace(1,1,1,1,false),3);
-		count(new ProgramSpace(1,1,1,1,true),3);
-		count(new ProgramSpace(1,1,1,2,false),3);
-		count(new ProgramSpace(1,1,1,2,true),3);
-		count(new ProgramSpace(1,1,2,2,false),3);
-		count(new ProgramSpace(1,1,2,2,true),3);
-		count(new ProgramSpace(1,2,2,2,false),3);
-		count(new ProgramSpace(1,2,2,2,true),3);
-		count(new ProgramSpace(2,2,2,2,false),3);
-		count(new ProgramSpace(2,2,2,2,true),3);
-		count(new ProgramSpace(1,2,2,3,false),3); // <----
-		count(new ProgramSpace(1,2,2,3,true),3); // <----
-		count(new ProgramSpace(1,2,3,3,false),3);
-		count(new ProgramSpace(1,2,3,3,true),3);
-		count(new ProgramSpace(1,3,2,3,false),3);
-		count(new ProgramSpace(1,3,2,3,true),3);
-		count(new ProgramSpace(1,3,3,3,false),3);
-		count(new ProgramSpace(1,3,3,3,true),3);
+		count(new ProgramSpace(1,1,1,1),2);
+		count(new ProgramSpace(1,1,1,2),2);
+		count(new ProgramSpace(1,1,2,2),2);
+		count(new ProgramSpace(1,2,2,2),2);
+		count(new ProgramSpace(2,2,2,2),2);
+		count(new ProgramSpace(1,2,2,3),2);
+		count(new ProgramSpace(1,2,3,3),2);
+		count(new ProgramSpace(1,3,2,3),2);
+		count(new ProgramSpace(1,3,3,3),2);
+		// Determine constrained sizes
+		count(new ProgramSpace(1,1,1,1),3);
+		count(new ProgramSpace(1,1,1,2),3);
+		count(new ProgramSpace(1,1,2,2),3);
+		count(new ProgramSpace(1,2,2,2),3);
+		count(new ProgramSpace(2,2,2,2),3);
+		count(new ProgramSpace(1,2,2,3),3); // <----
+		count(new ProgramSpace(1,2,3,3),3);
+		count(new ProgramSpace(1,3,2,3),3);
+		count(new ProgramSpace(1,3,3,3),3);
 	}
 }

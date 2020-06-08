@@ -33,6 +33,7 @@ import java.util.Map;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.Term;
+import featherweightrust.core.Syntax.Value;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.OptArg;
 import featherweightrust.util.SyntaxError;
@@ -104,8 +105,6 @@ public class FuzzTestingExperiment {
 		RUSTC = (String) options.get("rustc");
 		// Process generic command-line arguments
 		boolean quiet = options.containsKey("quiet");
-		// Always enable copy inference because this most closely follows
-		options.put("copyinf", true);
 		Triple<Iterator<Term.Block>,Long,String> config = Util.parseDefaultConfiguration(options);
 		// Extract version string
 		RUST_VERSION = new RustCompiler(RUSTC, 5000, NIGHTLY, EDITION).version().replace("\n", "").replace("\t", "");
@@ -136,8 +135,8 @@ public class FuzzTestingExperiment {
 		Stats stats = new Stats(null);
 		// First, strip out any which are not canonical
 		for(int i=0;i!=batch.length;++i) {
-			if(!isCanonical(batch[i])) {
-				stats.notCanonical++;
+			if(isIgnored(batch[i])) {
+				stats.ignored++;
 				batch[i] = null;
 			}
 		}
@@ -377,29 +376,30 @@ public class FuzzTestingExperiment {
 	}
 
 	/**
-	 * Determine whether a given program is canonical or not. Canonical programs
-	 * have their variables declared in a specific order. The purpose of this is
-	 * just to eliminate isomorphs with respect to variable renaming.
+	 * Determine whether a given program is canonical or not, and whether it
+	 * contains a copy accecss or not. Canonical programs have their variables
+	 * declared in a specific order. The purpose of this is just to eliminate
+	 * isomorphs with respect to variable renaming.
 	 *
 	 * @param stmt
 	 * @param numDeclared
 	 * @return
 	 */
-	public static boolean isCanonical(Term stmt) {
+	public static boolean isIgnored(Term stmt) {
 		try {
-			isCanonical(stmt,0);
-			return true;
-		} catch(IllegalArgumentException e) {
+			isIgnored(stmt,0);
 			return false;
+		} catch(IllegalArgumentException e) {
+			return true;
 		}
 	}
 
-	private static int isCanonical(Term stmt, int declared) {
+	private static int isIgnored(Term stmt, int declared) {
 		if(stmt instanceof Term.Block) {
 			Term.Block s = (Term.Block) stmt;
 			int declaredWithin = declared;
 			for(int i=0;i!=s.size();++i) {
-				declaredWithin = isCanonical(s.get(i), declaredWithin);
+				declaredWithin = isIgnored(s.get(i), declaredWithin);
 			}
 			return declared;
 		} else if(stmt instanceof Term.Let) {
@@ -409,7 +409,25 @@ public class FuzzTestingExperiment {
 				// Program is not canonical
 				throw new IllegalArgumentException();
 			}
+			isIgnored(s.initialiser(), declared);
 			declared = declared+1;
+		} else if(stmt instanceof Term.Assignment) {
+			Term.Assignment s = (Term.Assignment) stmt;
+			isIgnored(s.rightOperand(), declared);
+		} else if(stmt instanceof Term.Access) {
+			Term.Access a = (Term.Access) stmt;
+			if(a.copy() || a.unspecified()) {
+				// Is ignored
+				throw new IllegalArgumentException();
+			}
+		} else if(stmt instanceof Term.Borrow) {
+			// Fine
+		} else if(stmt instanceof Term.Box) {
+			Term.Box b = (Term.Box) stmt;
+			isIgnored(b.operand(), declared);
+		} else {
+			// Force coercion to value.
+			Value v = (Value) stmt;
 		}
 		return declared;
 	}
@@ -438,7 +456,7 @@ public class FuzzTestingExperiment {
 		private final String label;
 		public long valid = 0;
 		public long invalid = 0;
-		public long notCanonical = 0;
+		public long ignored = 0;
 		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
@@ -453,13 +471,13 @@ public class FuzzTestingExperiment {
 
 		public long total() {
 			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentDerefCoercion
-					+ +inconsistentPossibleBug + notCanonical + invalidPrefix;
+					+ +inconsistentPossibleBug + ignored + invalidPrefix;
 		}
 
 		public Stats join(Stats stats) {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
-			this.notCanonical += stats.notCanonical;
+			this.ignored += stats.ignored;
 			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
@@ -504,7 +522,7 @@ public class FuzzTestingExperiment {
 			System.out.println("\tTOTAL: " + total());
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
-			System.out.println("\tIGNORED (NOT CANONICAL): " + notCanonical);
+			System.out.println("\tIGNORED (NOT CANONICAL): " + ignored);
 			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);

@@ -62,7 +62,6 @@ public class ModelCheckingExperiment {
 			new OptArg("pspace", "p", OptArg.LONGARRAY(4, 4), "set program space"),
 			new OptArg("constrained", "c", OptArg.INT, "set maximum block count and constrain use-defs", -1),
 			new OptArg("batch", "b", OptArg.LONGARRAY(2, 2), "set batch index and batch count", null),
-			new OptArg("copyinf","i","enable copy inference"),
 			// Specific options
 			new OptArg("batchsize", "s", OptArg.INT, "set batch size", 10000),
 	};

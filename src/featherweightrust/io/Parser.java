@@ -231,9 +231,6 @@ public class Parser {
 		if (consumed && index < tokens.size() && tokens.get(index) instanceof Shreak) {
 			match("!");
 			kind = Access.Kind.COPY;
-		} else if (consumed && index < tokens.size() && tokens.get(index) instanceof QuestionMark) {
-			match("?");
-			kind = Access.Kind.UNSPECIFIED;
 		} else if(!consumed) {
 			kind = Access.Kind.TEMP;
 		} else {

@@ -70,10 +70,15 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public final static String LVAL_WRITE_PROHIBITED = "lval borrowed in part or whole";
 	public final static String LVAL_READ_PROHIBITED = "lval mutably borrowed in part or whole";
 
+	/**
+	 * Indicates whether or not to apply copy inference.
+	 */
+	protected final boolean copyInference;
 	protected final String sourcefile;
 
-	public BorrowChecker(String sourcefile, Extension... extensions) {
+	public BorrowChecker(boolean copyInference, String sourcefile, Extension... extensions) {
 		super(extensions);
+		this.copyInference = copyInference;
 		this.sourcefile = sourcefile;
 		// Bind self in extensions
 		for (Extension e : extensions) {
@@ -231,7 +236,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @return
 	 */
 	protected boolean isCopy(Term.Access t, Type T) {
-		if (t.unspecified()) {
+		if (copyInference) {
 			boolean r = T.copyable();
 			t.infer(r ? Term.Access.Kind.COPY : Term.Access.Kind.MOVE);
 			return r;

@@ -256,10 +256,6 @@ public class Syntax {
 				 * Represents neither copy nor move!
 				 */
 				TEMP,
-				/**
-				 * Represents unknown status (i.e. to be inferred)
-				 */
-				UNSPECIFIED
 			}
 			private Kind kind;
 			private final LVal slice;
@@ -290,13 +286,10 @@ public class Syntax {
 			}
 
 			/**
-			 * Determines whether the copy / move status of this term is unspecified (i.e.
-			 * can be inferred).
+			 * Get the LVal being read.
+			 *
+			 * @return
 			 */
-			public boolean unspecified() {
-				return kind == Kind.UNSPECIFIED;
-			}
-
 			public LVal operand() {
 				return slice;
 			}
@@ -314,8 +307,6 @@ public class Syntax {
 			public String toString() {
 				if (kind == Kind.COPY) {
 					return "!" + slice;
-				} else if (kind == Kind.UNSPECIFIED) {
-					return "?" + slice;
 				} else {
 					return slice.toString();
 				}

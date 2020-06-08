@@ -344,10 +344,10 @@ public class ControlFlowTests {
 
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
-		CoreTests.check(input, output, ControlFlow.SEMANTICS, new ControlFlow.Checker(input));
+		CoreTests.check(input, output, ControlFlow.SEMANTICS, new ControlFlow.Checker(false, input));
 	}
 
 	public static void checkInvalid(String input) throws IOException {
-		CoreTests.checkInvalid(input, new ControlFlow.Checker(input));
+		CoreTests.checkInvalid(input, new ControlFlow.Checker(false, input));
 	}
 }

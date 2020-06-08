@@ -605,12 +605,12 @@ public class TupleTests {
 	}
 
 	public static void checkInvalid(String input) throws IOException {
-		CoreTests.checkInvalid(input, new Tuples.Checker(input));
+		CoreTests.checkInvalid(input, new Tuples.Checker(false,input));
 	}
 
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility
-		CoreTests.check(input, output, Tuples.SEMANTICS, new Tuples.Checker(input));
+		CoreTests.check(input, output, Tuples.SEMANTICS, new Tuples.Checker(false,input));
 	}
 
 

@@ -153,7 +153,11 @@ public class ControlFlow {
 
 		@Override
 		final protected Pair<State, Term> apply(State S, Lifetime l, Term.Access e) {
-			return reduceAccess(S, e.operand(), e.copy() || e.temporary());
+			if(e.copy() || e.temporary()) {
+				return reduceCopy(S, e.operand());
+			} else {
+				return reduceMove(S, e.operand());
+			}
 		}
 
 		private Pair<State, Term> apply(State S1, Lifetime l, Syntax.IfElse t1) {
@@ -253,8 +257,8 @@ public class ControlFlow {
 
 	public static class Checker extends BorrowChecker {
 
-		public Checker(String sourcefile) {
-			super(sourcefile, TYPING);
+		public Checker(boolean copyInference, String sourcefile) {
+			super(copyInference, sourcefile, TYPING);
 		}
 
 		@Override

@@ -1166,7 +1166,7 @@ public class CoreTests {
 	// ==============================================================
 
 	public static void check(String input, Value output) throws IOException {
-		check(input, output, SEMANTICS, new BorrowChecker(input));
+		check(input, output, SEMANTICS, new BorrowChecker(false, input));
 	}
 
 	public static void check(String input, Value output, OperationalSemantics semantics, BorrowChecker typing) throws IOException {
@@ -1202,7 +1202,7 @@ public class CoreTests {
 
 
 	public static void checkInvalid(String input) throws IOException {
-		checkInvalid(input, new BorrowChecker(input));
+		checkInvalid(input, new BorrowChecker(false, input));
 	}
 
 	public static void checkInvalid(String input, BorrowChecker typing) throws IOException {

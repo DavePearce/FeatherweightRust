@@ -124,7 +124,8 @@ public class Util {
 	 * @return
 	 */
 	public static boolean requiresDerefCoercions(Term.Block b) {
-		BorrowChecker checker = new BorrowChecker(b.toString()) {
+		// NOTE: copy inference enabled when fuzzing
+		BorrowChecker checker = new BorrowChecker(true,b.toString()) {
 			@Override
 			public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
 				// Determine type of lval

@@ -352,7 +352,8 @@ public class FuzzTestingExperiment {
 		SyntaxError[] errs = new SyntaxError[programs.length];
 		for(int i=0;i!=programs.length;++i) {
 			Term.Block b = programs[i];
-			BorrowChecker checker = new BorrowChecker(b.toString());
+			// NOTE: copy inference enabled when fuzzing
+			BorrowChecker checker = new BorrowChecker(true,b.toString());
 			try {
 				checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
 			} catch (SyntaxError e) {
@@ -416,7 +417,7 @@ public class FuzzTestingExperiment {
 			isIgnored(s.rightOperand(), declared);
 		} else if(stmt instanceof Term.Access) {
 			Term.Access a = (Term.Access) stmt;
-			if(a.copy() || a.unspecified()) {
+			if(a.copy()) {
 				// Is ignored
 				throw new IllegalArgumentException();
 			}
@@ -457,7 +458,6 @@ public class FuzzTestingExperiment {
 		public long valid = 0;
 		public long invalid = 0;
 		public long ignored = 0;
-		public long invalidPrefix = 0;
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
 		public long inconsistentDerefCoercion = 0;
@@ -471,14 +471,13 @@ public class FuzzTestingExperiment {
 
 		public long total() {
 			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentDerefCoercion
-					+ +inconsistentPossibleBug + ignored + invalidPrefix;
+					+ +inconsistentPossibleBug + ignored;
 		}
 
 		public Stats join(Stats stats) {
 			this.valid += stats.valid;
 			this.invalid += stats.invalid;
 			this.ignored += stats.ignored;
-			this.invalidPrefix += stats.invalidPrefix;
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
 			this.inconsistentDerefCoercion += stats.inconsistentDerefCoercion;
@@ -522,8 +521,7 @@ public class FuzzTestingExperiment {
 			System.out.println("\tTOTAL: " + total());
 			System.out.println("\tVALID: " + valid);
 			System.out.println("\tINVALID: " + invalid);
-			System.out.println("\tIGNORED (NOT CANONICAL): " + ignored);
-			System.out.println("\tIGNORED (INVALID PREFIX): " + invalidPrefix);
+			System.out.println("\tIGNORED: " + ignored);
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
 			System.out.println("\tINCONSISTENT (DEREF COERCION): " + inconsistentDerefCoercion);

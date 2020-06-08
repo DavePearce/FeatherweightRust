@@ -391,8 +391,8 @@ public class Tuples {
 
 	public static class Checker extends BorrowChecker {
 
-		public Checker(String sourcefile) {
-			super(sourcefile, TYPING);
+		public Checker(boolean copyInference, String sourcefile) {
+			super(copyInference, sourcefile, TYPING);
 		}
 
 		@Override

@@ -197,46 +197,69 @@ public class Util {
 	 * @return
 	 */
 	public static String toRustProgram(Term.Block b, String name) {
-		return "fn " + name + "() " + toRustString(b);
+		return "fn " + name + "() " + toRustString(b, new HashSet<>());
 	}
 
-	private static String toRustString(Term t) {
-		if (t instanceof Term.Block) {
-			Term.Block block = (Term.Block) t;
+	private static String toRustString(Term stmt, HashSet<String> live) {
+		if (stmt instanceof Term.Block) {
+			Term.Block block = (Term.Block) stmt;
 			String contents = "";
 			ArrayList<String> declared = new ArrayList<>();
 			for (int i = 0; i != block.size(); ++i) {
 				Term s = block.get(i);
-				contents += toRustString(s) + " ";
+				contents += toRustString(s, live) + " ";
 				if (s instanceof Term.Let) {
 					Term.Let l = (Term.Let) s;
 					declared.add(l.variable());
 				}
 			}
+			// Attempt to work around non-lexical lifetimes
+			for (int i=declared.size()-1;i>=0;--i) {
+				String var = declared.get(i);
+				if (live.contains(var)) {
+					// declared live variable
+					contents = contents + var + "; ";
+					live.remove(var);
+				}
+			}
 			//
 			return "{ " + contents + "}";
-		} else if(t instanceof Term.Let) {
-			Term.Let s = (Term.Let) t;
+		} else if(stmt instanceof Term.Let) {
+			Term.Let s = (Term.Let) stmt;
 			String init = toRustString(s.initialiser());
+			updateLiveness(s.initialiser(),live);
 			// By definition variable is live after assignment
+			live.add(s.variable());
 			return "let mut " + s.variable() + " = " + init + ";";
-		} else if(t instanceof Term.Assignment){
-			Term.Assignment s = (Term.Assignment) t;
+		} else {
+			Term.Assignment s = (Term.Assignment) stmt;
+			updateLiveness(s.rightOperand(),live);
 			// By definition variable is live after assignment
+			live.add(s.leftOperand().name());
 			return s.leftOperand() + " = " + toRustString(s.rightOperand()) + ";";
-		} else if (t instanceof Term.Box) {
-			Term.Box b = (Term.Box) t;
+		}
+	}
+
+	/**
+	 * Convert an expression into a Rust-equivalent string.
+	 *
+	 * @param expr
+	 * @return
+	 */
+	private static String toRustString(Term expr) {
+		if (expr instanceof Term.Box) {
+			Term.Box b = (Term.Box) expr;
 			return "Box::new(" + toRustString(b.operand()) + ")";
-		} else if(t instanceof Term.Access) {
-			Term.Access d = (Term.Access) t;
+		} else if(expr instanceof Term.Access) {
+			Term.Access d = (Term.Access) expr;
 			String r = d.operand().toString();
 			if(d.copy()) {
 				return "*&" + r;
 			} else {
 				return r;
 			}
-		} else {
-			return t.toString();
+		}else {
+			return expr.toString();
 		}
 	}
 
@@ -258,7 +281,6 @@ public class Util {
 			updateLiveness(b.operand(), liveness);
 		}
 	}
-
 	private static Term.Block parse(String input) throws IOException {
 		// Allocate the global lifetime. This is the lifetime where all heap allocated
 				// data will reside.

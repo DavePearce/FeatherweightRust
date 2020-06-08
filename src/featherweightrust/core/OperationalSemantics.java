@@ -113,20 +113,29 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-Copy and R-Move.
+	 * Rule R-Copy.
 	 */
-	protected Pair<State, Term> reduceAccess(State S, LVal lv, boolean copy) {
+	protected Pair<State, Term> reduceCopy(State S, LVal lv) {
 		// Extract location, or throw exception otherwise
 		Reference lx = lv.locate(S);
 		// Read contents of cell at given location
 		Value v = S.read(lx);
-		// Check whether move required
-		if(!copy) {
-			// Apply destructive update
-			S = S.write(lx, null);
-		}
 		// Done
 		return new Pair<>(S, v);
+	}
+
+	/**
+	 * Rule R-Move.
+	 */
+	protected Pair<State, Term> reduceMove(State S1, LVal lv) {
+	    // Determine location represented by lval
+		Reference lx = lv.locate(S1);
+		// Read contents of slot at given location
+		Value v = S1.read(lx);
+		// Apply destructive update
+		State S2 = S1.write(lx, null);
+		// Return value read
+		return new Pair<>(S2, v);
 	}
 
 	/**
@@ -232,7 +241,11 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 
 	@Override
 	protected Pair<State, Term> apply(State S, Lifetime l, Term.Access e) {
-		return reduceAccess(S, e.operand(), e.copy());
+		if(e.copy()) {
+			return reduceCopy(S, e.operand());
+		} else {
+			return reduceMove(S, e.operand());
+		}
 	}
 
 	@Override

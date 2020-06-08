@@ -13,6 +13,7 @@ import java.util.Scanner;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
 import featherweightrust.core.Syntax.LVal;
+import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
@@ -34,12 +35,10 @@ public class Util {
 		String label;
 		long expected = (Long) options.get("expected");
 		long[] batch = (long[]) options.get("batch");
-		boolean copyInference = (Boolean) options.containsKey("copyinf");
 		if (options.containsKey("pspace")) {
 			long[] ivdw = (long[]) options.get("pspace");
 			int c = (Integer) options.get("constrained");
-			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3],
-					copyInference);
+			ProgramSpace space = new ProgramSpace((int) ivdw[0], (int) ivdw[1], (int) ivdw[2], (int) ivdw[3]);
 			// Create iterator
 			if (c >= 0) {
 				Walker<Term.Block> walker = space.definedVariableWalker(c);
@@ -197,69 +196,46 @@ public class Util {
 	 * @return
 	 */
 	public static String toRustProgram(Term.Block b, String name) {
-		return "fn " + name + "() " + toRustString(b, new HashSet<>());
+		return "fn " + name + "() " + toRustString(b);
 	}
 
-	private static String toRustString(Term stmt, HashSet<String> live) {
-		if (stmt instanceof Term.Block) {
-			Term.Block block = (Term.Block) stmt;
+	private static String toRustString(Term t) {
+		if (t instanceof Term.Block) {
+			Term.Block block = (Term.Block) t;
 			String contents = "";
 			ArrayList<String> declared = new ArrayList<>();
 			for (int i = 0; i != block.size(); ++i) {
 				Term s = block.get(i);
-				contents += toRustString(s, live) + " ";
+				contents += toRustString(s) + " ";
 				if (s instanceof Term.Let) {
 					Term.Let l = (Term.Let) s;
 					declared.add(l.variable());
 				}
 			}
-			// Attempt to work around non-lexical lifetimes
-			for (int i=declared.size()-1;i>=0;--i) {
-				String var = declared.get(i);
-				if (live.contains(var)) {
-					// declared live variable
-					contents = contents + var + "; ";
-					live.remove(var);
-				}
-			}
 			//
 			return "{ " + contents + "}";
-		} else if(stmt instanceof Term.Let) {
-			Term.Let s = (Term.Let) stmt;
+		} else if(t instanceof Term.Let) {
+			Term.Let s = (Term.Let) t;
 			String init = toRustString(s.initialiser());
-			updateLiveness(s.initialiser(),live);
 			// By definition variable is live after assignment
-			live.add(s.variable());
 			return "let mut " + s.variable() + " = " + init + ";";
-		} else {
-			Term.Assignment s = (Term.Assignment) stmt;
-			updateLiveness(s.rightOperand(),live);
+		} else if(t instanceof Term.Assignment){
+			Term.Assignment s = (Term.Assignment) t;
 			// By definition variable is live after assignment
-			live.add(s.leftOperand().name());
 			return s.leftOperand() + " = " + toRustString(s.rightOperand()) + ";";
-		}
-	}
-
-	/**
-	 * Convert an expression into a Rust-equivalent string.
-	 *
-	 * @param expr
-	 * @return
-	 */
-	private static String toRustString(Term expr) {
-		if (expr instanceof Term.Box) {
-			Term.Box b = (Term.Box) expr;
+		} else if (t instanceof Term.Box) {
+			Term.Box b = (Term.Box) t;
 			return "Box::new(" + toRustString(b.operand()) + ")";
-		} else if(expr instanceof Term.Access) {
-			Term.Access d = (Term.Access) expr;
+		} else if(t instanceof Term.Access) {
+			Term.Access d = (Term.Access) t;
 			String r = d.operand().toString();
 			if(d.copy()) {
 				return "*&" + r;
 			} else {
 				return r;
 			}
-		}else {
-			return expr.toString();
+		} else {
+			return t.toString();
 		}
 	}
 
@@ -280,5 +256,19 @@ public class Util {
 			Term.Box b = (Term.Box) expr;
 			updateLiveness(b.operand(), liveness);
 		}
+	}
+
+	private static Term.Block parse(String input) throws IOException {
+		// Allocate the global lifetime. This is the lifetime where all heap allocated
+				// data will reside.
+		Lifetime globalLifetime = new Lifetime();
+		List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
+		// Parse block
+		return new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
+	}
+
+	public static void main(String[] args) throws IOException {
+		Term.Block program = parse("{ let mut x = 1; let mut y = box !x; { let mut z = box 0; y = z; } }");
+		System.out.println(toRustProgram(program,"main"));
 	}
 }

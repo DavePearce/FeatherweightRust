@@ -253,11 +253,12 @@ public class Util {
 		} else if(expr instanceof Term.Access) {
 			Term.Access d = (Term.Access) expr;
 			String r = d.operand().toString();
-			if(d.copy()) {
-				return "*&" + r;
-			} else {
-				return r;
-			}
+//			if(d.copy()) {
+//				return "*&" + r;
+//			} else {
+//				return r;
+//			}
+			return r;
 		}else {
 			return expr.toString();
 		}

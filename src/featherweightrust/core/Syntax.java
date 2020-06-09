@@ -1068,7 +1068,7 @@ public class Syntax {
 		public static class Shadow extends AbstractType {
 			private final Type type;
 
-			private Shadow(Type type, Attribute... attributes) {
+			public Shadow(Type type, Attribute... attributes) {
 				super(attributes);
 				assert !(type instanceof Shadow);
 				this.type = type;

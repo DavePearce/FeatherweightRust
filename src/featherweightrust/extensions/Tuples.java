@@ -255,6 +255,11 @@ public class Tuples {
 			}
 
 			@Override
+			public Type.Shadow undefine() {
+				return new Shadow(this);
+			}
+
+			@Override
 			public String toString() {
 				String r = "";
 				for(int i=0;i!=types.length;++i) {

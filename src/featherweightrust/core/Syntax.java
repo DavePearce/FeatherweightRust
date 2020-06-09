@@ -26,6 +26,7 @@ import featherweightrust.core.BorrowChecker.Cell;
 import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Path.Element;
+import featherweightrust.core.Syntax.Type.Shadow;
 import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
@@ -667,6 +668,13 @@ public class Syntax {
 		public Type concretize();
 
 		/**
+		 * Convert this type into its undefined equivalent
+		 *
+		 * @return
+		 */
+		public Type.Shadow undefine();
+
+		/**
 		 * Check whether this type can safely live within a given lifetime. That is, the
 		 * lifetime does not outlive any object reachable through this type.
 		 *
@@ -762,6 +770,11 @@ public class Syntax {
 			@Override
 			public boolean copyable() {
 				return true;
+			}
+
+			@Override
+			public Type.Shadow undefine() {
+				return new Type.Shadow(this);
 			}
 
 			@Override
@@ -1055,7 +1068,7 @@ public class Syntax {
 		public static class Shadow extends AbstractType {
 			private final Type type;
 
-			public Shadow(Type type, Attribute... attributes) {
+			private Shadow(Type type, Attribute... attributes) {
 				super(attributes);
 				assert !(type instanceof Shadow);
 				this.type = type;
@@ -1063,6 +1076,11 @@ public class Syntax {
 
 			public Type getType() {
 				return type;
+			}
+
+			@Override
+			public Type.Shadow undefine() {
+				return this;
 			}
 
 			@Override
@@ -1415,6 +1433,16 @@ public class Syntax {
 			@Override
 			public String toString(String src) {
 				return "*" + src;
+			}
+
+			@Override
+			public boolean equals(Object o) {
+				return o instanceof Deref;
+			}
+
+			@Override
+			public int hashCode() {
+				return 0;
 			}
 		};
 	}

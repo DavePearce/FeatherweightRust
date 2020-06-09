@@ -9,6 +9,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Stack;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
@@ -128,61 +129,6 @@ public class Util {
 	public static boolean requiresDerefCoercions(Term.Block b) {
 		// NOTE: copy inference enabled when fuzzing
 		BorrowChecker checker = new CoercionChecker(true,b.toString());
-//	{
-//			@Override
-//			public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
-//				// Determine type of lval
-//				Type T3 = typeOf(R1, lv);
-//				// Check compatibility
-//				if (!compatible(R1, T3, T1, R1) && derefCoercion(R1,T3,T1)) {
-//					syntaxError(DEREF_COERCION_REQUIRED,lv);
-//				}
-//				return super.write(R1, lv, T1, strong);
-//			}
-//
-//			private boolean derefCoercion(Environment R, Type Tl, Type Tr) {
-//				if (compatible(R, Tl, Tr, R)) {
-//					return true;
-//				} else if (Tr instanceof Type.Box) {
-//					Type.Box b = (Type.Box) Tr;
-//					return derefCoercion(R, Tl, b.element());
-//				} else if (Tr instanceof Type.Borrow) {
-//					Type.Borrow b = (Type.Borrow) Tr;
-//					boolean before = derefBefore(R, Tl, b.lvals());
-//					boolean after = derefAfter(R, Tl, b.lvals(), b.isMutable());
-//					return before || after;
-//				} else {
-//					return false;
-//				}
-//			}
-//
-//			private boolean derefBefore(Environment R, Type Tl, LVal[] lvals) {
-//				for (int i = 0; i != lvals.length; ++i) {
-//					LVal ith = lvals[i];
-//					if (!derefCoercion(R, Tl, typeOf(R, ith))) {
-//						return false;
-//					}
-//				}
-//				return true;
-//			}
-//
-//			private boolean derefAfter(Environment R, Type Tl, LVal[] lvals, boolean mut) {
-//				for (int i = 0; i != lvals.length; ++i) {
-//					LVal ith = lvals[i];
-//					LVal lv = new LVal(ith.name(),Path.DEREF.append(ith.path()));
-//					Type T = typeOf(R, ith);
-//					if (isDerefable(T) && !derefCoercion(R, Tl, new Type.Borrow(mut,lv))) {
-//						return false;
-//					}
-//				}
-//				return true;
-//			}
-//
-//			private boolean isDerefable(Type T) {
-//				return T instanceof Type.Borrow || T instanceof Type.Box;
-//			}
-//		};
-//
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
 			return true;
@@ -208,10 +154,15 @@ public class Util {
 		@Override
 		protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
 			LVal lv = t.leftOperand();
-			// Declaration check
-			check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
 			// NOTE: only works because don't generate expression blocks when fuzzing.
 			this.target = super.typeOf(R1, lv).concretize();
+			// Declaration check
+			check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
+			// First, look for nooperation
+			if (isNoOperation(R1, l, t)) {
+				this.target = null;
+				return new Pair<>(R1,Type.Void);
+			}
 			Pair<Environment, Type> r = super.apply(R1, l, t);
 			this.target = null;
 			return r;
@@ -267,29 +218,37 @@ public class Util {
 			if (target == null) {
 				return actual;
 			} else {
-				Type guess = actual;
-				while (!compatible(R, target, guess, R)) {
-					if (guess instanceof Type.Box) {
-						guess = ((Type.Box) guess).element();
+				Stack<Type> guesses = new Stack<>();
+				guesses.push(actual);
+				while(guesses.size() > 0) {
+					// Extract guess
+					Type guess = guesses.pop();
+					if(compatible(R, target, guess, R)) {
+						return guess;
+					} else if (guess instanceof Type.Box) {
+						guesses.push(((Type.Box) guess).element());
 					} else if (guess instanceof Type.Borrow) {
 						Type.Borrow b = (Type.Borrow) guess;
-						// First check mutability
-//						if(target instanceof Type.Borrow) {
-//							Type.Borrow t = (Type.Borrow) target;
-//							if(!t.isMutable() && b.isMutable()) {
-//								guess = new Type.Borrow(false, b.lvals());
-//								continue;
-//							}
-//						}
-						// Second, try deref coercion
-						guess = typeOf(R, b.lvals()[0]);
-					} else {
-						// Give up --- can't figure it out.
-						return actual;
+						// Try deref coercion after
+						guesses.push(innerDeref(b));
+						// Try deref coercion before
+						guesses.push(typeOf(R, b.lvals()[0]));
 					}
 				}
-				return guess;
+				// Give up --- can't figure it out.
+				return actual;
 			}
+		}
+
+		private static Type.Borrow innerDeref(Type.Borrow b) {
+			LVal[] lvals =b.lvals();
+			LVal[] nlvals = new LVal[lvals.length];
+			for(int i=0;i!=lvals.length;++i) {
+				LVal ith = lvals[i];
+				Path p = Path.DEREF.append(ith.path());
+				nlvals[i] = new LVal(ith.name(), p);
+			}
+			return new Type.Borrow(b.isMutable(),nlvals);
 		}
 
 		private static Term.Borrow coerce(Type target, Term.Borrow b) {
@@ -302,8 +261,66 @@ public class Util {
 			}
 			return b;
 		}
+
+		private boolean isNoOperation(Environment R1, Lifetime l, Term.Assignment t) {
+			Type _target = target;
+			LVal lv = t.leftOperand();
+			try {
+				Type T1 = typeOf(R1, lv);
+				// Update type of lhs to be undefined
+				Environment R2 = write(R1,lv,T1.undefine(),true);
+				// Attempt to type check without lhs
+				Pair<Environment,Type> p =apply(R2,l,t.rightOperand());
+				// If we get here, then no problem
+				Type T2 = p.second();
+				return T1.equals(T2);
+			} catch(Exception e) {
+
+			}
+			target = _target;
+			return false;
+		}
+
 	}
 
+	public static boolean containsCyclicAssignment(Term t) {
+		if(t instanceof Term.Block) {
+			Term.Block b = (Term.Block) t;
+			for(int i=0;i!=b.size();++i) {
+				if(containsCyclicAssignment(b.get(i))) {
+					return true;
+				}
+			}
+		} else if(t instanceof Term.Assignment) {
+			Term.Assignment a = (Term.Assignment) t;
+			LVal lv = a.leftOperand();
+			Term rhs = a.rightOperand();
+			// Something else is up
+			if(rhs instanceof Term.Access && lv.equals(((Term.Access)rhs).operand())) {
+				// Don't count statements of the form x = x, *x = *x. etc.
+				return false;
+			} else if(lv.path().size() == 0 && cycle(lv.name(),a.rightOperand())) {
+				// NOTE: only consider assignments to variables (rather than arbitrary lvals)
+				// because only these perform strong updates.
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static boolean cycle(String name, Term e) {
+		if(e instanceof Term.Box) {
+			return cycle(name,((Term.Box)e).operand());
+		} else if(e instanceof Term.Access) {
+			Term.Access a = (Term.Access) e;
+			return a.operand().name().equals(name);
+		} else if(e instanceof Term.Borrow) {
+			Term.Borrow a = (Term.Borrow) e;
+			return a.operand().name().equals(name);
+		} else {
+			return false;
+		}
+	}
 	/**
 	 * Given a statement block in the calculus, generate a syntactically correct
 	 * Rust program.
@@ -407,7 +424,11 @@ public class Util {
 	}
 
 	public static void main(String[] args) throws IOException {
-		Term.Block program = parse("{ let mut x = 0 ; { let mut y = &x ; y = &y } }");
+//		String input = "{ let mut x = box 0 ; { let mut y = box &*x ; *y = &x } }";
+//		String input = "{ let mut x = box 0 ; { let mut y = box &*x ; y = box &*y } }";
+		String input = "{ let mut x = box 0 ; { let mut y = &*x ; y = &*y } }";
+		Term.Block program = parse(input);
 		System.out.println("DEREF COERCION: " + requiresDerefCoercions(program));
+		new BorrowChecker(true,input).apply(BorrowChecker.EMPTY_ENVIRONMENT, new Lifetime(), program);
 	}
 }

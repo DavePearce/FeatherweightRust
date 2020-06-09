@@ -26,6 +26,7 @@ import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.Syntax.Path.Deref;
 import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
@@ -313,6 +314,21 @@ public class Tuples {
 			@Override
 			public String toString(String src) {
 				return src + "." + index;
+			}
+
+
+			@Override
+			public boolean equals(Object o) {
+				if(o instanceof Index) {
+					Index i = (Index) o;
+					return index == i.index;
+				}
+				return false;
+			}
+
+			@Override
+			public int hashCode() {
+				return index;
 			}
 		}
 	}

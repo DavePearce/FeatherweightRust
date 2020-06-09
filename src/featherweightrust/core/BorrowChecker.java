@@ -133,25 +133,24 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		LVal lv = t.leftOperand();
 		// Declaration check
 		check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
-		// Possible strong update
+		// Determine lval type
+		Type T1 = typeOf(R1, lv);
+		// Determine lval lifetime
+		Lifetime m = lifetimeOf(R1, lv);
+		// Check LVal is mutable
+		check(owner(R1, lv), LVAL_NOT_MUTABLE, t.leftOperand());
 		// Type operand
 		Pair<Environment, Type> p = apply(R1, l, t.rightOperand());
 		Environment R2 = p.first();
 		Type T2 = p.second();
-		// Determine lval type
-		Type T1 = typeOf(R1,lv);
-		// Determine lval lifetime
-		Lifetime m = lifetimeOf(R1,lv);
 		// Check type compatibility
-		check(compatible(R1, T1, T2, R1), INCOMPATIBLE_TYPE, lv);
+		check(compatible(R2, T1, T2, R2), INCOMPATIBLE_TYPE, lv);
 		// lifetime check
-		check(T2.within(this, R1, m), NOTWITHIN_VARIABLE_ASSIGNMENT, lv);
-		// Check LVal is
-		check(!writeProhibited(R2.put(fresh(), T2, l), lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
-		// Check LVal is mutable
-		check(owner(R2, lv), LVAL_NOT_MUTABLE, t.leftOperand());
+		check(T2.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, lv);
 		// Write the type
 		Environment R3 = write(R2, lv, T2, true);
+		// Check lval not write prohibited
+		check(!writeProhibited(R3, lv), LVAL_WRITE_PROHIBITED, t.leftOperand());
 		//
 		return new Pair<>(R3, Type.Void);
 	}
@@ -245,19 +244,9 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		}
 	}
 
-	/**
-	 * Move a given path out of a given type. This results in part of all of the
-	 * type becoming a shadow. If the empty path is moved out, then the type is
-	 * entirely shadowed.
-	 *
-	 * @param T
-	 * @param p
-	 * @param i
-	 * @return
-	 */
 	protected Type move(Type T, Path p, int i) {
 		if (p.size() == i) {
-			return new Type.Shadow(T);
+			return T.undefine();
 		} else if (T instanceof Type.Box) {
 			// In core calculus, dereferences are only valid path elements.
 			Path.Deref ith = (Path.Deref) p.get(i);

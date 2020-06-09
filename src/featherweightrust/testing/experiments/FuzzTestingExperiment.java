@@ -247,6 +247,8 @@ public class FuzzTestingExperiment {
 				// Rust says yes, FR says no
 				if (Util.requiresDerefCoercions(program)) {
 					stats.inconsistentDerefCoercion++;
+				} else if (Util.containsCyclicAssignment(program)) {
+					stats.inconsistentCyclicAssignment++;
 				} else {
 					reportFailure(program, FR_err, rustcErrors);
 					stats.inconsistentInvalid++;
@@ -461,6 +463,7 @@ public class FuzzTestingExperiment {
 		public long inconsistentValid = 0;
 		public long inconsistentInvalid = 0;
 		public long inconsistentDerefCoercion = 0;
+		public long inconsistentCyclicAssignment = 0;
 		public long inconsistentPossibleBug = 0;
 		private final HashMap<String,Integer> errors;
 
@@ -471,7 +474,7 @@ public class FuzzTestingExperiment {
 
 		public long total() {
 			return valid + invalid + inconsistentValid + inconsistentInvalid + inconsistentDerefCoercion
-					+ +inconsistentPossibleBug + ignored;
+					+ inconsistentCyclicAssignment +inconsistentPossibleBug + ignored;
 		}
 
 		public Stats join(Stats stats) {
@@ -481,6 +484,7 @@ public class FuzzTestingExperiment {
 			this.inconsistentValid += stats.inconsistentValid;
 			this.inconsistentInvalid += stats.inconsistentInvalid;
 			this.inconsistentDerefCoercion += stats.inconsistentDerefCoercion;
+			this.inconsistentCyclicAssignment += stats.inconsistentCyclicAssignment;
 			this.inconsistentPossibleBug += stats.inconsistentPossibleBug;
 			// Join error classifications
 			join(errors,stats.errors);
@@ -525,6 +529,7 @@ public class FuzzTestingExperiment {
 			System.out.println("\tINCONSISTENT (VALID): " + inconsistentValid);
 			System.out.println("\tINCONSISTENT (INVALID): " + inconsistentInvalid);
 			System.out.println("\tINCONSISTENT (DEREF COERCION): " + inconsistentDerefCoercion);
+			System.out.println("\tINCONSISTENT (CYCLIC ASSIGNMENT): " + inconsistentCyclicAssignment);
 			System.out.println("\tINCONSISTENT (POSSIBLE BUG): " + inconsistentPossibleBug);
 			for(Map.Entry<String, Integer> e : errors.entrySet()) {
 				System.out.println("\tINCONSISTENT (" + e.getKey() + "): " + e.getValue());

@@ -1161,6 +1161,12 @@ public class CoreTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_0x0464() throws IOException {
+		String input = "{ let mut x = 0 ; { let mut y = &x ; y = &*y } }";
+		check(input, Value.Unit);
+	}
+
 	// ==============================================================
 	// Helpers
 	// ==============================================================

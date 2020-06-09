@@ -12,6 +12,7 @@ import java.util.Scanner;
 
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.ProgramSpace;
+import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
@@ -20,6 +21,7 @@ import featherweightrust.core.Syntax.Type;
 import featherweightrust.io.Lexer;
 import featherweightrust.io.Parser;
 import featherweightrust.util.OptArg;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SliceIterator;
 import featherweightrust.util.SyntaxError;
 import featherweightrust.util.Triple;
@@ -125,69 +127,182 @@ public class Util {
 	 */
 	public static boolean requiresDerefCoercions(Term.Block b) {
 		// NOTE: copy inference enabled when fuzzing
-		BorrowChecker checker = new BorrowChecker(true,b.toString()) {
-			@Override
-			public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
-				// Determine type of lval
-				Type T3 = typeOf(R1, lv);
-				// Check compatibility
-				if (!compatible(R1, T3, T1, R1) && derefCoercion(R1,T3,T1)) {
-					syntaxError(DEREF_COERCION_REQUIRED,lv);
-				}
-				return super.write(R1, lv, T1, strong);
-			}
-
-			private boolean derefCoercion(Environment R, Type Tl, Type Tr) {
-				if (compatible(R, Tl, Tr, R)) {
-					return true;
-				} else if (Tr instanceof Type.Box) {
-					Type.Box b = (Type.Box) Tr;
-					return derefCoercion(R, Tl, b.element());
-				} else if (Tr instanceof Type.Borrow) {
-					Type.Borrow b = (Type.Borrow) Tr;
-					boolean before = derefBefore(R, Tl, b.lvals());
-					boolean after = derefAfter(R, Tl, b.lvals(), b.isMutable());
-					return before || after;
-				} else {
-					return false;
-				}
-			}
-
-			private boolean derefBefore(Environment R, Type Tl, LVal[] lvals) {
-				for (int i = 0; i != lvals.length; ++i) {
-					LVal ith = lvals[i];
-					if (!derefCoercion(R, Tl, typeOf(R, ith))) {
-						return false;
-					}
-				}
-				return true;
-			}
-
-			private boolean derefAfter(Environment R, Type Tl, LVal[] lvals, boolean mut) {
-				for (int i = 0; i != lvals.length; ++i) {
-					LVal ith = lvals[i];
-					LVal lv = new LVal(ith.name(),Path.DEREF.append(ith.path()));
-					Type T = typeOf(R, ith);
-					if (isDerefable(T) && !derefCoercion(R, Tl, new Type.Borrow(mut,lv))) {
-						return false;
-					}
-				}
-				return true;
-			}
-
-			private boolean isDerefable(Type T) {
-				return T instanceof Type.Borrow || T instanceof Type.Box;
-			}
-		};
-
+		BorrowChecker checker = new CoercionChecker(true,b.toString());
+//	{
+//			@Override
+//			public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
+//				// Determine type of lval
+//				Type T3 = typeOf(R1, lv);
+//				// Check compatibility
+//				if (!compatible(R1, T3, T1, R1) && derefCoercion(R1,T3,T1)) {
+//					syntaxError(DEREF_COERCION_REQUIRED,lv);
+//				}
+//				return super.write(R1, lv, T1, strong);
+//			}
+//
+//			private boolean derefCoercion(Environment R, Type Tl, Type Tr) {
+//				if (compatible(R, Tl, Tr, R)) {
+//					return true;
+//				} else if (Tr instanceof Type.Box) {
+//					Type.Box b = (Type.Box) Tr;
+//					return derefCoercion(R, Tl, b.element());
+//				} else if (Tr instanceof Type.Borrow) {
+//					Type.Borrow b = (Type.Borrow) Tr;
+//					boolean before = derefBefore(R, Tl, b.lvals());
+//					boolean after = derefAfter(R, Tl, b.lvals(), b.isMutable());
+//					return before || after;
+//				} else {
+//					return false;
+//				}
+//			}
+//
+//			private boolean derefBefore(Environment R, Type Tl, LVal[] lvals) {
+//				for (int i = 0; i != lvals.length; ++i) {
+//					LVal ith = lvals[i];
+//					if (!derefCoercion(R, Tl, typeOf(R, ith))) {
+//						return false;
+//					}
+//				}
+//				return true;
+//			}
+//
+//			private boolean derefAfter(Environment R, Type Tl, LVal[] lvals, boolean mut) {
+//				for (int i = 0; i != lvals.length; ++i) {
+//					LVal ith = lvals[i];
+//					LVal lv = new LVal(ith.name(),Path.DEREF.append(ith.path()));
+//					Type T = typeOf(R, ith);
+//					if (isDerefable(T) && !derefCoercion(R, Tl, new Type.Borrow(mut,lv))) {
+//						return false;
+//					}
+//				}
+//				return true;
+//			}
+//
+//			private boolean isDerefable(Type T) {
+//				return T instanceof Type.Borrow || T instanceof Type.Box;
+//			}
+//		};
+//
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
-			throw new IllegalArgumentException("Program type checks!");
+			return true;
 		} catch (SyntaxError e) {
-			return e.msg() == DEREF_COERCION_REQUIRED;
+			return false;
 		}
 	}
 
+	/**
+	 * Extends the standard checker with support for implicit coercions as found in
+	 * Rust.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	private static class CoercionChecker extends BorrowChecker {
+		private Type target = null;
+
+		public CoercionChecker(boolean copyInference, String sourcefile, Extension... extensions) {
+			super(copyInference, sourcefile, extensions);
+		}
+
+		@Override
+		protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
+			LVal lv = t.leftOperand();
+			// Declaration check
+			check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
+			// NOTE: only works because don't generate expression blocks when fuzzing.
+			this.target = super.typeOf(R1, lv).concretize();
+			Pair<Environment, Type> r = super.apply(R1, l, t);
+			this.target = null;
+			return r;
+		}
+
+		@Override
+		protected Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Access t) {
+			Pair<Environment,Type> p = super.apply(R, l, t);
+			Type T1 = p.second();
+			Type T2 = coerce(p.first(),target,T1);
+			if(T1 == T2) {
+				return p;
+			} else {
+				return new Pair<>(p.first(),T2);
+			}
+		}
+
+		@Override
+		protected Pair<Environment, Type> apply(Environment R, Lifetime l, Term.Borrow t) {
+			if(target != null) {
+				t = coerce(target,t);
+			}
+			Pair<Environment,Type> p = super.apply(R, l, t);
+			Type T1 = p.second();
+			Type T2 = coerce(p.first(),target,T1);
+			if(T1 == T2) {
+				return p;
+			} else {
+				return new Pair<>(p.first(),T2);
+			}
+		}
+
+		@Override
+		protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Box t) {
+			// Update target
+			if(target instanceof Type.Box) {
+				target = ((Type.Box)target).element();
+			} else {
+				target = null;
+			}
+			//
+			return super.apply(R1, l, t);
+		}
+
+		/**
+		 * Attempt to apply a deref coercion.
+		 *
+		 * @param target
+		 * @param actual
+		 * @return
+		 */
+		private Type coerce(Environment R, Type target, Type actual) {
+			if (target == null) {
+				return actual;
+			} else {
+				Type guess = actual;
+				while (!compatible(R, target, guess, R)) {
+					if (guess instanceof Type.Box) {
+						guess = ((Type.Box) guess).element();
+					} else if (guess instanceof Type.Borrow) {
+						Type.Borrow b = (Type.Borrow) guess;
+						// First check mutability
+//						if(target instanceof Type.Borrow) {
+//							Type.Borrow t = (Type.Borrow) target;
+//							if(!t.isMutable() && b.isMutable()) {
+//								guess = new Type.Borrow(false, b.lvals());
+//								continue;
+//							}
+//						}
+						// Second, try deref coercion
+						guess = typeOf(R, b.lvals()[0]);
+					} else {
+						// Give up --- can't figure it out.
+						return actual;
+					}
+				}
+				return guess;
+			}
+		}
+
+		private static Term.Borrow coerce(Type target, Term.Borrow b) {
+			if(b.isMutable() && target instanceof Type.Borrow) {
+				Type.Borrow t = (Type.Borrow) target;
+				if(!t.isMutable()) {
+					// Coerce immutable borrow into mutable borrow.
+					return new Term.Borrow(b.operand(), false);
+				}
+			}
+			return b;
+		}
+	}
 
 	/**
 	 * Given a statement block in the calculus, generate a syntactically correct
@@ -292,7 +407,7 @@ public class Util {
 	}
 
 	public static void main(String[] args) throws IOException {
-		Term.Block program = parse("{ let mut x = 1; let mut y = box !x; { let mut z = box 0; y = z; } }");
-		System.out.println(toRustProgram(program,"main"));
+		Term.Block program = parse("{ let mut x = 0 ; { let mut y = &x ; y = &y } }");
+		System.out.println("DEREF COERCION: " + requiresDerefCoercions(program));
 	}
 }

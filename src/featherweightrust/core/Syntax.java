@@ -660,6 +660,13 @@ public class Syntax {
 		public Type intersect(Type type);
 
 		/**
+		 * Strip away any undefined components of this type.
+		 *
+		 * @return
+		 */
+		public Type concretize();
+
+		/**
 		 * Check whether this type can safely live within a given lifetime. That is, the
 		 * lifetime does not outlive any object reachable through this type.
 		 *
@@ -719,6 +726,11 @@ public class Syntax {
 		public static abstract class AbstractType extends SyntacticElement.Impl implements Type {
 			public AbstractType(Attribute... attributes) {
 				super(attributes);
+			}
+
+			@Override
+			public Type concretize() {
+				return this;
 			}
 
 			@Override
@@ -987,6 +999,11 @@ public class Syntax {
 			}
 
 			@Override
+			public Type concretize() {
+				return new Type.Box(element.concretize());
+			}
+
+			@Override
 			public boolean defined() {
 				return element.defined();
 			}
@@ -1091,6 +1108,11 @@ public class Syntax {
 			@Override
 			public Type intersect(Type t) {
 				return t;
+			}
+
+			@Override
+			public Type concretize() {
+				return type.concretize();
 			}
 
 			@Override

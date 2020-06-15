@@ -262,7 +262,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		Environment R2 = p.first();
 		Type T2 = p.second();
 		// Check type compatibility
-		check(compatible(R2, T1, T2, R2), INCOMPATIBLE_TYPE, w);
+		check(compatible(R2, T1, T2), INCOMPATIBLE_TYPE, w);
 		// lifetime check
 		check(T2.within(this, R2, m), NOTWITHIN_VARIABLE_ASSIGNMENT, w);
 		// Write the type
@@ -584,7 +584,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param R2 --- the environment in which the second type is defined.
 	 * @return
 	 */
-	public boolean compatible(Environment R1, Type T1, Type T2, Environment R2) {
+	public boolean compatible(Environment R1, Type T1, Type T2) {
 		if (T1 instanceof Type.Unit && T2 instanceof Type.Unit) {
 			return true;
 		} else if (T1 instanceof Type.Int && T2 instanceof Type.Int) {
@@ -595,23 +595,23 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// NOTE: follow holds because all members of a single borrow must be compatible
 			// by construction.
 			Type ti = typeOf(R1, _T1.lvals()[0]);
-			Type tj = typeOf(R2, _T2.lvals()[0]);
+			Type tj = typeOf(R1, _T2.lvals()[0]);
 			//
-			return _T1.isMutable() == _T2.isMutable() && compatible(R1, ti, tj, R2);
+			return _T1.isMutable() == _T2.isMutable() && compatible(R1, ti, tj);
 		} else if (T1 instanceof Type.Box && T2 instanceof Type.Box) {
 			Type.Box _T1 = (Type.Box) T1;
 			Type.Box _T2 = (Type.Box) T2;
-			return compatible(R1, _T1.element(), _T2.element(), R2);
+			return compatible(R1, _T1.element(), _T2.element());
 		} else if (T1 instanceof Type.Undefined && T2 instanceof Type.Undefined) {
 			Type.Undefined _T1 = (Type.Undefined) T1;
 			Type.Undefined _T2 = (Type.Undefined) T2;
-			return compatible(R1, _T1.getType(), _T2.getType(), R2);
+			return compatible(R1, _T1.getType(), _T2.getType());
 		} else if (T1 instanceof Type.Undefined) {
 			Type.Undefined _T1 = (Type.Undefined) T1;
-			return compatible(R1, _T1.getType(), T2, R2);
+			return compatible(R1, _T1.getType(), T2);
 		} else if (T2 instanceof Type.Undefined) {
 			Type.Undefined _T2 = (Type.Undefined) T2;
-			return compatible(R1, T1, _T2.getType(), R2);
+			return compatible(R1, T1, _T2.getType());
 		} else {
 			return false;
 		}

@@ -223,7 +223,7 @@ public class Util {
 				while(guesses.size() > 0) {
 					// Extract guess
 					Type guess = guesses.pop();
-					if(compatible(R, target, guess, R)) {
+					if (compatible(R, target, guess)) {
 						return guess;
 					} else if (guess instanceof Type.Box) {
 						guesses.push(((Type.Box) guess).element());

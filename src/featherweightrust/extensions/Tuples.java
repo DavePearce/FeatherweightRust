@@ -237,24 +237,6 @@ public class Tuples {
 			}
 
 			@Override
-			public Type intersect(Type type) {
-				if (type instanceof Type.Undefined) {
-					return type.intersect(this);
-				} else if (type instanceof TupleType) {
-					TupleType p = (TupleType) type;
-					if(types.length == p.types.length) {
-						Type[] ts = new Type[types.length];
-						for(int i=0;i!=ts.length;++i) {
-							ts[i] = types[i].intersect(p.types[i]);
-						}
-						// Recursively join components.
-						return new TupleType(ts);
-					}
-				}
-				throw new IllegalArgumentException("invalid intersection");
-			}
-
-			@Override
 			public Type.Undefined undefine() {
 				return new Undefined(this);
 			}
@@ -475,7 +457,7 @@ public class Tuples {
 		}
 
 		@Override
-		public boolean compatible(Environment R1, Type T1, Type T2, Environment R2) {
+		public boolean compatible(Environment R1, Type T1, Type T2) {
 			if(T1 instanceof Syntax.TupleType && T2 instanceof Syntax.TupleType) {
 				Syntax.TupleType _T1 = (Syntax.TupleType) T1;
 				Syntax.TupleType _T2 = (Syntax.TupleType) T2;
@@ -485,14 +467,14 @@ public class Tuples {
 					for(int i=0;i!=_T1.types.length;++i) {
 						Type t1 = _T1.types[i];
 						Type t2 = _T2.types[i];
-						if(!compatible(R1,t1,t2,R2)) {
+						if(!compatible(R1,t1,t2)) {
 							return false;
 						}
 					}
 				}
 				return true;
 			} else {
-				return super.compatible(R1, T1, T2, R2);
+				return super.compatible(R1, T1, T2);
 			}
 		}
 

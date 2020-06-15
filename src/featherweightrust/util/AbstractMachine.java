@@ -500,23 +500,27 @@ public abstract class AbstractMachine {
 		 * The heap invariant states that every heap location should have exactly one
 		 * owning reference.
 		 *
-		 * @param cells
+		 * @param slots
 		 * @return
 		 */
-		private static boolean heapInvariant(Slot[] cells) {
-			int[] owners = new int[cells.length];
+		private static boolean heapInvariant(Slot[] slots) {
+			int[] owners = new int[slots.length];
 			// First, mark all owned locations
-			for(int i=0;i!=cells.length;++i) {
-				Slot ith = cells[i];
+			for(int i=0;i!=slots.length;++i) {
+				Slot ith = slots[i];
 				if(ith != null) {
 					markOwners(ith.contents(),owners);
 				}
 			}
 			// Second look for any heap locations which are not owned.
-			for(int i=0;i!=cells.length;++i) {
-				Slot ith = cells[i];
-				if (ith != null && ith.hasGlobalLifetime() && owners[i] != 1) {
-					return false;
+			for(int i=0;i!=slots.length;++i) {
+				Slot ith = slots[i];
+				if(ith != null) {
+					if (ith.hasGlobalLifetime() && owners[i] != 1) {
+						return false;
+					} else if(hasDanglingReference(ith.contents(),slots)) {
+						return false;
+					}
 				}
 			}
 			return true;
@@ -535,6 +539,24 @@ public abstract class AbstractMachine {
 					markOwners(c.get(i),owners);
 				}
 			}
+		}
+
+		private static boolean hasDanglingReference(Value v, Slot[] slots) {
+			if(v instanceof Value.Reference) {
+				Value.Reference r = (Value.Reference) v;
+				int l = r.getAddress();
+				if(slots[l] == null) {
+					return true;
+				}
+			} else if(v instanceof Value.Compound) {
+				Value.Compound c = (Value.Compound) v;
+				for(int i=0;i!=c.size();++i) {
+					if(hasDanglingReference(c.get(i),slots)) {
+						return true;
+					}
+				}
+			}
+			return false;
 		}
 	}
 

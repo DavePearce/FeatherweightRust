@@ -17,8 +17,11 @@
 // Copyright 2018, David James Pearce.
 package featherweightrust.core;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.List;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.LVal;
@@ -27,12 +30,16 @@ import featherweightrust.core.Syntax.Term.Block;
 import featherweightrust.core.Syntax.Value;
 import static featherweightrust.core.Syntax.Value.Unit;
 import featherweightrust.core.Syntax.Value.Reference;
+import featherweightrust.io.Lexer;
+import featherweightrust.io.Parser;
+import featherweightrust.testing.CoreTests;
 import featherweightrust.util.AbstractMachine;
 import featherweightrust.util.AbstractMachine.StackFrame;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractTransformer;
 import featherweightrust.util.ArrayUtils;
 import featherweightrust.util.Pair;
+import featherweightrust.util.SyntaxError;
 
 /**
  * Encodes the core operational semantics of Featherweight Rust. That is, the
@@ -305,5 +312,28 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 			stmts[i - n] = b.get(i);
 		}
 		return stmts;
+	}
+
+	public static void main(String[] args) throws IOException {
+		Lifetime globalLifetime = new Lifetime();
+		String input = "{let mut x = 0; let mut y = &mut x; {let mut z = 1; y = &mut z; }}";
+		// Allocate the global lifetime. This is the lifetime where all heap allocated
+		// data will reside.
+		//
+		try {
+			List<Lexer.Token> tokens = new Lexer(new StringReader(input)).scan();
+			// Parse block
+			Term.Block stmt = new Parser(input, tokens).parseStatementBlock(new Parser.Context(), globalLifetime);
+			// Execute block in outermost lifetime "*")
+			Pair<State, Term> state = new Pair<>(new State(),stmt);
+			// Execute continually until all reductions complete (or exception)
+			Term result = CoreTests.SEMANTICS.execute(globalLifetime, state.second());
+			//
+			System.out.println("GOT: " + result);
+			//
+		} catch (SyntaxError e) {
+			e.outputSourceError(System.err);
+			e.printStackTrace();
+		}
 	}
 }

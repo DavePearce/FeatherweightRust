@@ -22,11 +22,11 @@ import java.util.Arrays;
 import java.util.List;
 
 
-import featherweightrust.core.BorrowChecker.Cell;
+import featherweightrust.core.BorrowChecker.Slot;
 import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Path.Element;
-import featherweightrust.core.Syntax.Type.Shadow;
+import featherweightrust.core.Syntax.Type.Undefined;
 import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
@@ -194,12 +194,12 @@ public class Syntax {
 		 */
 		public class Block extends AbstractTerm implements Compound {
 			private final Lifetime lifetime;
-			private final Term[] stmts;
+			private final Term[] terms;
 
 			public Block(Lifetime lifetime, Term[] stmts, Attribute... attributes) {
 				super(TERM_block,attributes);
 				this.lifetime = lifetime;
-				this.stmts = stmts;
+				this.terms = stmts;
 			}
 
 			public Lifetime lifetime() {
@@ -207,24 +207,24 @@ public class Syntax {
 			}
 
 			public int size() {
-				return stmts.length;
+				return terms.length;
 			}
 
 			public Term get(int i) {
-				return stmts[i];
+				return terms[i];
 			}
 
 			public Term[] toArray() {
-				return stmts;
+				return terms;
 			}
 			@Override
 			public String toString() {
 				String contents = "";
-				for (int i = 0; i != stmts.length; ++i) {
+				for (int i = 0; i != terms.length; ++i) {
 					if(i != 0) {
 						contents += " ; ";
 					}
-					contents += stmts[i];
+					contents += terms[i];
 				}
 				return "{ " + contents + " }";
 			}
@@ -597,7 +597,7 @@ public class Syntax {
 			 *
 			 * @return
 			 */
-			public Reference reference() {
+			public Reference toBorrowed() {
 				if (path == OWNER) {
 					return new Reference(address, OTHER);
 				} else {
@@ -653,14 +653,6 @@ public class Syntax {
 		public Type union(Type type);
 
 		/**
-		 * Join two types together on the same execution path.
-		 *
-		 * @param type
-		 * @return
-		 */
-		public Type intersect(Type type);
-
-		/**
 		 * Strip away any undefined components of this type.
 		 *
 		 * @return
@@ -672,7 +664,7 @@ public class Syntax {
 		 *
 		 * @return
 		 */
-		public Type.Shadow undefine();
+		public Type.Undefined undefine();
 
 		/**
 		 * Check whether this type can safely live within a given lifetime. That is, the
@@ -725,7 +717,7 @@ public class Syntax {
 		/**
 		 * Constant representing the type void
 		 */
-		public static Type Void = new Void();
+		public static Type Unit = new Unit();
 		/**
 		 * Constant representing the type int
 		 */
@@ -773,13 +765,13 @@ public class Syntax {
 			}
 
 			@Override
-			public Type.Shadow undefine() {
-				return new Type.Shadow(this);
+			public Type.Undefined undefine() {
+				return new Type.Undefined(this);
 			}
 
 			@Override
 			public Type union(Type t) {
-				if(t instanceof Shadow) {
+				if(t instanceof Undefined) {
 					return t.union(this);
 				} else if(equals(t)) {
 					return this;
@@ -787,27 +779,16 @@ public class Syntax {
 					throw new IllegalArgumentException("invalid union");
 				}
 			}
-
-			@Override
-			public Type intersect(Type t) {
-				if(t instanceof Shadow) {
-					return t.intersect(this);
-				} else if(equals(t)) {
-					return this;
-				} else {
-					throw new IllegalArgumentException("invalid intersect (" + this + " & " + t + ")");
-				}
-			}
 		}
 
-		public static class Void extends AbstractAtom {
-			public Void(Attribute... attributes) {
+		public static class Unit extends AbstractAtom {
+			public Unit(Attribute... attributes) {
 				super(attributes);
 			}
 
 			@Override
 			public boolean equals(Object o) {
-				return o instanceof Type.Void;
+				return o instanceof Type.Unit;
 			}
 
 			@Override
@@ -895,8 +876,9 @@ public class Syntax {
 				for (int i = 0; i != lvals.length; ++i) {
 					LVal ith = lvals[i];
 					checker.check(R.get(ith.name()) != null, BorrowChecker.UNDECLARED_VARIABLE, this);
-					Cell C = R.get(ith.name());
-					// FIXME: this differs from the presentation.
+					Slot C = R.get(ith.name());
+					// NOTE: this differs from the presentation as, in fact, we don't need to type
+					// the lval fully.
 					r &= C.lifetime().contains(l);
 				}
 				return r;
@@ -904,7 +886,7 @@ public class Syntax {
 
 			@Override
 			public Type union(Type t) {
-				if(t instanceof Shadow) {
+				if(t instanceof Undefined) {
 					return t.union(this);
 				} else if(t instanceof Borrow) {
 					Type.Borrow b = (Type.Borrow) t;
@@ -918,25 +900,6 @@ public class Syntax {
 					}
 				}
 				throw new IllegalArgumentException("invalid union");
-			}
-
-
-			@Override
-			public Type intersect(Type t) {
-				if(t instanceof Shadow) {
-					return t.intersect(this);
-				} else if(t instanceof Borrow) {
-					Type.Borrow b = (Type.Borrow) t;
-					if(mut == b.mut) {
-						// Append both sets of names together
-						LVal[] ps = ArrayUtils.append(lvals, b.lvals);
-						// Remove any duplicates and ensure result is sorted
-						ps = ArrayUtils.sortAndRemoveDuplicates(ps);
-						// Done
-						return new Type.Borrow(mut, ps);
-					}
-				}
-				throw new IllegalArgumentException("invalid intersect");
 			}
 
 			public LVal[] lvals() {
@@ -1027,7 +990,7 @@ public class Syntax {
 
 			@Override
 			public Type union(Type t) {
-				if(t instanceof Shadow) {
+				if(t instanceof Undefined) {
 					return t.union(this);
 				} else if (t instanceof Type.Box) {
 					Type.Box b = (Type.Box) t;
@@ -1065,12 +1028,12 @@ public class Syntax {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class Shadow extends AbstractType {
+		public static class Undefined extends AbstractType {
 			private final Type type;
 
-			public Shadow(Type type, Attribute... attributes) {
+			public Undefined(Type type, Attribute... attributes) {
 				super(attributes);
-				assert !(type instanceof Shadow);
+				assert !(type instanceof Undefined);
 				this.type = type;
 			}
 
@@ -1079,7 +1042,7 @@ public class Syntax {
 			}
 
 			@Override
-			public Type.Shadow undefine() {
+			public Type.Undefined undefine() {
 				return this;
 			}
 
@@ -1118,14 +1081,9 @@ public class Syntax {
 			@Override
 			public Type union(Type t) {
 				// Strip effect for joining
-				t = (t instanceof Shadow) ? ((Type.Shadow) t).type : t;
+				t = (t instanceof Undefined) ? ((Type.Undefined) t).type : t;
 				//
-				return new Type.Shadow(type.union(t));
-			}
-
-			@Override
-			public Type intersect(Type t) {
-				return t;
+				return new Type.Undefined(type.union(t));
 			}
 
 			@Override
@@ -1135,8 +1093,8 @@ public class Syntax {
 
 			@Override
 			public boolean equals(Object o) {
-				if(o instanceof Shadow) {
-					Shadow e = (Shadow) o;
+				if(o instanceof Undefined) {
+					Undefined e = (Undefined) o;
 					return type.equals(e.type);
 				}
 				return false;

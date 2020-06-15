@@ -220,7 +220,7 @@ public class Tuples {
 
 			@Override
 			public Type union(Type type) {
-				if(type instanceof Type.Shadow) {
+				if(type instanceof Type.Undefined) {
 					return type.union(this);
 				} else if (type instanceof TupleType) {
 					TupleType p = (TupleType) type;
@@ -238,7 +238,7 @@ public class Tuples {
 
 			@Override
 			public Type intersect(Type type) {
-				if (type instanceof Type.Shadow) {
+				if (type instanceof Type.Undefined) {
 					return type.intersect(this);
 				} else if (type instanceof TupleType) {
 					TupleType p = (TupleType) type;
@@ -255,8 +255,8 @@ public class Tuples {
 			}
 
 			@Override
-			public Type.Shadow undefine() {
-				return new Shadow(this);
+			public Type.Undefined undefine() {
+				return new Undefined(this);
 			}
 
 			@Override
@@ -417,7 +417,7 @@ public class Tuples {
 		}
 
 		@Override
-		public Type move(Type T, Path p, int i) {
+		public Type strike(Type T, Path p, int i) {
 			if (i < p.size() && T instanceof Syntax.TupleType) {
 				Path.Element ith = p.get(i);
 				if (ith instanceof Syntax.Index) {
@@ -426,18 +426,18 @@ public class Tuples {
 					int index = ((Syntax.Index) p.get(i)).index;
 					if (index < ts.length) {
 						ts = Arrays.copyOf(ts, ts.length);
-						ts[index] = move(ts[index], p, i + 1);
+						ts[index] = strike(ts[index], p, i + 1);
 						return new Syntax.TupleType(ts);
 					}
 				}
 				syntaxError("Invalid tuple access \"" + ith.toString(T.toString()) + "\"", null);
 			}
 			// Default fallback
-			return super.move(T, p, i);
+			return super.strike(T, p, i);
 		}
 
 		@Override
-		public Pair<Environment, Type> write(Environment R, Type T1, Path p, int i, Type T2, boolean strong) {
+		public Pair<Environment, Type> update(Environment R, Type T1, Path p, int i, Type T2, boolean strong) {
 			if (i < p.size() && T1 instanceof Syntax.TupleType) {
 				Path.Element ith = p.get(i);
 				if (ith instanceof Syntax.Index) {
@@ -446,14 +446,14 @@ public class Tuples {
 					int index = ((Syntax.Index) p.get(i)).index;
 					if (index < ts.length) {
 						ts = Arrays.copyOf(ts, ts.length);
-						Pair<Environment, Type> r = write(R, ts[i], p, i + 1, T2, strong);
+						Pair<Environment, Type> r = update(R, ts[i], p, i + 1, T2, strong);
 						ts[index] = r.second();;
 						return new Pair<>(r.first(), new Syntax.TupleType(ts));
 					}
 				}
 				syntaxError("Invalid tuple access \"" + ith.toString(T1.toString()) + "\"", null);
 			}
-			return super.write(R, T1, p, i, T2, strong);
+			return super.update(R, T1, p, i, T2, strong);
 		}
 
 		@Override

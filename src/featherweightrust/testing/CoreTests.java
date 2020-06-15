@@ -558,7 +558,7 @@ public class CoreTests {
 	public void test_0x030C() throws IOException {
 		// NOTE: this is accepted by rust!
 		String input = "{ let mut x = 0 ; let mut y = &mut x ; y = &mut x }";
-		check(input,Value.Unit);
+		checkInvalid(input);
 	}
 
 	@Test
@@ -787,7 +787,7 @@ public class CoreTests {
 
 	@Test
 	public void test_0x0375() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 1; let mut p = box &mut x; *p = &mut y; x}";
+		String input = "{ let mut x = 1; let mut y = 1; let mut p = box &mut x; *p = &mut y; y}";
 		checkInvalid(input);
 	}
 
@@ -1164,7 +1164,7 @@ public class CoreTests {
 	@Test
 	public void test_0x0464() throws IOException {
 		String input = "{ let mut x = 0 ; { let mut y = &x ; y = &*y } }";
-		check(input, Value.Unit);
+		checkInvalid(input);
 	}
 
 	// ==============================================================

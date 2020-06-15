@@ -106,14 +106,14 @@ public abstract class AbstractMachine {
 		}
 
 		/**
-		 * Read the contents of a given location
+		 * Read the contents of a given lval.
 		 *
 		 * @param location
 		 *            Location to read
 		 * @return
 		 */
-		public Value read(Reference location) {
-			return heap.read(location);
+		public Value read(LVal lv) {
+			return heap.read(lv.locate(this));
 		}
 
 		/**
@@ -125,8 +125,8 @@ public abstract class AbstractMachine {
 		 *            Value to be written
 		 * @return
 		 */
-		public State write(Reference location, Value value) {
-			Store nstore = heap.write(location, value);
+		public State write(LVal lv, Value value) {
+			Store nstore = heap.write(lv.locate(this), value);
 			return new State(stack, nstore);
 		}
 
@@ -266,13 +266,13 @@ public abstract class AbstractMachine {
 	 *
 	 */
 	public static class Store {
-		private Cell[] cells;
+		private Slot[] cells;
 
 		public Store() {
-			this.cells = new Cell[0];
+			this.cells = new Slot[0];
 		}
 
-		private Store(Cell[] cells) {
+		private Store(Slot[] cells) {
 			this.cells = cells;
 		}
 
@@ -296,9 +296,9 @@ public abstract class AbstractMachine {
 		 */
 		public Pair<Store, Reference> allocate(Lifetime lifetime, Value v) {
 			// Create space for new cell at end of array
-			Cell[] ncells = Arrays.copyOf(cells, cells.length + 1);
+			Slot[] ncells = Arrays.copyOf(cells, cells.length + 1);
 			// Create new cell using given contents
-			ncells[cells.length] = new Cell(lifetime, v);
+			ncells[cells.length] = new Slot(lifetime, v);
 			// Return updated store and location
 			return new Pair<>(new Store(ncells), new Reference(cells.length));
 		}
@@ -313,7 +313,7 @@ public abstract class AbstractMachine {
 		public Value read(Reference location) {
 			int address = location.getAddress();
 			int[] path = location.getPath();
-			Cell cell = cells[address];
+			Slot cell = cells[address];
 			// Read value at location
 			Value contents = cell.contents();
 			// Extract path (if applicable)
@@ -331,15 +331,15 @@ public abstract class AbstractMachine {
 			int address = location.getAddress();
 			int[] path = location.getPath();
 			// Read cell from given base address
-			Cell cell = cells[address];
+			Slot cell = cells[address];
 			// Read value at location
 			Value n = cell.contents();
 			// Construct new value
 			Value nv = (path.length == 0) ? value : n.write(path, 0, value);
 			// Copy cells ahead of write
-			Cell[] ncells = Arrays.copyOf(cells, cells.length);
+			Slot[] ncells = Arrays.copyOf(cells, cells.length);
 			// Perform actual write
-			ncells[address] = new Cell(cell.lifetime, nv);
+			ncells[address] = new Slot(cell.lifetime, nv);
 			// Done
 			return new Store(ncells);
 		}
@@ -352,7 +352,7 @@ public abstract class AbstractMachine {
 		 * @return
 		 */
 		public Store drop(BitSet locations) {
-			Cell[] ncells = Arrays.copyOf(cells, cells.length);
+			Slot[] ncells = Arrays.copyOf(cells, cells.length);
 			for (int i = locations.nextSetBit(0); i != -1; i = locations.nextSetBit(i + 1)) {
 				destroy(ncells, i);
 			}
@@ -377,7 +377,7 @@ public abstract class AbstractMachine {
 			// nothing is actually going to change.
 			if(containsOwnerReference(v)) {
 				// Prepare for the drop by copying all cells
-				Cell[] ncells = Arrays.copyOf(cells, cells.length);
+				Slot[] ncells = Arrays.copyOf(cells, cells.length);
 				// Perform the physical drop
 				finalise(ncells, v);
 				// Check heap invariant still holds!
@@ -398,7 +398,7 @@ public abstract class AbstractMachine {
 			BitSet matches = new BitSet();
 			// Action the drop
 			for (int i = 0; i != cells.length; ++i) {
-				Cell ncell = cells[i];
+				Slot ncell = cells[i];
 				if (ncell != null && ncell.lifetime() == lifetime) {
 					// Mark address
 					matches.set(i);
@@ -413,7 +413,7 @@ public abstract class AbstractMachine {
 			return Arrays.toString(cells);
 		}
 
-		public Cell[] toArray() {
+		public Slot[] toArray() {
 			return cells;
 		}
 
@@ -451,9 +451,9 @@ public abstract class AbstractMachine {
 		 * @param address Address of location to destroy.
 		 * @return
 		 */
-		private static void destroy(Cell[] cells, int address) {
+		private static void destroy(Slot[] cells, int address) {
 			// Locate cell being dropped
-			Cell cell = cells[address];
+			Slot cell = cells[address];
 			// Save value for later
 			Value v = cell.value;
 			// Physically drop the location
@@ -470,7 +470,7 @@ public abstract class AbstractMachine {
 		 * @param cells
 		 * @param v
 		 */
-		private static void finalise(Cell[] cells, Value v) {
+		private static void finalise(Slot[] cells, Value v) {
 			if(v instanceof Value.Reference) {
 				Value.Reference ref = (Value.Reference) v;
 				// Check whether is an owner reference or not. If it is, then it should be
@@ -503,18 +503,18 @@ public abstract class AbstractMachine {
 		 * @param cells
 		 * @return
 		 */
-		private static boolean heapInvariant(Cell[] cells) {
+		private static boolean heapInvariant(Slot[] cells) {
 			int[] owners = new int[cells.length];
 			// First, mark all owned locations
 			for(int i=0;i!=cells.length;++i) {
-				Cell ith = cells[i];
+				Slot ith = cells[i];
 				if(ith != null) {
 					markOwners(ith.contents(),owners);
 				}
 			}
 			// Second look for any heap locations which are not owned.
 			for(int i=0;i!=cells.length;++i) {
-				Cell ith = cells[i];
+				Slot ith = cells[i];
 				if (ith != null && ith.hasGlobalLifetime() && owners[i] != 1) {
 					return false;
 				}
@@ -544,11 +544,11 @@ public abstract class AbstractMachine {
 	 * @author djp
 	 *
 	 */
-	public static class Cell {
+	public static class Slot {
 		private final Lifetime lifetime;
 		private final Value value;
 
-		public Cell(Lifetime lifetime, Value value) {
+		public Slot(Lifetime lifetime, Value value) {
 			this.lifetime = lifetime;
 			this.value = value;
 		}

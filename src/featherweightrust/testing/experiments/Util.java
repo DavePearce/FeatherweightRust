@@ -161,7 +161,7 @@ public class Util {
 			// First, look for nooperation
 			if (isNoOperation(R1, l, t)) {
 				this.target = null;
-				return new Pair<>(R1,Type.Void);
+				return new Pair<>(R1,Type.Unit);
 			}
 			Pair<Environment, Type> r = super.apply(R1, l, t);
 			this.target = null;

@@ -82,6 +82,69 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 		return p;
 	}
 
+
+	/**
+	 * Rule R-Copy.
+	 */
+	protected Pair<State, Term> reduceCopy(State S,  Lifetime l, LVal w) {
+		// Read contents of cell at given location
+		Value v = S.read(w);
+		// Done
+		return new Pair<>(S, v);
+	}
+
+	/**
+	 * Rule R-Move.
+	 */
+	protected Pair<State, Term> reduceMove(State S1,  Lifetime l, LVal w) {
+		// Read contents of slot at given location
+		Value v = S1.read(w);
+		// Apply destructive update
+		State S2 = S1.write(w, null);
+		// Return value read
+		return new Pair<>(S2, v);
+	}
+
+	/**
+	 * Rule R-Box.
+	 */
+	protected Pair<State, Term> reduceBox(State S1, Lifetime l, Value v) {
+		// Find global lifetime
+		Lifetime global = l.getRoot();
+		// Allocate new location
+		Pair<State, Reference> pl = S1.allocate(global, v);
+		State S2 = pl.first();
+		Reference ln = pl.second();
+		// Done
+		return new Pair<>(S2, ln);
+	}
+
+	/**
+	 * Rule R-Borrow.
+	 */
+	protected Pair<State, Term> reduceBorrow(State S, Lifetime l, LVal s) {
+		// Locate operand
+		Reference lx = s.locate(S);
+		// NOTE: since this is a borrow, must obtain a reference to the location (i.e.
+		// something which is not also an owner of that location). Otherwise, we risk
+		// this borrow resulting in the location to which it refers being dropped.
+		return new Pair<>(S, lx.toBorrowed());
+	}
+
+	/**
+	 * Rule R-Assign.
+	 */
+	protected Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal w, Value v2) {
+		// Extract value being overwritten
+		Value v1 = S1.read(w);
+		// Perform the assignment
+		State S2 = S1.write(w, v2);
+		// Drop overwritten value (and any owned boxes)
+		State S3 = S2.drop(v1);
+		// Done
+		return new Pair<>(S3, Unit);
+	}
+
 	/**
 	 * Rule R-Declare.
 	 */
@@ -97,92 +160,38 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	}
 
 	/**
-	 * Rule R-Assign.
+	 * Rule R-Seq
 	 */
-	protected Pair<State, Term> reduceAssignment(State S1, Lifetime l, LVal lv, Value v) {
-		// Extract location, or throw exception otherwise
-		Reference lx = lv.locate(S1);
-		// Extract value being overwritten
-		Value v1 = S1.read(lx);
-		// Perform the assignment
-		State S2 = S1.write(lx, v);
-		// Drop overwritten value (and any owned boxes)
-		State S3 = S2.drop(v1);
-		// Done
-		return new Pair<>(S3, Unit);
+	protected Pair<State, Term> reduceSeq(State S1, Lifetime l, Term[] terms, Lifetime m) {
+		return new Pair<>(S1, new Term.Block(m, terms));
 	}
 
 	/**
-	 * Rule R-Copy.
+	 * Rule R-Block.
 	 */
-	protected Pair<State, Term> reduceCopy(State S, LVal lv) {
-		// Extract location, or throw exception otherwise
-		Reference lx = lv.locate(S);
-		// Read contents of cell at given location
-		Value v = S.read(lx);
-		// Done
-		return new Pair<>(S, v);
-	}
-
-	/**
-	 * Rule R-Move.
-	 */
-	protected Pair<State, Term> reduceMove(State S1, LVal lv) {
-	    // Determine location represented by lval
-		Reference lx = lv.locate(S1);
-		// Read contents of slot at given location
-		Value v = S1.read(lx);
-		// Apply destructive update
-		State S2 = S1.write(lx, null);
-		// Return value read
+	protected Pair<State, Term> reduceBlock(State S1, Lifetime l, Value v, Lifetime m) {
+		// Identify locations allocated in this lifetime
+		BitSet phi = S1.findAll(m);
+		// drop all matching locations
+		State S2 = S1.drop(phi);
+		//
 		return new Pair<>(S2, v);
 	}
 
-	/**
-	 * Rule R-Borrow.
-	 */
-	protected Pair<State, Term> reduceBorrow(State S, LVal s) {
-		// Locate operand
-		Reference lx = s.locate(S);
-		//
-		if (lx == null) {
-			throw new RuntimeException("invalid path \"" + s + "\"");
-		}
-		// NOTE: since this is a borrow, must obtain a reference to the location (i.e.
-		// something which is not also an owner of that location). Otherwise, we risk
-		// this borrow resulting in the location to which it refers being dropped.
-		return new Pair<>(S, lx.reference());
-	}
-
-	/**
-	 * Rule R-Box.
-	 */
-	protected Pair<State, Term> reduceBox(State S1, Value v, Lifetime global) {
-		// Allocate new location
-		Pair<State, Reference> pl = S1.allocate(global, v);
-		State S2 = pl.first();
-		Reference ln = pl.second();
-		// Done
-		return new Pair<>(S2, ln);
-	}
-
 	@Override
-	final protected Pair<State, Term> apply(State S1, Lifetime lifetime, Block b) {
+	final protected Pair<State, Term> apply(State S1, Lifetime l, Block b) {
 		final int n = b.size();
-		// Save current bindings so they can be restored
-		StackFrame outerFrame = S1.frame();
-		Term returnValue = Unit;
 		//
 		if (n > 0) {
 			Pair<State, Term> p = apply(S1, b.lifetime(), b.get(0));
 			Term s = p.second();
 			S1 = p.first();
-			if(s instanceof Value) {
-				if(n == 1) {
-					returnValue = s;
+			if (s instanceof Value) {
+				if (n == 1) {
+					return reduceBlock(S1, l, (Value) s, b.lifetime());
 				} else {
 					// Slice off head
-					return new Pair<>(S1, new Term.Block(b.lifetime(), slice(b, 1), b.attributes()));
+					return reduceSeq(S1,l,slice(b,1),b.lifetime());
 				}
 			} else {
 				// Statement hasn't completed
@@ -192,15 +201,10 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 				// Go around again
 				return new Pair<>(S1, new Term.Block(b.lifetime(), stmts, b.attributes()));
 			}
+		} else {
+			// Empty block
+			return reduceBlock(S1, l, Unit, b.lifetime());
 		}
-		// drop all bindings created within block
-		State S2 = new State(outerFrame, S1.store());
-		// Identify locations allocated in this lifetime
-		BitSet phi = S2.findAll(b.lifetime());
-		// drop all matching locations
-		State S3 = S2.drop(phi);
-		//
-		return new Pair<>(S3, returnValue);
 	}
 
 	@Override
@@ -236,15 +240,15 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 
 	@Override
 	final protected Pair<State, Term> apply(State S, Lifetime l, Term.Borrow e) {
-		return reduceBorrow(S, e.operand());
+		return reduceBorrow(S, l, e.operand());
 	}
 
 	@Override
 	protected Pair<State, Term> apply(State S, Lifetime l, Term.Access e) {
 		if(e.copy()) {
-			return reduceCopy(S, e.operand());
+			return reduceCopy(S, l, e.operand());
 		} else {
-			return reduceMove(S, e.operand());
+			return reduceMove(S, l, e.operand());
 		}
 	}
 
@@ -252,7 +256,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	final protected Pair<State, Term> apply(State S1, Lifetime l, Term.Box e) {
 		if (e.operand() instanceof Value) {
 			// Statement can be completely reduced
-			return reduceBox(S1, (Value) e.operand(), l.getRoot());
+			return reduceBox(S1, l, (Value) e.operand());
 		} else {
 			// Statement not ready to be reduced yet
 			Pair<State, Term> rhs = apply(S1, l, e.operand());

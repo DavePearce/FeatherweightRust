@@ -20,7 +20,7 @@ package featherweightrust.extensions;
 import java.util.Set;
 
 import featherweightrust.core.BorrowChecker;
-import featherweightrust.core.BorrowChecker.Cell;
+import featherweightrust.core.BorrowChecker.Slot;
 import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.LVal;
@@ -154,9 +154,9 @@ public class ControlFlow {
 		@Override
 		final protected Pair<State, Term> apply(State S, Lifetime l, Term.Access e) {
 			if(e.copy() || e.temporary()) {
-				return reduceCopy(S, e.operand());
+				return reduceCopy(S, l, e.operand());
 			} else {
-				return reduceMove(S, e.operand());
+				return reduceMove(S, l, e.operand());
 			}
 		}
 
@@ -240,8 +240,8 @@ public class ControlFlow {
 			self.check(lhsBindings.equals(rhsBindings), INVALID_ENVIRONMENT_KEYS, e);
 			// Join all keys
 			for(String key : lhsBindings) {
-				Cell Cl = lhs.get(key);
-				Cell Cr = rhs.get(key);
+				Slot Cl = lhs.get(key);
+				Slot Cr = rhs.get(key);
 				// Sanity check lifetimes match
 				self.check(Cl.lifetime().equals(Cr.lifetime()), INVALID_ENVIRONMENT_CELLS, e);
 				// Check types are compatible
@@ -286,7 +286,7 @@ public class ControlFlow {
 		public Pair<Environment, Type> readTemporary(Environment R, LVal lv) {
 			final String x = lv.name();
 			// Extract target cell
-			Cell Cx = R.get(x);
+			Slot Cx = R.get(x);
 			check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
 			// Determine type being read
 			Type T2 = typeOf(R,lv);

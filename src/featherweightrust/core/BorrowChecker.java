@@ -56,7 +56,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	public final static String CANNOT_MOVEOUT_THROUGH_BORROW = "cannot move out through borrow";
 	public final static String VARIABLE_ALREADY_DECLARED = "variable already declared";
 	public final static String BORROWED_VARIABLE_ASSIGNMENT = "cannot assign because borrowed";
-	public final static String NOTWITHIN_VARIABLE_ASSIGNMENT = "cannot assign because lifetime not within";
+	public final static String NOTWITHIN_VARIABLE_ASSIGNMENT = "lifetime not within";
 	public final static String INCOMPATIBLE_TYPE = "incompatible type";
 	public final static String EXPECTED_REFERENCE = "expected reference type";
 	public final static String EXPECTED_MUTABLE_BORROW = "expected mutable borrow";
@@ -220,9 +220,12 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 */
 	@Override
 	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Block t) {
+		Term last = t.size() == 0 ? t : t.get(t.size()-1);
 		Pair<Environment, Type> p = apply(R1, t.lifetime(), t.toArray());
 		Environment R2 = p.first();
 		Type T = p.second();
+		// lifetime check
+		check(T.within(this, R2, l), NOTWITHIN_VARIABLE_ASSIGNMENT, last);
 		//
 		Environment R3 = drop(R2, t.lifetime());
 		//

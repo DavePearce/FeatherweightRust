@@ -190,6 +190,23 @@ public class CoreTests {
 		check(input,Value.Unit);
 	}
 
+	@Test
+	public void test_0x0019() throws IOException {
+		String input = "{ { 1 } }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_0x0020() throws IOException {
+		String input = "{ { let mut x = 123; x } }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
+	public void test_0x0021() throws IOException {
+		String input = "{ let mut x = 123; { x } }";
+		check(input,OneTwoThree);
+	}
 
 	@Test
 	public void test_0x0050() throws IOException {
@@ -250,6 +267,7 @@ public class CoreTests {
 		String input = "{ let mut x = 0 ; *x = 0 }";
 		checkInvalid(input);
 	}
+
 
 	// ==============================================================
 	// Allocation Examples
@@ -405,6 +423,11 @@ public class CoreTests {
 		check(input, OneTwoThree);
 	}
 
+	@Test
+	public void test_0x0207() throws IOException {
+		String input = "{ let mut x = 123; let mut p = { &x } ; !*p } }";
+		check(input, OneTwoThree);
+	}
 
 	@Test
 	public void test_0x0250() throws IOException {
@@ -475,6 +498,47 @@ public class CoreTests {
 	@Test
 	public void test_0x025B() throws IOException {
 		String input = "{ let mut x = 123; let mut y = &x; let mut z = &mut x; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x025C() throws IOException {
+		String input = "{ let mut x = 123; &x }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x025D() throws IOException {
+		String input = "{ { let mut x = 123; &x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x025E() throws IOException {
+		String input = "{ let mut x = 123; { &x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x025F() throws IOException {
+		String input = "{ let mut x = 123; let mut y = &x; y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x025G() throws IOException {
+		String input = "{ { let mut x = 123; let mut y = &x; y } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x025H() throws IOException {
+		String input = "{ let mut x = 123; let mut y = &x; { y } }";
+		checkInvalid(input);
+	}
+	@Test
+	public void test_0x025I() throws IOException {
+		String input = "{ { let mut x = 123; } &x }";
 		checkInvalid(input);
 	}
 
@@ -556,6 +620,12 @@ public class CoreTests {
 
 	@Test
 	public void test_0x030C() throws IOException {
+		String input = "{ let mut x = 123; let mut p = { &mut x } ; !*p } }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
+	public void test_0x0349() throws IOException {
 		// NOTE: this is accepted by rust!
 		String input = "{ let mut x = 0 ; let mut y = &mut x ; y = &mut x }";
 		checkInvalid(input);
@@ -967,6 +1037,47 @@ public class CoreTests {
 	@Test
 	public void test_0x038B() throws IOException {
 		String input = "{ let mut x = 1; let mut y = &x; let mut z = &mut y; **z = 1; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x038C() throws IOException {
+		String input = "{ let mut x = 123; &mut x }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x038D() throws IOException {
+		String input = "{ { let mut x = 123; &mut x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x038E() throws IOException {
+		String input = "{ let mut x = 123; { &mut x } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x038F() throws IOException {
+		String input = "{ let mut x = 123; let mut y = &mut x; y }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x038G() throws IOException {
+		String input = "{ { let mut x = 123; let mut y = &mut x; y } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x038H() throws IOException {
+		String input = "{ let mut x = 123; let mut y = &mut x; { y } }";
+		checkInvalid(input);
+	}
+	@Test
+	public void test_0x038I() throws IOException {
+		String input = "{ { let mut x = 123; } &mut x }";
 		checkInvalid(input);
 	}
 

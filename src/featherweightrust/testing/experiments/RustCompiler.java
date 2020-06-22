@@ -77,6 +77,8 @@ public final class RustCompiler {
 		// ===================================================
 		ArrayList<String> command = new ArrayList<>();
 		command.add(rust_cmd);
+		command.add("-C");
+		command.add("opt-level=0");
 		command.add("-A");
 		command.add("unused-assignments");
 		command.add("-A");

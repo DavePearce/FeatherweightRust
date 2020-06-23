@@ -245,8 +245,12 @@ public class Util {
 			LVal[] nlvals = new LVal[lvals.length];
 			for(int i=0;i!=lvals.length;++i) {
 				LVal ith = lvals[i];
-				Path p = Path.DEREF.append(ith.path());
-				nlvals[i] = new LVal(ith.name(), p);
+				if(ith.path().size() > 5) {
+					return null;
+				} else {
+					Path p = Path.DEREF.append(ith.path());
+					nlvals[i] = new LVal(ith.name(), p);
+				}
 			}
 			return new Type.Borrow(b.isMutable(),nlvals);
 		}
@@ -426,7 +430,7 @@ public class Util {
 	public static void main(String[] args) throws IOException {
 //		String input = "{ let mut x = box 0 ; { let mut y = box &*x ; *y = &x } }";
 //		String input = "{ let mut x = box 0 ; { let mut y = box &*x ; y = box &*y } }";
-		String input = "{ let mut x = box 0 ; { let mut y = &*x ; y = &*y } }";
+		String input = "{ let mut x = 0 ; { let mut y = &mut x ; let mut z = &mut *y ; z = y } }";
 		Term.Block program = parse(input);
 		System.out.println("DEREF COERCION: " + requiresDerefCoercions(program));
 		new BorrowChecker(true,input).apply(BorrowChecker.EMPTY_ENVIRONMENT, new Lifetime(), program);

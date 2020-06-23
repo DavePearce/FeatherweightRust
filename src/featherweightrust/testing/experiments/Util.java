@@ -132,7 +132,7 @@ public class Util {
 		try {
 			checker.apply(BorrowChecker.EMPTY_ENVIRONMENT, ProgramSpace.ROOT, b);
 			return true;
-		} catch (SyntaxError e) {
+		} catch (Exception e) {
 			return false;
 		}
 	}
@@ -428,11 +428,19 @@ public class Util {
 	}
 
 	public static void main(String[] args) throws IOException {
-//		String input = "{ let mut x = box 0 ; { let mut y = box &*x ; *y = &x } }";
-//		String input = "{ let mut x = box 0 ; { let mut y = box &*x ; y = box &*y } }";
-		String input = "{ let mut x = 0 ; { let mut y = &mut x ; let mut z = &mut *y ; z = y } }";
-		Term.Block program = parse(input);
-		System.out.println("DEREF COERCION: " + requiresDerefCoercions(program));
-		new BorrowChecker(true,input).apply(BorrowChecker.EMPTY_ENVIRONMENT, new Lifetime(), program);
+		String inputs[] = {
+				"{ let mut x = 0 ; { let mut y = &x ; let mut z = &mut y ; *z = z } }",
+				 };
+				for(int i=0;i!=inputs.length;++i) {
+					Term.Block program = parse(inputs[i]);
+					try {
+						System.out.println("GOT: " + requiresDerefCoercions(program));
+						new BorrowChecker(true,inputs[i]).apply(BorrowChecker.EMPTY_ENVIRONMENT, new Lifetime(), program);
+					} catch(SyntaxError e) {
+						System.out.println("SYNTAXERROR(" + i + "): " + inputs[i]);
+					} catch(Exception e) {
+						System.out.println("EXCEPTION(" + i + "): " + inputs[i]);
+					}
+				}
 	}
 }

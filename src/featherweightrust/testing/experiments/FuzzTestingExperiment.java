@@ -76,7 +76,7 @@ public class FuzzTestingExperiment {
 	/**
 	 * Number of programs to pass into RUSTC in one go.
 	 */
-	private static final int RUSTC_BATCHSIZE = 100;
+	private static final int RUSTC_BATCHSIZE = 20;
 
 	/**
 	 * Command-line options

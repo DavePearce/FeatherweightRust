@@ -169,8 +169,11 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	/**
 	 * Rule R-Seq
 	 */
-	protected Pair<State, Term> reduceSeq(State S1, Lifetime l, Term[] terms, Lifetime m) {
-		return new Pair<>(S1, new Term.Block(m, terms));
+	protected Pair<State, Term> reduceSeq(State S1, Lifetime l, Value v, Term[] terms, Lifetime m) {
+		// Drop value (and any owned boxes)
+		State S2 = S1.drop(v);
+		// Done
+		return new Pair<>(S2, new Term.Block(m, terms));
 	}
 
 	/**
@@ -198,7 +201,7 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 					return reduceBlock(S1, l, (Value) s, b.lifetime());
 				} else {
 					// Slice off head
-					return reduceSeq(S1,l,slice(b,1),b.lifetime());
+					return reduceSeq(S1,l,(Value) s, slice(b,1),b.lifetime());
 				}
 			} else {
 				// Statement hasn't completed

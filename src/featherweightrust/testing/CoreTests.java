@@ -209,6 +209,24 @@ public class CoreTests {
 	}
 
 	@Test
+	public void test_0x0022() throws IOException {
+		String input = "{ box 123 ; 1 }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_0x0023() throws IOException {
+		String input = "{ let mut x = box 123 ; x ; 1 }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_0x0024() throws IOException {
+		String input = "{ let mut x = 123 ; box &x ; x }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
 	public void test_0x0050() throws IOException {
 		String input = "{ let mut x = 123; let mut y = x; x }";
 		checkInvalid(input);
@@ -267,7 +285,17 @@ public class CoreTests {
 		String input = "{ let mut x = 0 ; *x = 0 }";
 		checkInvalid(input);
 	}
+	@Test
+	public void test_0x0060() throws IOException {
+		String input = "{ let mut x = box 1; x; x }";
+		checkInvalid(input);
+	}
 
+	@Test
+	public void test_0x0061() throws IOException {
+		String input = "{ let mut x = box 1; let mut y = &x; x; *y }";
+		checkInvalid(input);
+	}
 
 	// ==============================================================
 	// Allocation Examples

@@ -152,36 +152,6 @@ public class ControlFlowTests {
 	}
 
 	@Test
-	public void test_0x016() throws IOException {
-		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y1 = &mut x1; let mut y2 = &mut x2; if y1 == y2 { } else { } }";
-		check(input,Unit);
-	}
-
-	@Test
-	public void test_0x017() throws IOException {
-		String input = "{ let mut x1 = box 1; if x1 == x1 { } else { } }";
-		check(input,Unit);
-	}
-
-	@Test
-	public void test_0x018() throws IOException {
-		String input = "{ let mut x1 = box 1; let mut x2 = box 2; if x1 == x2 { } else { } }";
-		check(input,Unit);
-	}
-
-	@Test
-	public void test_0x019() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 1; if &mut x == &mut y { 1 } else { 2 } }";
-		check(input,Two);
-	}
-
-	@Test
-	public void test_0x020() throws IOException {
-		String input = "{ let mut x = 1; let mut y = 1; if &mut x == &mut y { 1 } else { 2 } x }";
-		check(input,One);
-	}
-
-	@Test
 	public void test_0x050() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 2; let mut z = &y; if x == x { z = &x; } else { } let mut w = *z; w }";
 		checkInvalid(input);
@@ -341,6 +311,38 @@ public class ControlFlowTests {
 		String input = "{ let mut x = 1; if &mut x == &mut x { } else { } }";
 		checkInvalid(input);
 	}
+
+
+	@Test
+	public void test_0x06D() throws IOException {
+		String input = "{ let mut x1 = 1; let mut x2 = 2; let mut y1 = &mut x1; let mut y2 = &mut x2; if y1 == y2 { } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x06E() throws IOException {
+		String input = "{ let mut x1 = box 1; if x1 == x1 { } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x06F() throws IOException {
+		String input = "{ let mut x1 = box 1; let mut x2 = box 2; if x1 == x2 { } else { } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x070() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 1; if &mut x == &mut y { 1 } else { 2 } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x071() throws IOException {
+		String input = "{ let mut x = 1; let mut y = 1; if &mut x == &mut y { 1 } else { 2 } x }";
+		checkInvalid(input);
+	}
+
 
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility

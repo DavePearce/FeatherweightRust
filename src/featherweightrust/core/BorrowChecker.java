@@ -290,7 +290,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 * @param T The type of the operand being moved / copied.
 	 * @return
 	 */
-	protected boolean isCopy(Term.Access t, Type T) {
+	public boolean isCopy(Term.Access t, Type T) {
 		if (copyInference) {
 			boolean r = T.copyable();
 			t.infer(r ? Term.Access.Kind.COPY : Term.Access.Kind.MOVE);

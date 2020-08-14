@@ -219,6 +219,8 @@ public class ControlFlow {
 			Environment R4 = R3.remove(v);
 			// Check operands are compatible
 			self.check(self.compatible(R4, Tx, Ty), BorrowChecker.INCOMPATIBLE_TYPE, t);
+			self.check(Tx.copyable(), BorrowChecker.LVAL_NOT_COPY, t.leftHandSide());
+			self.check(Ty.copyable(), BorrowChecker.LVAL_NOT_COPY, t.rightHandSide());
 			// Type true and false blocks
 			Pair<Environment, Type> pTrue = self.apply(R4, l, t.trueBlock());
 			Pair<Environment, Type> pFalse = self.apply(R4, l, t.falseBlock());

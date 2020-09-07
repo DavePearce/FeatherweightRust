@@ -83,7 +83,7 @@ public class Lexer {
 			} else if (Character.isWhitespace(c)) {
 				skipWhitespace();
 			} else {
-				syntaxError("syntax error");
+				syntaxError("syntax error at '" + c + "'");
 			}
 		}
 
@@ -105,7 +105,7 @@ public class Lexer {
 		return new Int(r, input.substring(start, pos), start);
 	}
 
-	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', '!', '.', '?' };
+	static final char[] opStarts = { '&', ',', '(', ')', '{', '}', '*', '=', ';', ':', '!', '.', '?', '-', '[', '\'' };
 
 	public boolean isOperatorStart(char c) {
 		for (char o : opStarts) {
@@ -125,6 +125,8 @@ public class Lexer {
 			return new Comma(pos++);
 		} else if (c == ';') {
 			return new SemiColon(pos++);
+		}  else if (c == ':') {
+			return new Colon(pos++);
 		} else if (c == '(') {
 			return new LeftBrace(pos++);
 		} else if (c == ')') {
@@ -146,6 +148,8 @@ public class Lexer {
 			return new Dot(pos++);
 		} else if (c == '?') {
 			return new QuestionMark(pos++);
+		} else if (c == '\'') {
+			return new Quote(pos++);
 		} else if (c == '!') {
 			if((pos+1) < input.length() && input.charAt(pos+1) == '=' ) {
 				pos = pos + 2;
@@ -153,13 +157,23 @@ public class Lexer {
 			} else {
 				return new Shreak(pos++);
 			}
+		} else if (c == '-') {
+			if((pos+1) < input.length() && input.charAt(pos+1) == '>' ) {
+				pos = pos + 2;
+				return new RightArrow(pos-2);
+			}
+		} else if (c == '[') {
+			if((pos+1) < input.length() && input.charAt(pos+1) == ']' ) {
+				pos = pos + 2;
+				return new Box(pos-2);
+			}
 		}
 
 		syntaxError("unknown operator encountered: " + c);
 		return null;
 	}
 
-	public static final String[] keywords = {  "int", "let", "mut", "box", "if", "else", "while", "do" };
+	public static final String[] keywords = {  "int", "let", "mut", "box", "if", "else", "while", "do", "fn", "mut" };
 
 	public Token scanIdentifier() {
 		int start = pos;
@@ -302,6 +316,12 @@ public class Lexer {
 		}
 	}
 
+	public static class Colon extends Token {
+		public Colon(int pos) {
+			super(":", pos);
+		}
+	}
+
 	public static class SemiColon extends Token {
 		public SemiColon(int pos) {
 			super(";", pos);
@@ -351,6 +371,18 @@ public class Lexer {
 	}
 
 
+	public static class Box extends Token {
+		public Box(int pos) {
+			super("[]", pos);
+		}
+	}
+
+	public static class RightArrow extends Token {
+		public RightArrow(int pos) {
+			super("->", pos);
+		}
+	}
+
 	public static class Star extends Token {
 		public Star(int pos) {
 			super("*", pos);
@@ -366,6 +398,13 @@ public class Lexer {
 	public static class QuestionMark extends Token {
 		public QuestionMark(int pos) {
 			super("?", pos);
+		}
+	}
+
+
+	public static class Quote extends Token {
+		public Quote(int pos) {
+			super("'", pos);
 		}
 	}
 }

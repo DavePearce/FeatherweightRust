@@ -1503,15 +1503,15 @@ public class Syntax {
 	public static class Lifetime {
 		private static int LIFETIME_COUNTER = 0;
 		private final int index;
-		private final Lifetime parent;
+		private Lifetime[] parents;
 
 		public Lifetime() {
-			this.parent = null;
+			this.parents = new Lifetime[0];
 			this.index = LIFETIME_COUNTER++;
 		}
 
-		public Lifetime(Lifetime parent) {
-			this.parent = parent;
+		public Lifetime(Lifetime... parents) {
+			this.parents = parents;
 			this.index = LIFETIME_COUNTER++;
 		}
 
@@ -1523,14 +1523,19 @@ public class Syntax {
 		 * @return
 		 */
 		public boolean contains(Lifetime l) {
-			if(l == null) {
+			if (l == null) {
 				return false;
 			} else if (l == this) {
 				// Base case
 				return true;
 			} else {
 				// Recursive case
-				return contains(l.parent);
+				for (int i = 0; i != l.parents.length; ++i) {
+					if (contains(l.parents[i])) {
+						return true;
+					}
+				}
+				return false;
 			}
 		}
 
@@ -1540,10 +1545,10 @@ public class Syntax {
 		 * @return
 		 */
 		public Lifetime getRoot() {
-			if (parent == null) {
+			if (parents.length == 0) {
 				return this;
 			} else {
-				return parent.getRoot();
+				return parents[0].getRoot();
 			}
 		}
 
@@ -1555,6 +1560,21 @@ public class Syntax {
 		public Lifetime freshWithin() {
 			// Create the new lifetime
 			return new Lifetime(this);
+		}
+
+		/**
+		 * Assert that this lifetime is within a given lifetime.
+		 *
+		 * @param l
+		 */
+		public void assertWithin(Lifetime l) {
+			// Check whether contraint already exists
+			if(!l.contains(this)) {
+				// Nope
+				final int n = parents.length;
+				this.parents = Arrays.copyOf(parents, n + 1);
+				this.parents[n] = l;
+			}
 		}
 
 		@Override

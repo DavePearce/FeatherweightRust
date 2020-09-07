@@ -28,8 +28,11 @@ import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.core.Syntax.Term.Access;
 import featherweightrust.extensions.ControlFlow;
+import featherweightrust.extensions.Functions.Syntax.FunctionDeclaration;
+import featherweightrust.extensions.Functions.Syntax.Signature;
 import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
 
@@ -43,6 +46,65 @@ public class Parser {
 	public Parser(String sourcefile, List<Token> tokens) {
 		this.sourcefile = sourcefile;
 		this.tokens = new ArrayList<>(tokens);
+	}
+
+	public List<FunctionDeclaration> parseDeclarations() {
+		ArrayList<FunctionDeclaration> declarations = new ArrayList<>();
+		while (index < tokens.size() && tokens.get(index).text.equals("fn")) {
+			declarations.add(parseFunctionDeclaration());
+		}
+		return declarations;
+	}
+
+	public FunctionDeclaration parseFunctionDeclaration() {
+		matchKeyword("fn");
+		String name = matchIdentifier().text;
+		match("(");
+		ArrayList<Pair<String, Signature>> params = new ArrayList<>();
+		while (index < tokens.size() && !(tokens.get(index) instanceof RightBrace)) {
+			if (!params.isEmpty()) {
+				match(",");
+			}
+			String param = matchIdentifier().text;
+			match(":");
+			Signature sig = parseSignature();
+			params.add(new Pair<>(param, sig));
+		}
+		match(")");
+		Signature ret = new Signature.Unit(sourceAttr(index - 1, index - 1));
+		if(index < tokens.size() && (tokens.get(index) instanceof RightArrow)) {
+			match("->");
+			ret = parseSignature();
+		}
+		Lifetime globalLifetime = new Lifetime();
+		Term.Block body = parseStatementBlock(new Context(), globalLifetime);
+		Pair<String, Signature>[] params_array = params.toArray(new Pair[params.size()]);
+		return new FunctionDeclaration(name, params_array, ret, body);
+	}
+
+	public Signature parseSignature() {
+		int start = index;
+		Token lookahead = tokens.get(index);
+		//
+		if (lookahead.text.equals("int")) {
+			matchKeyword("int");
+			return new Signature.Int(sourceAttr(start, index - 1));
+		} else if(lookahead.text.equals("[]")) {
+			match("[]");
+			Signature operand = parseSignature();
+			return new Signature.Box(operand,sourceAttr(start, index - 1));
+		} else {
+			match("&");
+			match("'");
+			String lifetime = matchIdentifier().text;
+			boolean mut = false;
+			if(index < tokens.size() && tokens.get(index).text.equals("mut")) {
+				matchKeyword("mut");
+				mut = true;
+			}
+			Signature operand = parseSignature();
+			return new Signature.Borrow(lifetime, mut, operand,sourceAttr(start, index - 1));
+		}
 	}
 
 	/**

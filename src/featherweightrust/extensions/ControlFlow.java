@@ -180,7 +180,7 @@ public class ControlFlow {
 				// Construct term reduced by one step
 				Term t2 = new Syntax.IfElse(t1.eq, lhs, _rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
 				// Done
-				return new Pair<State, Term>(S2, t2);
+				return new Pair<>(S2, t2);
 			} else {
 				// Statement not ready to be reduced yet
 				Pair<State, Term> p = apply(S1, l, lhs);
@@ -189,7 +189,7 @@ public class ControlFlow {
 				// Construct term reduced by one step
 				Term t2 = new Syntax.IfElse(t1.eq, _lhs, rhs, t1.trueBlock(), t1.falseBlock(), t1.attributes());
 				// Done
-				return new Pair<State, Term>(S2, t2);
+				return new Pair<>(S2, t2);
 			}
 		}
 	}
@@ -299,7 +299,7 @@ public class ControlFlow {
 			// Check variable readable (e.g. not mutably borrowed)
 			check(!readProhibited(R, lv), LVAL_READ_PROHIBITED, lv);
 			// Done
-			return new Pair<Environment, Type>(R,T2);
+			return new Pair<>(R,T2);
 		}
 
 	}

@@ -152,6 +152,12 @@ public class ControlFlowTests {
 	}
 
 	@Test
+	public void test_0x016() throws IOException {
+		String input = "{ let mut a = 1; let mut x = 2; let mut y = 3; let mut p = &mut x; let mut q = &mut y; if a == a { p = &mut a; } else { q = &mut a; } }";
+		check(input, Unit);
+	}
+
+	@Test
 	public void test_0x050() throws IOException {
 		String input = "{ let mut x = 1; let mut y = 2; let mut z = &y; if x == x { z = &x; } else { } let mut w = *z; w }";
 		checkInvalid(input);
@@ -343,6 +349,11 @@ public class ControlFlowTests {
 		checkInvalid(input);
 	}
 
+	@Test
+	public void test_0x072() throws IOException {
+		String input = "{ let mut x = 1; let mut q = &mut x; { let mut y = 2; if y == y { } else { q = &mut y; } } !*q }";
+		checkInvalid(input);
+	}
 
 	public static void check(String input, Value output) throws IOException {
 		// Reuse existing checking facility

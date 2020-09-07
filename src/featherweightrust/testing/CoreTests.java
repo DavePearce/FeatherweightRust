@@ -653,6 +653,12 @@ public class CoreTests {
 	}
 
 	@Test
+	public void test_0x030D() throws IOException {
+		String input = "{ let mut x = 0; let mut y = 123; let mut p = &mut x ; { let mut q = &mut p; *q = &mut y; } !*p }";
+		check(input, OneTwoThree);
+	}
+
+	@Test
 	public void test_0x0349() throws IOException {
 		// NOTE: this is accepted by rust!
 		String input = "{ let mut x = 0 ; let mut y = &mut x ; y = &mut x }";

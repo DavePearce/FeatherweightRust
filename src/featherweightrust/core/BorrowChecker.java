@@ -146,14 +146,14 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			// Check available for reading
 			check(!readProhibited(R1, w), LVAL_NOT_READABLE, w);
 			// Done
-			return new Pair<Environment, Type>(R1, T);
+			return new Pair<>(R1, T);
 		} else {
 			// Check available for writing
 			check(!writeProhibited(R1, w), LVAL_NOT_WRITEABLE, w);
 			// Apply destructive update
 			Environment R2 = move(R1,w);
 			// Done
-			return new Pair<Environment, Type>(R2, T);
+			return new Pair<>(R2, T);
 		}
 	}
 
@@ -408,7 +408,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 				// compiler.
 				Pair<Environment, Type> r = update(R, T.element(), p, i + 1, T2, true);
 				// Done
-				return new Pair<Environment, Type>(r.first(), new Type.Box(r.second()));
+				return new Pair<>(r.first(), new Type.Box(r.second()));
 			} else {
 				Type.Borrow T = (Type.Borrow) T1;
 				check(T.isMutable(), LVAL_NOT_MUTABLE, p);

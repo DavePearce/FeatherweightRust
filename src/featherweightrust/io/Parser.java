@@ -179,7 +179,9 @@ public class Parser {
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
 			t = parseBox(context, lifetime, consumed);
-		} else {
+		} else if (lookahead instanceof Identifier &&) { 
+		
+	} else {
 			t = parseAssignmentOrDereference(context, lifetime, consumed);
 		}
 		// Done

@@ -46,42 +46,42 @@ public class FunctionTests {
 	@Test
 	public void test_0x001() throws IOException {
 		String input = "fn id(x : int) -> int { x }";
-		input += " { 1 }";
+		input += " { id(1) }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x002() throws IOException {
 		String input = "fn id(x : []int) -> []int { x }";
-		input += " { 1 }";
+		input += " { let mut p = id(box 1); *p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x003() throws IOException {
 		String input = "fn id(x : &'a int) -> &'a int { x }";
-		input += " { 1 }";
+		input += " { let mut v = 1; let mut p = id(&v); *p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x004() throws IOException {
 		String input = "fn id(x : &'a mut int) -> &'a mut int { x }";
-		input += " { 1 }";
+		input += " { let mut v = 1; let mut p = id(&mut v); *p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x005() throws IOException {
 		String input = "fn id(x : &'a &'b int) -> &'a &'b int { x }";
-		input += " { 1 }";
+		input += " { let mut v = 1; let mut u = &v; let mut p = id(&u); **p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x006() throws IOException {
 		String input = "fn id(x : &'a mut &'b int) -> &'a mut &'b int { x }";
-		input += " { 1 }";
+		input += " { let mut v = 1; let mut u = &v; let mut p = id(&mut u); **p }";
 		check(input,One);
 	}
 

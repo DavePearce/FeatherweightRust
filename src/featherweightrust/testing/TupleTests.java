@@ -332,6 +332,13 @@ public class TupleTests {
 	}
 
 	@Test
+	public void test_0x0031() throws IOException {
+		// test for carry typing
+		String input = "{ let mut x = 1; { let mut y = (&x,&x); } let mut z = &mut x; !*z }";
+		check(input,One);
+	}
+
+	@Test
 	public void test_0x0050() throws IOException {
 		String input = "{ let mut x = (); }";
 		checkInvalid(input);

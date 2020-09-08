@@ -226,7 +226,7 @@ public class Syntax {
 					}
 					contents += terms[i];
 				}
-				return "{ " + contents + " }";
+				return "{ " + contents + " }@" + lifetime;
 			}
 
 			public static Block construct(Lifetime lifetime, List<Term> items) {

@@ -350,7 +350,7 @@ public class Tuples {
 				//
 				Term[] nelements = Arrays.copyOf(elements, elements.length);
 				nelements[i] = p.second();
-				return new Pair<>(p.first(), new Syntax.TupleTerm<Term>(nelements));
+				return new Pair<>(p.first(), new Syntax.TupleTerm<>(nelements));
 			}
 		}
 
@@ -369,26 +369,10 @@ public class Tuples {
 		}
 
 		public Pair<Environment, Type> apply(Environment R1, Lifetime l, Syntax.TupleTerm<?> t) {
-			Term[] elements = t.terms;
-			String[] vars = BorrowChecker.fresh(elements.length);
-			Type[] types = new Type[elements.length];
-			Environment Rn = R1;
-			// Type each element individually
-			for(int i=0;i!=elements.length;++i) {
-				Term ith = elements[i];
-				// Type left-hand side
-				Pair<Environment, Type> p1 = self.apply(Rn, l, ith);
-				Type Tn = p1.second();
-				Rn = p1.first();
-				// Add type into environment temporarily
-				Rn = Rn.put(vars[i], Tn, l.getRoot());
-				//
-				types[i] = p1.second();
-			}
-			// Remove all temporary types
-			Environment R2 = Rn.remove(vars);
+			// Apply "carry typing"
+			Pair<Environment,Type[]> p = self.carry(R1, l, t.terms);
 			// Done
-			return new Pair<>(R2, new Syntax.TupleType(types));
+			return new Pair<>(p.first(), new Syntax.TupleType(p.second()));
 		}
 	}
 
@@ -502,7 +486,7 @@ public class Tuples {
 	 * @param items
 	 * @return
 	 */
-	private static int firstNonValue(Term[] items) {
+	public static int firstNonValue(Term[] items) {
 		for(int i=0;i!=items.length;++i) {
 			if(!(items[i] instanceof Value)) {
 				return i;

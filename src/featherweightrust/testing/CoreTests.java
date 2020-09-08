@@ -404,6 +404,12 @@ public class CoreTests {
 	}
 
 	@Test
+	public void test_0x0111() throws IOException {
+		String input = "{ let mut x = { box 123 }; *x }";
+		check(input,OneTwoThree);
+	}
+
+	@Test
 	public void test_0x0150() throws IOException {
 		String input = "{ let mut y = 123; let mut z = box &y; let mut x = *z; *x }";
 		checkInvalid(input);

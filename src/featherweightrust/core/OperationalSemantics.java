@@ -51,7 +51,7 @@ import featherweightrust.util.SyntaxError;
  *
  */
 public class OperationalSemantics extends AbstractTransformer<AbstractMachine.State, Term, OperationalSemantics.Extension> {
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = true;
 
 	public OperationalSemantics(Extension... extensions) {
 		super(extensions);
@@ -180,10 +180,8 @@ public class OperationalSemantics extends AbstractTransformer<AbstractMachine.St
 	 * Rule R-Block.
 	 */
 	protected Pair<State, Term> reduceBlock(State S1, Lifetime l, Value v, Lifetime m) {
-		// Identify locations allocated in this lifetime
-		BitSet phi = S1.findAll(m);
 		// drop all matching locations
-		State S2 = S1.drop(phi);
+		State S2 = S1.drop(m,v);
 		//
 		return new Pair<>(S2, v);
 	}

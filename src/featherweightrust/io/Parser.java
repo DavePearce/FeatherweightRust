@@ -28,6 +28,7 @@ import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.core.Syntax.Term.Access;
 import featherweightrust.extensions.ControlFlow;
+import featherweightrust.extensions.Functions;
 import featherweightrust.extensions.Functions.Syntax.FunctionDeclaration;
 import featherweightrust.extensions.Functions.Syntax.Signature;
 import featherweightrust.extensions.Tuples;
@@ -179,9 +180,9 @@ public class Parser {
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
 			t = parseBox(context, lifetime, consumed);
-		} else if (lookahead instanceof Identifier &&) { 
-		
-	} else {
+		} else if (lookahead instanceof Identifier && (index+1) < tokens.size() && tokens.get(index+1) instanceof LeftBrace) {
+			t = parseInvocation(context, lifetime, consumed);
+		} else {
 			t = parseAssignmentOrDereference(context, lifetime, consumed);
 		}
 		// Done
@@ -251,6 +252,32 @@ public class Parser {
 		Term.Block falseBlock = parseStatementBlock(context,lifetime);
 		// Return extended term
 		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
+	}
+
+	/**
+	 * Parse a function invocation.
+	 *
+	 * @param context
+	 * @param lifetime
+	 * @param consumed
+	 * @return
+	 */
+	public Term parseInvocation(Context context, Lifetime lifetime, boolean consumed) {
+		int start = index;
+		// match function name
+		String name = matchIdentifier().text;
+		ArrayList<Term> arguments = new ArrayList<>();
+		// parse argument list
+		match("(");
+		while(index < tokens.size() && !(tokens.get(index) instanceof RightBrace)) {
+			if(arguments.size() > 0) {
+				match(",");
+			}
+			arguments.add(parseTerm(context, lifetime, consumed));
+		}
+		match(")");
+		Term[] args = arguments.toArray(new Term[arguments.size()]);
+		return new Functions.Syntax.Invoke(name, args, sourceAttr(start, index - 1));
 	}
 
 	public Term parseBracketedExpression(Context context, Lifetime lifetime, boolean consumed) {

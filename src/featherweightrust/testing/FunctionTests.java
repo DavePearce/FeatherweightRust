@@ -44,10 +44,45 @@ public class FunctionTests {
 	private static Value.Integer OneTwoThree = new Value.Integer(123);
 
 	@Test
+	public void test_0x000() throws IOException {
+		String input = "fn f() -> int { 1 }";
+		input += " { f() }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_0x000a() throws IOException {
+		String input = "fn f(x : int) -> int { 1 }";
+		input += " { let mut a = 1 ; f(a) }";
+		check(input,One);
+	}
+
+	@Test
 	public void test_0x001() throws IOException {
 		String input = "fn id(x : int) -> int { x }";
 		input += " { id(1) }";
 		check(input,One);
+	}
+
+	@Test
+	public void test_0x001b() throws IOException {
+		String input = "fn sel(x : int, y : int) -> int { x }";
+		input += " { sel(1,2) }";
+		check(input,One);
+	}
+
+	@Test
+	public void test_0x001c() throws IOException {
+		String input = "fn sel(x : int, y : int) -> int { y }";
+		input += " { sel(1,2) }";
+		check(input,Two);
+	}
+
+	@Test
+	public void test_0x001d() throws IOException {
+		String input = "fn id(x : int) -> int { x }";
+		input += " { let mut x = 2; id(1); x }";
+		check(input,Two);
 	}
 
 	@Test
@@ -237,7 +272,8 @@ public class FunctionTests {
 			// Execute block in outermost lifetime "*")
 			Pair<State, Term> state = new Pair<>(new State(),stmt);
 			// Execute continually until all reductions complete (or exception)
-			Term result = new Functions.Semantics(decls).execute(globalLifetime, state.second());
+			Term result = new OperationalSemantics(new Functions.Semantics(decls)).execute(globalLifetime,
+					state.second());
 			//
 			CoreTests.check(output, (Value) result);
 		} catch (SyntaxError e) {

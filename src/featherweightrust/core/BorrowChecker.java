@@ -24,6 +24,7 @@ import java.util.Set;
 
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
+import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Type;
@@ -274,6 +275,41 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 		check(!writeProhibited(R3, w), LVAL_WRITE_PROHIBITED, t.leftOperand());
 		//
 		return new Pair<>(R3, Type.Unit);
+	}
+
+	// ================================================================================
+	// Carry Typing
+	// ================================================================================
+
+	/**
+	 * Apply "carry typing" to a given sequence of terms.
+	 *
+	 * @param R1    Initial environment before left-most term
+	 * @param l     Enclosing lifetime
+	 * @param terms Sequence of terms
+	 * @return Final environment after right-most term, along with a type for each
+	 *         term.
+	 */
+	public Pair<Environment,Type[]> carry(Environment R1, Lifetime l, Term[] terms) {
+		String[] vars = BorrowChecker.fresh(terms.length);
+		Type[] types = new Type[terms.length];
+		Environment Rn = R1;
+		// Type each element individually
+		for(int i=0;i!=terms.length;++i) {
+			Term ith = terms[i];
+			// Type left-hand side
+			Pair<Environment, Type> p1 = apply(Rn, l, ith);
+			Type Tn = p1.second();
+			Rn = p1.first();
+			// Add type into environment temporarily
+			Rn = Rn.put(vars[i], Tn, l.getRoot());
+			//
+			types[i] = p1.second();
+		}
+		// Remove all temporary types
+		Environment R2 = Rn.remove(vars);
+		// Done
+		return new Pair<>(R2,types);
 	}
 
 	// ================================================================================

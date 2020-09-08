@@ -18,6 +18,7 @@
 package featherweightrust.extensions;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,14 +36,17 @@ import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
 import featherweightrust.core.Syntax.Type;
+import featherweightrust.core.Syntax.Value;
+import featherweightrust.extensions.ControlFlow.Syntax;
 import featherweightrust.extensions.Functions.Syntax.Signature;
 import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement;
+import featherweightrust.util.AbstractMachine.State;
 
 public class Functions {
 	public final static int DECL_fn = 40;
 	public final static int TERM_invoke = 41;
-
+	public final static String UNKNOWN_FUNCTION = "unknown function";
 	/**
 	 * Extensions to the core syntax of the language.
 	 *
@@ -122,6 +126,10 @@ public class Functions {
 				super(TERM_invoke, attributes);
 				this.name = name;
 				this.operands = operands;
+			}
+
+			public String getName() {
+				return name;
 			}
 
 			public Term[] getOperands() {
@@ -271,7 +279,7 @@ public class Functions {
 		}
 	}
 
-	public static class Semantics extends OperationalSemantics {
+	public static class Semantics extends OperationalSemantics.Extension {
 		private Map<String,Syntax.FunctionDeclaration> fns = new HashMap<>();
 
 		public Semantics(List<Syntax.FunctionDeclaration> decls) {
@@ -279,6 +287,75 @@ public class Functions {
 				Syntax.FunctionDeclaration ith = decls.get(i);
 				fns.put(ith.getName(), ith);
 			}
+		}
+
+
+		@Override
+		public Pair<State, Term> apply(State S, Lifetime l, Term t) {
+			if(t instanceof Syntax.Invoke) {
+				return apply(S, l, (Syntax.Invoke) t);
+			} else {
+				return null;
+			}
+		}
+
+		public Pair<State, Term> apply(State S, Lifetime l, Syntax.Invoke t) {
+			final Term[] arguments = t.operands;
+			// Determine whether all reduced
+			int i = Tuples.firstNonValue(arguments);
+			//
+			if(i < 0) {
+				// All operands fully reduced, so perform invocation
+				return invoke(S,l,t.name,t.operands);
+			} else {
+				Term ith = arguments[i];
+				// Reduce ith
+				Pair<State, Term> p = self.apply(S, l, ith);
+				// Done
+				Term[] nelements = Arrays.copyOf(arguments, arguments.length);
+				nelements[i] = p.second();
+				return new Pair<>(p.first(), new Syntax.Invoke(t.name, nelements));
+			}
+		}
+
+		private Pair<State, Term> invoke(State S, Lifetime l, String name, Term[] args) {
+			Syntax.FunctionDeclaration decl = fns.get(name);
+			// Extract parameters
+			Pair<String,Signature>[] params = decl.getParameters();
+			// Instantiate new lifetimes within this term
+			Term.Block body = instantiate(l,decl.getBody());
+			// Push empty stack frame
+			S = S.push(body.lifetime());
+			// Allocate parameters
+			for (int i = 0; i != args.length; ++i) {
+				Value ith = (Value) args[i];
+				Pair<State, Value.Reference> p = S.allocate(body.lifetime(), ith);
+				S = p.first().bind(params[i].first(), p.second());
+			}
+			// Done
+			return new Pair<>(S, body);
+		}
+
+		/**
+		 * Instantiate a given block with fresh lifetimes such that they respect the
+		 * existing (static) nesting and are all within the given lifetime.
+		 *
+		 * @param l
+		 * @param blk
+		 * @return
+		 */
+		private Term.Block instantiate(Lifetime l, Term.Block blk) {
+			Lifetime m = l.freshWithin();
+			Term[] stmts = new Term[blk.size()];
+			for (int i = 0; i != stmts.length; ++i) {
+				Term ith = blk.get(i);
+				if (ith instanceof Term.Block) {
+					stmts[i] = instantiate(m, (Term.Block) ith);
+				} else {
+					stmts[i] = ith;
+				}
+			}
+			return new Term.Block(m, stmts, blk.attributes());
 		}
 	}
 
@@ -294,7 +371,20 @@ public class Functions {
 
 		@Override
 		public Pair<Environment, Type> apply(Environment state, Lifetime lifetime, Term term) {
+			if(term instanceof Syntax.Invoke) {
+				return apply(state,lifetime,(Syntax.Invoke) term);
+			}
 			return null;
+		}
+
+		public Pair<Environment, Type> apply(Environment state, Lifetime lifetime, Syntax.Invoke term) {
+			Syntax.FunctionDeclaration decl = fns.get(term.getName());
+			self.check(decl != null, UNKNOWN_FUNCTION, term);
+			// Apply "carry typing" of arguments
+			Pair<Environment, Type[]> p = self.carry(state, lifetime, term.getOperands());
+			// FIXME: apply lifting constraints!!
+			Pair<Environment,Type> rt = decl.getReturn().lower(null, BorrowChecker.EMPTY_ENVIRONMENT);
+			return new Pair<>(p.first(), rt.second());
 		}
 	}
 

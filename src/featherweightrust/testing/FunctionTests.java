@@ -190,6 +190,20 @@ public class FunctionTests {
 	}
 
 	@Test
+	public void test_0x017() throws IOException {
+		String input = "fn f(x : &'a &'b int, y : &'a int) -> &'a int { *x }";
+		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,v); *w }";
+		check(input, One);
+	}
+
+	@Test
+	public void test_0x018() throws IOException {
+		String input = "fn f(x : &'a &'b int, y : &'a int) -> &'a int { y }";
+		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,v); *w }";
+		check(input, One);
+	}
+
+	@Test
 	public void test_0x050() throws IOException {
 		String input = "fn id(x : int) -> int { y }";
 		input += " { }";

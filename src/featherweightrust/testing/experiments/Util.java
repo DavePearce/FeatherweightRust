@@ -155,7 +155,7 @@ public class Util {
 		protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
 			LVal lv = t.leftOperand();
 			// NOTE: only works because don't generate expression blocks when fuzzing.
-			this.target = super.typeOf(R1, lv).concretize();
+			this.target = lv.typeOf(R1).first().concretize();
 			// Declaration check
 			check(R1.get(lv.name()) != null, UNDECLARED_VARIABLE, lv);
 			// First, look for nooperation
@@ -232,7 +232,7 @@ public class Util {
 						// Try deref coercion after
 						guesses.push(innerDeref(b));
 						// Try deref coercion before
-						guesses.push(typeOf(R, b.lvals()[0]));
+						guesses.push(b.lvals()[0].typeOf(R).first());
 					}
 				}
 				// Give up --- can't figure it out.
@@ -270,7 +270,7 @@ public class Util {
 			Type _target = target;
 			LVal lv = t.leftOperand();
 			try {
-				Type T1 = typeOf(R1, lv);
+				Type T1 = lv.typeOf(R1).first();
 				// Update type of lhs to be undefined
 				Environment R2 = write(R1,lv,T1.undefine(),true);
 				// Attempt to type check without lhs

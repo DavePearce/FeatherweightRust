@@ -20,7 +20,8 @@ package featherweightrust.core;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
-
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import featherweightrust.core.BorrowChecker.Slot;
 import featherweightrust.core.BorrowChecker.Environment;
@@ -32,6 +33,7 @@ import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.ArrayUtils;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement;
 import jmodelgen.core.Domain;
 import jmodelgen.core.Walker;
@@ -60,6 +62,7 @@ public class Syntax {
 
 		/**
 		 * An abstract term to be implemented by all other terms.
+		 *
 		 * @author David J. Pearce
 		 *
 		 */
@@ -154,7 +157,7 @@ public class Syntax {
 			public final Term rhs;
 
 			public Assignment(LVal lhs, Term rhs, Attribute... attributes) {
-				super(TERM_assignment,attributes);
+				super(TERM_assignment, attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -197,7 +200,7 @@ public class Syntax {
 			private final Term[] terms;
 
 			public Block(Lifetime lifetime, Term[] stmts, Attribute... attributes) {
-				super(TERM_block,attributes);
+				super(TERM_block, attributes);
 				this.lifetime = lifetime;
 				this.terms = stmts;
 			}
@@ -217,11 +220,12 @@ public class Syntax {
 			public Term[] toArray() {
 				return terms;
 			}
+
 			@Override
 			public String toString() {
 				String contents = "";
 				for (int i = 0; i != terms.length; ++i) {
-					if(i != 0) {
+					if (i != 0) {
 						contents += " ; ";
 					}
 					contents += terms[i];
@@ -233,8 +237,7 @@ public class Syntax {
 				return new Block(lifetime, items.toArray(new Term[items.size()]));
 			}
 
-			public static Domain.Big<Block> toBigDomain(Lifetime lifetime, int min, int max,
-					Domain.Big<Term> stmts) {
+			public static Domain.Big<Block> toBigDomain(Lifetime lifetime, int min, int max, Domain.Big<Term> stmts) {
 				return Domains.Adaptor(Domains.Array(min, max, stmts), (ss) -> new Block(lifetime, ss));
 			}
 
@@ -258,6 +261,7 @@ public class Syntax {
 				 */
 				TEMP,
 			}
+
 			private Kind kind;
 			private final LVal slice;
 
@@ -315,7 +319,7 @@ public class Syntax {
 
 			public static Term.Access construct(LVal lv, Boolean b) {
 				Kind kind = b ? Kind.MOVE : Kind.COPY;
-				return new Term.Access(kind,lv);
+				return new Term.Access(kind, lv);
 			}
 
 			public static Domain.Big<Access> toBigDomain(Domain.Big<LVal> subdomain) {
@@ -328,7 +332,7 @@ public class Syntax {
 			private final boolean mutable;
 
 			public Borrow(LVal operand, boolean mutable, Attribute... attributes) {
-				super(TERM_borrow,attributes);
+				super(TERM_borrow, attributes);
 				this.operand = operand;
 				this.mutable = mutable;
 			}
@@ -378,14 +382,14 @@ public class Syntax {
 
 			public static Term.Box construct(int dimension, Term operand) {
 				Term.Box b = new Term.Box(operand);
-				for(int i=1;i<=dimension;++i) {
+				for (int i = 1; i <= dimension; ++i) {
 					b = new Term.Box(b);
 				}
 				return b;
 			}
 
 			public static Domain.Big<Box> toBigDomain(int i, Domain.Big<Term> subdomain) {
-				return Domains.Adaptor(subdomain, t -> construct(i,t));
+				return Domains.Adaptor(subdomain, t -> construct(i, t));
 			}
 		}
 	}
@@ -472,7 +476,7 @@ public class Syntax {
 		public class Unit extends Atom {
 
 			public Unit(Attribute... attributes) {
-				super(TERM_unit,attributes);
+				super(TERM_unit, attributes);
 			}
 
 			@Override
@@ -495,7 +499,7 @@ public class Syntax {
 			private final int value;
 
 			public Integer(int value, Attribute... attributes) {
-				super(TERM_integer,attributes);
+				super(TERM_integer, attributes);
 				this.value = value;
 			}
 
@@ -614,7 +618,7 @@ public class Syntax {
 			public Reference at(int offset) {
 				int[] npath = Arrays.copyOf(path, path.length + 1);
 				npath[path.length] = offset;
-				return new Reference(address,npath);
+				return new Reference(address, npath);
 			}
 
 			@Override
@@ -634,7 +638,7 @@ public class Syntax {
 			@Override
 			public String toString() {
 				String p = "";
-				for(int i=0;i!=path.length;++i) {
+				for (int i = 0; i != path.length; ++i) {
 					p = p + ":" + path[i];
 				}
 				String q = owner() ? "+" : "";
@@ -715,6 +719,16 @@ public class Syntax {
 		public boolean prohibitsWriting(LVal lv);
 
 		/**
+		 * Extract a type component matching the given class and predicate.
+		 *
+		 * @param <T>
+		 * @param type
+		 * @param pred
+		 * @return
+		 */
+		public <T extends Type> T extract(Class<T> type, Predicate<T> pred);
+
+		/**
 		 * Constant representing the type void
 		 */
 		public static Type Unit = new Unit();
@@ -771,12 +785,21 @@ public class Syntax {
 
 			@Override
 			public Type union(Type t) {
-				if(t instanceof Undefined) {
+				if (t instanceof Undefined) {
 					return t.union(this);
-				} else if(equals(t)) {
+				} else if (equals(t)) {
 					return this;
 				} else {
 					throw new IllegalArgumentException("invalid union");
+				}
+			}
+
+			@Override
+			public <T extends Type> T extract(Class<T> type, Predicate<T> pred) {
+				if (type == getClass() && pred.test((T) this)) {
+					return (T) this;
+				} else {
+					return null;
 				}
 			}
 		}
@@ -818,7 +841,9 @@ public class Syntax {
 			}
 
 			@Override
-			public String toString() { return "int"; }
+			public String toString() {
+				return "int";
+			}
 		}
 
 		public static class Borrow extends AbstractAtom {
@@ -826,7 +851,7 @@ public class Syntax {
 			private final LVal[] lvals;
 
 			public Borrow(boolean mut, LVal item, Attribute... attributes) {
-				this(mut,new LVal[] {item}, attributes);
+				this(mut, new LVal[] { item }, attributes);
 			}
 
 			public Borrow(boolean mut, LVal[] paths, Attribute... attributes) {
@@ -840,7 +865,7 @@ public class Syntax {
 
 			@Override
 			public boolean prohibitsReading(LVal lv) {
-				if(mut) {
+				if (mut) {
 					// Only a mutable borrow can prohibit other borrows from being read.
 					return prohibitsWriting(lv);
 				}
@@ -886,11 +911,11 @@ public class Syntax {
 
 			@Override
 			public Type union(Type t) {
-				if(t instanceof Undefined) {
+				if (t instanceof Undefined) {
 					return t.union(this);
-				} else if(t instanceof Borrow) {
+				} else if (t instanceof Borrow) {
 					Type.Borrow b = (Type.Borrow) t;
-					if(mut == b.mut) {
+					if (mut == b.mut) {
 						// Append both sets of names together
 						LVal[] ps = ArrayUtils.append(lvals, b.lvals);
 						// Remove any duplicates and ensure result is sorted
@@ -908,7 +933,7 @@ public class Syntax {
 
 			@Override
 			public boolean equals(Object o) {
-				if(o instanceof Borrow) {
+				if (o instanceof Borrow) {
 					Borrow b = (Borrow) o;
 					return mut == b.mut && Arrays.equals(lvals, b.lvals);
 				}
@@ -929,13 +954,13 @@ public class Syntax {
 				}
 			}
 
-			private static String toString(LVal[]  slices) {
-				if(slices.length == 1) {
+			private static String toString(LVal[] slices) {
+				if (slices.length == 1) {
 					return slices[0].toString();
 				} else {
 					String r = "";
-					for(int i=0;i!=slices.length;++i) {
-						if(i != 0) {
+					for (int i = 0; i != slices.length; ++i) {
+						if (i != 0) {
 							r = r + ",";
 						}
 						r = r + slices[i];
@@ -990,7 +1015,7 @@ public class Syntax {
 
 			@Override
 			public Type union(Type t) {
-				if(t instanceof Undefined) {
+				if (t instanceof Undefined) {
 					return t.union(this);
 				} else if (t instanceof Type.Box) {
 					Type.Box b = (Type.Box) t;
@@ -1001,7 +1026,7 @@ public class Syntax {
 
 			@Override
 			public boolean equals(Object o) {
-				if(o instanceof Box) {
+				if (o instanceof Box) {
 					Box b = (Box) o;
 					return element.equals(b.element);
 				}
@@ -1012,7 +1037,6 @@ public class Syntax {
 			public int hashCode() {
 				return 123 ^ element.hashCode();
 			}
-
 
 			@Override
 			public String toString() {
@@ -1092,8 +1116,17 @@ public class Syntax {
 			}
 
 			@Override
+			public <T extends Type> T extract(Class<T> type, Predicate<T> pred) {
+				if (type == getClass() && pred.test((T) this)) {
+					return (T) this;
+				} else {
+					return null;
+				}
+			}
+
+			@Override
 			public boolean equals(Object o) {
-				if(o instanceof Undefined) {
+				if (o instanceof Undefined) {
 					Undefined e = (Undefined) o;
 					return type.equals(e.type);
 				}
@@ -1136,7 +1169,7 @@ public class Syntax {
 
 		@Override
 		public boolean equals(Object o) {
-			if(o instanceof LVal) {
+			if (o instanceof LVal) {
 				LVal s = (LVal) o;
 				return name.equals(s.name) && path.equals(s.path);
 			}
@@ -1146,6 +1179,43 @@ public class Syntax {
 		@Override
 		public int hashCode() {
 			return name.hashCode() ^ path.hashCode();
+		}
+
+		/**
+		 * <p>
+		 * Determine the type of this lval and smallest lifetime for which it is valid.
+		 * For example, the type of <code>x</code> in the environment
+		 * <code>{x->int}</code> is simply <code>int</code>. Likewise, the type of
+		 * <code>*x</code> in the environment <code>{x->[]int}</code> is also
+		 * <code>int</code>. If the lval is malformed with respect to the given
+		 * environment, then null is returned.
+		 * </p>
+		 * <p>
+		 * Also determines the smallest lifetime of a given lval. For example, consider
+		 * the following:
+		 * </p>
+		 *
+		 * <pre>
+		 * {
+		 *   let mut x = 1;
+		 *   let mut y = &mut x;
+		 *   {
+		 * 	   let mut z = &mut y;
+		 *   }^m
+		 * }^l
+		 * </pre>
+		 *
+		 * The lifetime of <code>x</code> and <code>*y</code> is <code>l</code>.
+		 * Likewise, <code>*z</code> and <code>**z</code> have lifetime <code>l</code>
+		 * whilst <code>z</code> has lifetime <code>m</code>.
+		 *
+		 * @param env
+		 * @return
+		 */
+		public Pair<Type, Lifetime> typeOf(BorrowChecker.Environment env) {
+			Slot Cx = env.get(name);
+			//
+			return (Cx == null) ? null : path.apply(env, Cx.type(), Cx.lifetime());
 		}
 
 		/**
@@ -1180,7 +1250,7 @@ public class Syntax {
 		@Override
 		public int compareTo(LVal s) {
 			int c = name.compareTo(s.name);
-			if(c == 0) {
+			if (c == 0) {
 				c = path.compareTo(s.path);
 			}
 			return c;
@@ -1193,7 +1263,7 @@ public class Syntax {
 
 		public static LVal construct(String name, boolean flag) {
 			Path path = flag ? Path.EMPTY : Path.DEREF;
-			return new LVal(name,path);
+			return new LVal(name, path);
 		}
 
 		public static Domain.Big<LVal> toBigDomain(Domain.Small<String> vars) {
@@ -1211,7 +1281,7 @@ public class Syntax {
 	public static class Path extends SyntacticElement.Impl implements Comparable<Path> {
 		public static Element DEREF_ELEMENT = new Deref();
 		public final static Path EMPTY = new Path();
-		public final static Path DEREF = new Path(new Path.Element[] {DEREF_ELEMENT});
+		public final static Path DEREF = new Path(new Path.Element[] { DEREF_ELEMENT });
 
 		/**
 		 * The sequence of elements making up this path
@@ -1219,7 +1289,7 @@ public class Syntax {
 		private final Element[] elements;
 
 		public Path(Attribute... attributes) {
-			this(new Element[0],attributes);
+			this(new Element[0], attributes);
 		}
 
 		public Path(Element[] elements, Attribute... attributes) {
@@ -1263,6 +1333,29 @@ public class Syntax {
 		}
 
 		/**
+		 * Apply this path to a given type, producing a potentially updated type. For
+		 * example, applying a boxed int to a dereference yields an int.
+		 *
+		 * @param env
+		 * @param t
+		 * @return
+		 */
+		public Pair<Type, Lifetime> apply(BorrowChecker.Environment env, Type T, Lifetime l) {
+			for (int i = 0; i != elements.length; ++i) {
+				Path.Element ith = elements[i];
+				Pair<Type, Lifetime> p = ith.apply(env, T, l);
+				// Sanity check for early termination
+				if (p == null) {
+					return null;
+				} else {
+					T = p.first();
+					l = p.second();
+				}
+			}
+			return new Pair<>(T, l);
+		}
+
+		/**
 		 * Determine whether two paths conflict. That is, represent potentially
 		 * overlapping locations. For example, variables <code>x</code> and
 		 * <code>y</code> do not conflict. Likewise, tuple accesses <code>x.0</code> and
@@ -1276,10 +1369,10 @@ public class Syntax {
 			// Determine smallest path length
 			final int n = Math.min(elements.length, p.elements.length);
 			// Iterate elements looking for something which doesn't conflict.
-			for(int i=0;i<n;++i) {
+			for (int i = 0; i < n; ++i) {
 				Element ith = elements[i];
 				Element pith = p.elements[i];
-				if(!ith.conflicts(pith)) {
+				if (!ith.conflicts(pith)) {
 					return false;
 				}
 			}
@@ -1303,7 +1396,7 @@ public class Syntax {
 
 		@Override
 		public boolean equals(Object o) {
-			if(o instanceof Path) {
+			if (o instanceof Path) {
 				Path p = (Path) o;
 				return Arrays.deepEquals(elements, p.elements);
 			}
@@ -1332,11 +1425,11 @@ public class Syntax {
 		}
 
 		public String toString(String src) {
-			for(int i=0;i!=elements.length;++i) {
-				if(i != 0) {
+			for (int i = 0; i != elements.length; ++i) {
+				if (i != 0) {
 					src = "(" + src + ")";
 				}
-			  src = elements[i].toString(src);
+				src = elements[i].toString(src);
 			}
 			return src;
 		}
@@ -1359,6 +1452,15 @@ public class Syntax {
 			 * @return
 			 */
 			public Reference apply(Store store, Reference loc);
+
+			/**
+			 * Apply this element to a given type.
+			 *
+			 * @param env
+			 * @param type
+			 * @return
+			 */
+			public Pair<Type, Lifetime> apply(BorrowChecker.Environment env, Type T, Lifetime l);
 
 			public String toString(String src);
 		}
@@ -1389,6 +1491,28 @@ public class Syntax {
 			}
 
 			@Override
+			public Pair<Type, Lifetime> apply(BorrowChecker.Environment env, Type type, Lifetime lifetime) {
+				if (type instanceof Type.Box) {
+					Type.Box b = (Type.Box) type;
+					return new Pair<>(b.element, lifetime);
+				} else if (type instanceof Type.Borrow) {
+					Type.Borrow b = (Type.Borrow) type;
+					LVal[] lvals = b.lvals();
+					Type T = null;
+					Lifetime l = null;
+					for (int i = 0; i != lvals.length; ++i) {
+						Pair<Type, Lifetime> ith = lvals[i].typeOf(env);
+						T = (T == null) ? ith.first() : T.union(ith.first());
+						l = (l == null) ? ith.second() : l.min(ith.second());
+					}
+					return new Pair<>(T, l);
+				} else {
+					// ill typed
+					return null;
+				}
+			}
+
+			@Override
 			public String toString(String src) {
 				return "*" + src;
 			}
@@ -1408,23 +1532,18 @@ public class Syntax {
 	/**
 	 * Construct a domain for terms with a maximum level of nesting.
 	 *
-	 * @param depth
-	 *            The maximum depth of block nesting.
-	 * @param width
-	 *            The maximum width of a block.
-	 * @param lifetime
-	 *            The lifetime of the enclosing block
-	 * @param ints
-	 *            The domain of integers to use
-	 * @param declared
-	 *            The set of variable names for variables which have already been
-	 *            declared.
+	 * @param depth      The maximum depth of block nesting.
+	 * @param width      The maximum width of a block.
+	 * @param lifetime   The lifetime of the enclosing block
+	 * @param ints       The domain of integers to use
+	 * @param declared   The set of variable names for variables which have already
+	 *                   been declared.
 	 * @param undeclared The set of variable names for variables which have not
-	 *        already been declared.
+	 *                   already been declared.
 	 * @return
 	 */
-	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime,
-			Domain.Small<Integer> ints, Domain.Small<String> declared, Domain.Small<String> undeclared) {
+	public static Domain.Big<Term> toBigDomain(int depth, int width, Lifetime lifetime, Domain.Small<Integer> ints,
+			Domain.Small<String> declared, Domain.Small<String> undeclared) {
 		// Construct expressions
 		Domain.Big<Term> expressions = toBigDomain(1, ints, declared);
 		// Construct statements
@@ -1480,13 +1599,13 @@ public class Syntax {
 		Domain.Big<? extends Term> derefs = Term.Access.toBigDomain(lvals);
 		Domain.Big<Term> terminals = Domains.Union(integers, derefs, borrows);
 		//
-		Domain.Big<? extends Term>[] domains = new Domain.Big[depth+3];
+		Domain.Big<? extends Term>[] domains = new Domain.Big[depth + 3];
 		domains[0] = integers;
 		domains[1] = derefs;
 		domains[2] = borrows;
 		//
-		for(int i=0;i<depth;++i) {
-			domains[i+3] = Term.Box.toBigDomain(i,terminals);
+		for (int i = 0; i < depth; ++i) {
+			domains[i + 3] = Term.Box.toBigDomain(i, terminals);
 		}
 		//
 		return Domains.Union(domains);
@@ -1540,6 +1659,22 @@ public class Syntax {
 		}
 
 		/**
+		 * Return the smallest lifetime between this and a given lifetime.
+		 *
+		 * @param l
+		 * @return
+		 */
+		public Lifetime min(Lifetime l) {
+			if (this.contains(l)) {
+				return l;
+			} else if (l.contains(this)) {
+				return this;
+			} else {
+				throw new IllegalArgumentException("ambiguous lifetimes");
+			}
+		}
+
+		/**
 		 * Get the outermost lifetime which this lifetime is within.
 		 *
 		 * @return
@@ -1569,7 +1704,7 @@ public class Syntax {
 		 */
 		public void assertWithin(Lifetime l) {
 			// Check whether contraint already exists
-			if(!l.contains(this)) {
+			if (!l.contains(this)) {
 				// Nope
 				final int n = parents.length;
 				this.parents = Arrays.copyOf(parents, n + 1);
@@ -1589,7 +1724,7 @@ public class Syntax {
 		Domain.Small<String> declared = Domains.Finite("x");
 		Domain.Big<Term> terms = toBigDomain(2, 1, root, ints, declared, declared);
 		//
-		for(int i=0;i!=terms.bigSize().intValue();++i) {
+		for (int i = 0; i != terms.bigSize().intValue(); ++i) {
 			Term t = terms.get(BigInteger.valueOf(i));
 			System.out.println("[" + i + "] " + t);
 		}

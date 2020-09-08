@@ -21,6 +21,7 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.BorrowChecker.Environment;
 
 import java.util.Arrays;
+import java.util.function.Predicate;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.LVal;
@@ -252,6 +253,12 @@ public class Tuples {
 				}
 				return "(" + r + ")";
 			}
+
+			@Override
+			public <T extends Type> T extract(Class<T> type, Predicate<T> pred) {
+				// NOTE: don't need to implement this yet.
+				throw new UnsupportedOperationException();
+			}
 		}
 
 		/**
@@ -303,6 +310,17 @@ public class Tuples {
 				return src + "." + index;
 			}
 
+			@Override
+			public Pair<Type, Lifetime> apply(Environment env, Type T, Lifetime l) {
+				if (T instanceof Syntax.TupleType) {
+					Syntax.TupleType t = (Syntax.TupleType) T;
+					Type[] ts = t.types;
+					if (index < ts.length) {
+						return new Pair<>(ts[index], l);
+					}
+				}
+				return null;
+			}
 
 			@Override
 			public boolean equals(Object o) {
@@ -461,23 +479,6 @@ public class Tuples {
 				return super.compatible(R1, T1, T2);
 			}
 		}
-
-		@Override
-		public Type typeOf(Environment env, Type type, Path.Element ith) {
-			if(ith instanceof Syntax.Index) {
-				int i = ((Syntax.Index) ith).index;
-				if(type instanceof Syntax.TupleType) {
-					Syntax.TupleType t = (Syntax.TupleType) type;
-					Type[] ts = t.types;
-					if(i < ts.length) {
-						return ts[i];
-					}
-				}
-				syntaxError("Invalid tuple access \"" + ith.toString(type.toString()) + "\"", null);
-			}
-			return super.typeOf(env, type, ith);
-		}
-
 	}
 
 	/**

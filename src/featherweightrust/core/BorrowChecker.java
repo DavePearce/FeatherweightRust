@@ -135,9 +135,11 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Access t) {
 		final LVal w = t.operand();
 		// Determine type being read
-		Type T = typeOf(R1, w);
+		Pair<Type,Lifetime> p = w.typeOf(R1);
 		// Sanity check type
-		check(T != null, LVAL_INVALID, w);
+		check(p != null, LVAL_INVALID, w);
+		// Extract lval's type
+		Type T = p.first();
 		// Sanity check type is moveable
 		check(T.defined(), LVAL_MOVED, w);
 		// Decide if copy or move
@@ -165,9 +167,11 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	protected Pair<Environment, Type> apply(Environment R, Lifetime lifetime, Term.Borrow t) {
 		LVal w = t.operand();
 		// Determine type being read
-		Type T = typeOf(R, w);
-		// Sanity check lval
-		check(T != null, LVAL_INVALID, w);
+		Pair<Type,Lifetime> p = w.typeOf(R);
+		// Sanity check type
+		check(p != null, LVAL_INVALID, w);
+		// Extract lval's type
+		Type T = p.first();
 		// Sanity check type is moveable
 		check(T.defined(), LVAL_MOVED, w);
 		//
@@ -259,12 +263,16 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	protected Pair<Environment, Type> apply(Environment R1, Lifetime l, Term.Assignment t) {
 		LVal w = t.leftOperand();
 		// Determine lval type and lifetime
-		Type T1 = typeOf(R1, w);
-		Lifetime m = lifetimeOf(R1, w);
+		Pair<Type,Lifetime> p = w.typeOf(R1);
+		// Sanity check type
+		check(p != null, LVAL_INVALID, w);
+		// Extract lval's type and lifetime
+		Type T1 = p.first();
+		Lifetime m = p.second();
 		// Type operand
-		Pair<Environment, Type> p = apply(R1, l, t.rightOperand());
-		Environment R2 = p.first();
-		Type T2 = p.second();
+		Pair<Environment, Type> q = apply(R1, l, t.rightOperand());
+		Environment R2 = q.first();
+		Type T2 = q.second();
 		// Check type compatibility
 		check(compatible(R2, T1, T2), INCOMPATIBLE_TYPE, w);
 		// lifetime check
@@ -588,7 +596,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			} else {
 				LVal[] borrows = t.lvals();
 				// Determine type of first borrow
-				Type Tj = typeOf(R, borrows[0]);
+				Type Tj = borrows[0].typeOf(R).first();
 				// NOTE: is safe to ignore other lvals because every lval must have a compatible
 				// type.
 				return mutable(R, Tj, p, i + 1);
@@ -633,8 +641,8 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			Type.Borrow _T2 = (Type.Borrow) T2;
 			// NOTE: follow holds because all members of a single borrow must be compatible
 			// by construction.
-			Type ti = typeOf(R1, _T1.lvals()[0]);
-			Type tj = typeOf(R1, _T2.lvals()[0]);
+			Type ti = _T1.lvals()[0].typeOf(R1).first();
+			Type tj = _T2.lvals()[0].typeOf(R1).first();
 			//
 			return _T1.isMutable() == _T2.isMutable() && compatible(R1, ti, tj);
 		} else if (T1 instanceof Type.Box && T2 instanceof Type.Box) {
@@ -653,128 +661,6 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 			return compatible(R1, T1, _T2.getType());
 		} else {
 			return false;
-		}
-	}
-
-
-	// ================================================================================
-	// lifetimeOf
-	// ================================================================================
-
-	/**
-	 * Determine the lifetime of a given lval. For example, consider the following:
-	 *
-	 * <pre>
-	 * {
-	 *   let mut x = 1;
-	 *   let mut y = &mut x;
-	 *   {
-	 * 	   let mut z = &mut y;
-	 *   }^m
-	 * }^l
-	 * </pre>
-	 *
-	 * The lifetime of <code>x</code> and <code>*y</code> is <code>l</code>.
-	 * Likewise, <code>*z</code> and <code>**z</code> have lifetime <code>l</code>
-	 * whilst <code>z</code> has lifetime <code>m</code>.
-	 *
-	 * @param env
-	 * @param lv
-	 * @return
-	 */
-	protected Lifetime lifetimeOf(Environment env, LVal lv) {
-		final String name = lv.name();
-		final Path path = lv.path();
-		// Extract target cell
-		Slot Cx = env.get(name);
-		Type T = Cx.type();
-		// Process path elements (if any)
-		return lifetimeOf(env, Cx.lifetime(), T, path, 0);
-	}
-
-	protected Lifetime lifetimeOf(Environment env, Lifetime l, Type type, Path p, int i) {
-		// NOTE: in the code calculus, the only form of path element is a Deref. Hence,
-		// the following is safe.
-		if (p.size() == i) {
-			return l;
-		} else if (type instanceof Type.Box) {
-			Type.Box b = (Type.Box) type;
-			return lifetimeOf(env, l, b.element(), p, i + 1);
-		} else if (type instanceof Type.Borrow) {
-			Type.Borrow b = (Type.Borrow) type;
-			LVal[] lvals = b.lvals();
-			Lifetime m = null;
-			for (int k = 0; k != lvals.length; ++k) {
-				LVal kth = lvals[k];
-				Slot Ck = env.get(kth.name());
-				Type Tk = typeOf(env, kth);
-				Lifetime ith = lifetimeOf(env, Ck.lifetime(), Tk, p, i + 1);
-				// Determine smallest lifetime
-				if(m != null && m.contains(ith)) {
-					m = ith;
-				} else if(m == null) {
-					m = ith;
-				}
-			}
-			return m;
-		} else {
-			// No valid type exists when dereferencing e.g. an integer, or a shadow.
-			return null;
-		}
-	}
-
-	// ================================================================================
-	// typeOf
-	// ================================================================================
-
-	/**
-	 * Determine the type of an LVal in the given environment, assuming that the
-	 * LVal is defined for the environment. For example, the type of <code>x</code>
-	 * in the environment <code>{x->int}</code> is simply <code>int</code>.
-	 * Likewise, the type of <code>*x</code> in the environment
-	 * <code>{x->[]int}</code> is also <code>int</code>.
-	 *
-	 * @param env
-	 * @return
-	 */
-	protected Type typeOf(Environment env, LVal w) {
-		final String name = w.name();
-		final Path path = w.path();
-		// Extract target cell
-		Slot Sw = env.get(name);
-		check(Sw != null, BorrowChecker.UNDECLARED_VARIABLE, w);
-		Type T = Sw.type();
-		// Process path elements (if any)
-		for (int i = 0; i != path.size(); ++i) {
-			Path.Element ith = path.get(i);
-			T = typeOf(env, T, ith);
-		}
-		return T;
-	}
-
-	protected Type typeOf(Environment env, Type type, Path.Element ith) {
-		// NOTE: in the code calculus, the only form of path element is a Deref. Hence,
-		// the following is safe.
-		return typeOf(env, type, (Path.Deref) ith);
-	}
-
-	protected Type typeOf(Environment env, Type type, Path.Deref d) {
-		if (type instanceof Type.Box) {
-			Type.Box b = (Type.Box) type;
-			return b.element();
-		} else if (type instanceof Type.Borrow) {
-			Type.Borrow b = (Type.Borrow) type;
-			LVal[] lvals = b.lvals();
-			Type T = null;
-			for (int i = 0; i != lvals.length; ++i) {
-				Type ith = typeOf(env, lvals[i]);
-				// FIXME: does union make sense???
-				T = (T == null) ? ith : T.union(ith);
-			}
-			return T;
-		} else {
-			// No valid type exists when dereferencing e.g. an integer, or a shadow.
-			return null;
 		}
 	}
 

@@ -29,14 +29,17 @@ import java.util.Set;
 import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.BorrowChecker.Environment;
 import featherweightrust.core.BorrowChecker.Extension;
+import featherweightrust.core.BorrowChecker.Slot;
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
+import featherweightrust.core.Syntax.Type.Box;
 import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
+import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.extensions.ControlFlow.Syntax;
 import featherweightrust.extensions.Functions.Syntax.Signature;
 import featherweightrust.util.Pair;
@@ -47,6 +50,10 @@ public class Functions {
 	public final static int DECL_fn = 40;
 	public final static int TERM_invoke = 41;
 	public final static String UNKNOWN_FUNCTION = "unknown function";
+	public final static String INSUFFICIENT_ARGUMENTS = "insufficient arguments";
+	public final static String TOO_MANY_ARGUMENTS = "too many arguments";
+	public final static String INCOMPATIBLE_ARGUMENT = "incompatible argument";
+
 	/**
 	 * Extensions to the core syntax of the language.
 	 *
@@ -139,8 +146,8 @@ public class Functions {
 			@Override
 			public String toString() {
 				String r = name + "(";
-				for(int i=0;i!=operands.length;++i) {
-					if(i != 0) {
+				for (int i = 0; i != operands.length; ++i) {
+					if (i != 0) {
 						r += ",";
 					}
 					r += operands[i];
@@ -157,12 +164,31 @@ public class Functions {
 		 */
 		public interface Signature extends SyntacticElement {
 			/**
-			 * Lower signature into a given environemnt.
+			 * Lower signature into a given environment. This may add anonymous locations to
+			 * the environment as necessary.
 			 *
 			 * @param env
 			 * @return
 			 */
-			public Pair<Environment,Type> lower(Map<String,Lifetime> binding, Environment env);
+			public Pair<Environment, Type> lower(Map<String, Lifetime> binding, Environment env);
+
+			/**
+			 * Lift a given signature into a type in the enclosing environment. This will
+			 * reuse existing locations from the environment as necessary.
+			 *
+			 * @param binding
+			 * @return
+			 */
+			public Type lift(Map<String, Lifetime> binding, Environment env, Type[] types);
+
+			/**
+			 * Check whether a given type is a subtype of this signature,under a given
+			 * binding or not.
+			 *
+			 * @param binding
+			 * @param type
+			 */
+			public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type);
 
 			/**
 			 * Bind all lifetimes referenced in this signature such that they are within a
@@ -170,7 +196,7 @@ public class Functions {
 			 *
 			 * @return
 			 */
-			public void bind(Map<String,Lifetime> binding, Lifetime upper, Lifetime lower);
+			public void bind(Map<String, Lifetime> binding, Lifetime upper, Lifetime lower);
 
 			public static class Unit extends SyntacticElement.Impl implements Signature {
 				public Unit(Attribute... attributes) {
@@ -178,13 +204,23 @@ public class Functions {
 				}
 
 				@Override
-				public Pair<Environment, Type> lower(Map<String,Lifetime> binding, Environment env) {
-					return new Pair<>(env,Type.Unit);
+				public Pair<Environment, Type> lower(Map<String, Lifetime> binding, Environment env) {
+					return new Pair<>(env, Type.Unit);
 				}
 
 				@Override
-				public void bind(Map<String,Lifetime> binding, Lifetime upper, Lifetime lower) {
+				public void bind(Map<String, Lifetime> binding, Lifetime upper, Lifetime lower) {
 					// Do nout!
+				}
+
+				@Override
+				public Type lift(Map<String, Lifetime> binding, Environment env, Type[] types) {
+					return Type.Unit;
+				}
+
+				@Override
+				public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type) {
+					return type instanceof Type.Unit;
 				}
 			}
 
@@ -192,14 +228,25 @@ public class Functions {
 				public Int(Attribute... attributes) {
 					super(attributes);
 				}
+
 				@Override
-				public Pair<Environment, Type> lower(Map<String,Lifetime> binding, Environment env) {
-					return new Pair<>(env,Type.Int);
+				public Pair<Environment, Type> lower(Map<String, Lifetime> binding, Environment env) {
+					return new Pair<>(env, Type.Int);
 				}
 
 				@Override
-				public void bind(Map<String,Lifetime> binding, Lifetime upper, Lifetime lower) {
+				public void bind(Map<String, Lifetime> binding, Lifetime upper, Lifetime lower) {
 					// Do nout!
+				}
+
+				@Override
+				public Type lift(Map<String, Lifetime> binding, Environment env, Type[] types) {
+					return Type.Int;
+				}
+
+				@Override
+				public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type) {
+					return type instanceof Type.Int;
 				}
 			}
 
@@ -216,14 +263,24 @@ public class Functions {
 				}
 
 				@Override
-				public Pair<Environment, Type> lower(Map<String,Lifetime> binding, Environment env) {
-					Pair<Environment,Type> p = operand.lower(binding,env);
-					return new Pair<>(p.first(),new Type.Box(p.second()));
+				public Pair<Environment, Type> lower(Map<String, Lifetime> binding, Environment env) {
+					Pair<Environment, Type> p = operand.lower(binding, env);
+					return new Pair<>(p.first(), new Type.Box(p.second()));
 				}
 
 				@Override
-				public void bind(Map<String,Lifetime> binding, Lifetime upper, Lifetime lower) {
+				public void bind(Map<String, Lifetime> binding, Lifetime upper, Lifetime lower) {
 					operand.bind(binding, upper, lower);
+				}
+
+				@Override
+				public Type lift(Map<String, Lifetime> binding, Environment env, Type[] types) {
+					return new Type.Box(operand.lift(binding, env, types));
+				}
+
+				@Override
+				public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type) {
+					return (type instanceof Type.Box) && operand.isSubtype(binding, env, ((Type.Box) type).element());
 				}
 			}
 
@@ -252,7 +309,7 @@ public class Functions {
 				}
 
 				@Override
-				public Pair<Environment, Type> lower(Map<String,Lifetime> binding, Environment R1) {
+				public Pair<Environment, Type> lower(Map<String, Lifetime> binding, Environment R1) {
 					Pair<Environment, Type> p = operand.lower(binding, R1);
 					// Create a fresh variablename
 					String fvar = BorrowChecker.fresh();
@@ -275,24 +332,60 @@ public class Functions {
 					// Constrain any subsequents to be outside this
 					operand.bind(binding, upper, self);
 				}
+
+				@Override
+				public Type lift(Map<String, Lifetime> binding, Environment env, Type[] types) {
+					Type r = null;
+					for (int i = 0; i != types.length; ++i) {
+						Type ith = types[i].extract(Type.Borrow.class, b -> isSubtype(binding,env,b));
+						if (ith != null && r == null) {
+							r = ith;
+						} else if (ith != null) {
+							r = r.union(ith);
+						}
+					}
+					return r;
+				}
+
+				@Override
+				public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type) {
+					if (type instanceof Type.Borrow) {
+						Type.Borrow b = (Type.Borrow) type;
+						if (b.isMutable() == mut) {
+							Lifetime l = binding.get(lifetime);
+							//
+							for (LVal lv : b.lvals()) {
+								// Need to decide whether this is a candidate for this borrow, or not.
+								Pair<Type, Lifetime> p = lv.typeOf(env);
+								Type T = p.first();
+								Lifetime m = p.second();
+								// Check whether outlives bound lifetime
+								if (!m.contains(l) || !operand.isSubtype(binding, env, T)) {
+									return false;
+								}
+							}
+							return true;
+						}
+					}
+					return false;
+				}
 			}
 		}
 	}
 
 	public static class Semantics extends OperationalSemantics.Extension {
-		private Map<String,Syntax.FunctionDeclaration> fns = new HashMap<>();
+		private Map<String, Syntax.FunctionDeclaration> fns = new HashMap<>();
 
 		public Semantics(List<Syntax.FunctionDeclaration> decls) {
-			for(int i=0;i!=decls.size();++i) {
+			for (int i = 0; i != decls.size(); ++i) {
 				Syntax.FunctionDeclaration ith = decls.get(i);
 				fns.put(ith.getName(), ith);
 			}
 		}
 
-
 		@Override
 		public Pair<State, Term> apply(State S, Lifetime l, Term t) {
-			if(t instanceof Syntax.Invoke) {
+			if (t instanceof Syntax.Invoke) {
 				return apply(S, l, (Syntax.Invoke) t);
 			} else {
 				return null;
@@ -304,9 +397,9 @@ public class Functions {
 			// Determine whether all reduced
 			int i = Tuples.firstNonValue(arguments);
 			//
-			if(i < 0) {
+			if (i < 0) {
 				// All operands fully reduced, so perform invocation
-				return invoke(S,l,t.name,t.operands);
+				return invoke(S, l, t.name, t.operands);
 			} else {
 				Term ith = arguments[i];
 				// Reduce ith
@@ -321,9 +414,9 @@ public class Functions {
 		private Pair<State, Term> invoke(State S, Lifetime l, String name, Term[] args) {
 			Syntax.FunctionDeclaration decl = fns.get(name);
 			// Extract parameters
-			Pair<String,Signature>[] params = decl.getParameters();
+			Pair<String, Signature>[] params = decl.getParameters();
 			// Instantiate new lifetimes within this term
-			Term.Block body = instantiate(l,decl.getBody());
+			Term.Block body = instantiate(l, decl.getBody());
 			// Push empty stack frame
 			S = S.push(body.lifetime());
 			// Allocate parameters
@@ -360,10 +453,10 @@ public class Functions {
 	}
 
 	public static class Typing extends BorrowChecker.Extension {
-		private Map<String,Syntax.FunctionDeclaration> fns = new HashMap<>();
+		private Map<String, Syntax.FunctionDeclaration> fns = new HashMap<>();
 
 		public Typing(List<Syntax.FunctionDeclaration> decls) {
-			for(int i=0;i!=decls.size();++i) {
+			for (int i = 0; i != decls.size(); ++i) {
 				Syntax.FunctionDeclaration ith = decls.get(i);
 				fns.put(ith.getName(), ith);
 			}
@@ -371,21 +464,38 @@ public class Functions {
 
 		@Override
 		public Pair<Environment, Type> apply(Environment state, Lifetime lifetime, Term term) {
-			if(term instanceof Syntax.Invoke) {
-				return apply(state,lifetime,(Syntax.Invoke) term);
+			if (term instanceof Syntax.Invoke) {
+				return apply(state, lifetime, (Syntax.Invoke) term);
 			}
 			return null;
 		}
 
-		public Pair<Environment, Type> apply(Environment state, Lifetime lifetime, Syntax.Invoke term) {
+		public Pair<Environment, Type> apply(Environment R1, Lifetime lifetime, Syntax.Invoke term) {
+			// Determine function being invoked
 			Syntax.FunctionDeclaration decl = fns.get(term.getName());
 			self.check(decl != null, UNKNOWN_FUNCTION, term);
+			// Extract parameters
+			Pair<String, Signature>[] parameters = decl.getParameters();
+			self.check(term.getOperands().length >= parameters.length, INSUFFICIENT_ARGUMENTS, term);
+			self.check(term.getOperands().length <= parameters.length, TOO_MANY_ARGUMENTS, term);
 			// Apply "carry typing" of arguments
-			Pair<Environment, Type[]> p = self.carry(state, lifetime, term.getOperands());
-			// FIXME: apply lifting constraints!!
-			Pair<Environment,Type> rt = decl.getReturn().lower(null, BorrowChecker.EMPTY_ENVIRONMENT);
-			return new Pair<>(p.first(), rt.second());
+			Pair<Environment, Type[]> p = self.carry(R1, lifetime, term.getOperands());
+			// Construct binding
+			Environment R2 = p.first();
+			Type[] args = p.second();
+			Map<String, Lifetime> binding = new HashMap<>();
+			for (int i = 0; i != args.length; ++i) {
+				Signature ith = parameters[i].second();
+				self.check(ith.isSubtype(binding, R2, args[i]), INCOMPATIBLE_ARGUMENT, ith);
+			}
+			// Apply lifting
+			Type rt = decl.getReturn().lift(binding, R2, args);
+			// FIXME: apply side effects!!
+			Environment R3 = R2;
+			// Done
+			return new Pair<>(R3, rt);
 		}
+
 	}
 
 	public static class Checker extends BorrowChecker {
@@ -395,40 +505,36 @@ public class Functions {
 		}
 
 		public void apply(Lifetime l, List<Syntax.FunctionDeclaration> fns) {
-			for(Syntax.FunctionDeclaration fn : fns) {
-				apply(l,fn);
+			for (Syntax.FunctionDeclaration fn : fns) {
+				apply(l, fn);
 			}
 		}
 
 		public void apply(Lifetime l, Syntax.FunctionDeclaration fn) {
-			Pair<String,Signature>[] params = fn.getParameters();
+			Pair<String, Signature>[] params = fn.getParameters();
 			// Our lifetime must be within all others
 			Lifetime self = new Lifetime();
 			// Extract all lifetimes
-			HashMap<String,Lifetime> binding = new HashMap<>();
-			for(int i=0;i!=params.length;++i) {
+			HashMap<String, Lifetime> binding = new HashMap<>();
+			for (int i = 0; i != params.length; ++i) {
 				Signature s = params[i].second();
 				s.bind(binding, l, self);
 			}
 			Environment R1 = BorrowChecker.EMPTY_ENVIRONMENT;
 			// Lower parameters into environment
-			for(int i=0;i!=params.length;++i) {
+			for (int i = 0; i != params.length; ++i) {
 				String p = params[i].first();
 				Signature s = params[i].second();
 				// Lower signature into environment
-				Pair<Environment,Type> r = s.lower(binding,R1);
+				Pair<Environment, Type> r = s.lower(binding, R1);
 				R1 = r.first();
 				// Bind parameter to resulting type
-				R1 = R1.put(p, new Slot(r.second(),self));
+				R1 = R1.put(p, new Slot(r.second(), self));
 			}
-			// Done
-			Pair<Environment,Type> p = super.apply(R1,self,fn.getBody());
-			Pair<Environment,Type> s = fn.getReturn().lower(binding, p.first());
-			Environment R2 = s.first();
-			Type T1 = p.second();
-			Type T2 = s.second();
+			// Type method body
+			Pair<Environment, Type> p = super.apply(R1, self, fn.getBody());
 			// Check type compatibility
-			check(compatible(R2, T1, T2), INCOMPATIBLE_TYPE, fn.getReturn());
+			check(fn.getReturn().isSubtype(binding, p.first(), p.second()), INCOMPATIBLE_TYPE, fn.getReturn());
 		}
 	}
 }

@@ -20,6 +20,7 @@ package featherweightrust.core;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -719,14 +720,14 @@ public class Syntax {
 		public boolean prohibitsWriting(LVal lv);
 
 		/**
-		 * Extract a type component matching the given class and predicate.
+		 * Consume type component(s) matching the given class.
 		 *
 		 * @param <T>
 		 * @param type
 		 * @param pred
 		 * @return
 		 */
-		public <T extends Type> T extract(Class<T> type, Predicate<T> pred);
+		public <T extends Type> void consume(Class<T> type, Consumer<T> consumer);
 
 		/**
 		 * Constant representing the type void
@@ -795,11 +796,9 @@ public class Syntax {
 			}
 
 			@Override
-			public <T extends Type> T extract(Class<T> type, Predicate<T> pred) {
-				if (type == getClass() && pred.test((T) this)) {
-					return (T) this;
-				} else {
-					return null;
+			public <T extends Type> void consume(Class<T> type, Consumer<T> consumer) {
+				if (type == getClass()) {
+					consumer.accept((T) this);
 				}
 			}
 		}
@@ -1025,6 +1024,12 @@ public class Syntax {
 			}
 
 			@Override
+			public <T extends Type> void consume(Class<T> type, Consumer<T> consumer) {
+				super.consume(type, consumer);
+				element.consume(type, consumer);
+			}
+
+			@Override
 			public boolean equals(Object o) {
 				if (o instanceof Box) {
 					Box b = (Box) o;
@@ -1116,12 +1121,8 @@ public class Syntax {
 			}
 
 			@Override
-			public <T extends Type> T extract(Class<T> type, Predicate<T> pred) {
-				if (type == getClass() && pred.test((T) this)) {
-					return (T) this;
-				} else {
-					return null;
-				}
+			public <T extends Type> void consume(Class<T> type, Consumer<T> consumer) {
+				// NOTE: don't need to do anything here really.
 			}
 
 			@Override

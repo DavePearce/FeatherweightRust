@@ -43,6 +43,10 @@ public class FunctionTests {
 	private static Value.Integer Two = new Value.Integer(2);
 	private static Value.Integer OneTwoThree = new Value.Integer(123);
 
+	// =================================================================
+	// Straightforward (Valid) Tests
+	// =================================================================
+
 	@Test
 	public void test_0x000() throws IOException {
 		String input = "fn f() -> int { 1 }";
@@ -95,28 +99,28 @@ public class FunctionTests {
 	@Test
 	public void test_0x003() throws IOException {
 		String input = "fn id(x : &'a int) -> &'a int { x }";
-		input += " { let mut v = 1; let mut p = id(&v); *p }";
+		input += " { let mut v = 1; let mut p = id(&v); !*p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x004() throws IOException {
 		String input = "fn id(x : &'a mut int) -> &'a mut int { x }";
-		input += " { let mut v = 1; let mut p = id(&mut v); *p }";
+		input += " { let mut v = 1; let mut p = id(&mut v); !*p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x005() throws IOException {
 		String input = "fn id(x : &'a &'b int) -> &'a &'b int { x }";
-		input += " { let mut v = 1; let mut u = &v; let mut p = id(&u); **p }";
+		input += " { let mut v = 1; let mut u = &v; let mut p = id(&u); !**p }";
 		check(input,One);
 	}
 
 	@Test
 	public void test_0x006() throws IOException {
 		String input = "fn id(x : &'a mut &'b int) -> &'a mut &'b int { x }";
-		input += " { let mut v = 1; let mut u = &v; let mut p = id(&mut u); **p }";
+		input += " { let mut v = 1; let mut u = &v; let mut p = id(&mut u); !**p }";
 		check(input,One);
 	}
 
@@ -161,6 +165,42 @@ public class FunctionTests {
 		check(input,One);
 	}
 
+	// =================================================================
+	// Return Type (Valid) Tests
+	// =================================================================
+
+	@Test
+	public void test_0x017() throws IOException {
+		// b :> a
+		String input = "fn f(x : &'a &'b int, y : &'a int) -> &'a int { !*x }";
+		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,!v); !*w }";
+		check(input, One);
+	}
+
+	@Test
+	public void test_0x018() throws IOException {
+		// b :> a
+		String input = "fn f(x : &'a &'b int, y : &'a int) -> &'a int { y }";
+		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,!v); !*w }";
+		check(input, One);
+	}
+
+	public void test_0x018a() throws IOException {
+		// Prove covariance of immutable borrow
+		String input = "fn f(x : &'a &'b int) -> &'a &'a int { y }";
+		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v); *w }";
+		check(input, One);
+	}
+
+	// =================================================================
+	// Parameter (Valid) Tests
+	// =================================================================
+
+
+	// =================================================================
+	// Side-Effect (Valid) Tests
+	// =================================================================
+
 	@Test
 	public void test_0x013() throws IOException {
 		String input = "fn write(p : []int) { *p = 1; }";
@@ -189,19 +229,10 @@ public class FunctionTests {
 		check(input, Value.Unit);
 	}
 
-	@Test
-	public void test_0x017() throws IOException {
-		String input = "fn f(x : &'a &'b int, y : &'a int) -> &'a int { *x }";
-		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,v); *w }";
-		check(input, One);
-	}
+	// =================================================================
+	// Straightforward (Invalid) Tests
+	// =================================================================
 
-	@Test
-	public void test_0x018() throws IOException {
-		String input = "fn f(x : &'a &'b int, y : &'a int) -> &'a int { y }";
-		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,v); *w }";
-		check(input, One);
-	}
 
 	@Test
 	public void test_0x050() throws IOException {
@@ -209,6 +240,10 @@ public class FunctionTests {
 		input += " { }";
 		checkInvalid(input);
 	}
+
+	// =================================================================
+	// Return Type (Invalid) Tests
+	// =================================================================
 
 	@Test
 	public void test_0x051() throws IOException {
@@ -259,12 +294,49 @@ public class FunctionTests {
 		checkInvalid(input);
 	}
 
+	public void test_0x057b() throws IOException {
+		// Prove covariance of immutable borrow
+		String input = "fn f(x : &'a &'b int, y : &'a &'a int) -> &'a &'b int { y }";
+		input += " { }";
+		checkInvalid(input);
+	}
+
+	public void test_0x057c() throws IOException {
+		// Prove contravariance of mutable borrow
+		String input = "fn f(x : &'a mut &'b int) -> &'a mut &'a int { y }";
+		input += " { }";
+		checkInvalid(input);
+	}
+
+
+	public void test_0x057d() throws IOException {
+		// This should work I think?
+		//
+		// 'a smaller than 'b
+		// &'a T :> &'b T
+		// &'c mut &'a T <: &'c mut 'b T
+		String input = "fn f(x : &'a &'b int, y : &'a mut &'a int) -> &'a mut &'b int { y }";
+		input += " { }";
+		checkInvalid(input);
+	}
+
+
+	// =================================================================
+	// Parameter (Invalid) Tests
+	// =================================================================
+
+
+	// =================================================================
+	// Side-Effect (Invalid) Tests
+	// =================================================================
+
 	@Test
 	public void test_0x058() throws IOException {
 		String input = "fn f(x : &'a mut &'b int) { let mut y = 0; *x = &y; }";
 		input += " { }";
 		checkInvalid(input);
 	}
+
 
 	public static void check(String input, Value output) throws IOException {
 		// Allocate the global lifetime. This is the lifetime where all heap allocated

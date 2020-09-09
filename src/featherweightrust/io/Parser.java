@@ -66,6 +66,7 @@ public class Parser {
 			if (!params.isEmpty()) {
 				match(",");
 			}
+			matchKeyword("mut");
 			String param = matchIdentifier().text;
 			match(":");
 			Signature sig = parseSignature();

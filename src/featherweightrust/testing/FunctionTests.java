@@ -48,118 +48,118 @@ public class FunctionTests {
 	// =================================================================
 
 	@Test
-	public void test_0x000() throws IOException {
+	public void test_0x001() throws IOException {
 		String input = "fn f() -> int { 1 }";
 		input += " { f() }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x000a() throws IOException {
+	public void test_0x002() throws IOException {
 		String input = "fn f(mut x : int) -> int { 1 }";
 		input += " { let mut a = 1 ; f(a) }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x001() throws IOException {
+	public void test_0x003() throws IOException {
 		String input = "fn id(mut x : int) -> int { x }";
 		input += " { id(1) }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x001b() throws IOException {
+	public void test_0x004() throws IOException {
 		String input = "fn sel(mut x : int, mut y : int) -> int { x }";
 		input += " { sel(1,2) }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x001c() throws IOException {
+	public void test_0x005() throws IOException {
 		String input = "fn sel(mut x : int, mut y : int) -> int { y }";
 		input += " { sel(1,2) }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_0x001d() throws IOException {
+	public void test_0x006() throws IOException {
 		String input = "fn id(mut x : int) -> int { x }";
 		input += " { let mut x = 2; id(1); x }";
 		check(input,Two);
 	}
 
 	@Test
-	public void test_0x002() throws IOException {
+	public void test_0x007() throws IOException {
 		String input = "fn id(mut x : []int) -> []int { x }";
 		input += " { let mut p = id(box 1); *p }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x003() throws IOException {
+	public void test_0x008() throws IOException {
 		String input = "fn id(mut x : &'a int) -> &'a int { x }";
 		input += " { let mut v = 1; let mut p = id(&v); !*p }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x004() throws IOException {
+	public void test_0x009() throws IOException {
 		String input = "fn id(mut x : &'a mut int) -> &'a mut int { x }";
 		input += " { let mut v = 1; let mut p = id(&mut v); !*p }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x005() throws IOException {
+	public void test_0x00A() throws IOException {
 		String input = "fn id(mut x : &'a &'b int) -> &'a &'b int { x }";
 		input += " { let mut v = 1; let mut u = &v; let mut p = id(&u); !**p }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x006() throws IOException {
+	public void test_0x00B() throws IOException {
 		String input = "fn id(mut x : &'a mut &'b int) -> &'a mut &'b int { x }";
 		input += " { let mut v = 1; let mut u = &v; let mut p = id(&mut u); !**p }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x007() throws IOException {
+	public void test_0x00C() throws IOException {
 		String input = "fn id(mut x : &'a mut &'b mut int) -> &'a mut &'b mut int { x }";
 		input += " { 1 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x008() throws IOException {
+	public void test_0x00D() throws IOException {
 		String input = "fn id(mut x : []&'a int) -> []&'a int { x }";
 		input += " { 1 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x009() throws IOException {
+	public void test_0x00E() throws IOException {
 		String input = "fn id(mut x : []&'a mut int) -> []&'a mut int { x }";
 		input += " { 1 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x010() throws IOException {
+	public void test_0x00F() throws IOException {
 		String input = "fn id(mut x : []int) -> int { !*x }";
 		input += " { 1 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x011() throws IOException {
+	public void test_0x010() throws IOException {
 		String input = "fn id(mut x : &'a int) -> int { !*x }";
 		input += " { 1 }";
 		check(input,One);
 	}
 	@Test
-	public void test_0x012() throws IOException {
+	public void test_0x011() throws IOException {
 		String input = "fn id(mut x : []&'a mut int) -> &'a mut int { *x }";
 		input += " { 1 }";
 		check(input,One);
@@ -170,7 +170,7 @@ public class FunctionTests {
 	// =================================================================
 
 	@Test
-	public void test_0x017() throws IOException {
+	public void test_0x020() throws IOException {
 		// b :> a
 		String input = "fn f(mut x : &'a &'b int, mut y : &'a int) -> &'a int { !*x }";
 		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,!v); !*w }";
@@ -178,7 +178,7 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x018() throws IOException {
+	public void test_0x021() throws IOException {
 		// b :> a
 		String input = "fn f(mut x : &'a &'b int, mut y : &'a int) -> &'a int { y }";
 		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v,!v); !*w }";
@@ -186,7 +186,7 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x018a() throws IOException {
+	public void test_0x022() throws IOException {
 		// Prove covariance of immutable borrow
 		String input = "fn f(mut x : &'a &'b int) -> &'a &'a int { x }";
 		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v); !**w }";
@@ -194,14 +194,14 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x018b() throws IOException {
+	public void test_0x023() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int) -> &'a int { !*x }";
 		input += " { let mut u = 1; { let mut v = &u; let mut w = f(&mut v); !*w } }";
 		check(input, One);
 	}
 
 	@Test
-	public void test_0x018b2() throws IOException {
+	public void test_0x024() throws IOException {
 		// Immutable borrows co-variant
 		String input = "fn f(mut x : &'a &'b int, mut y1 : &'b &'c int, mut y2 : &'d &'b int) -> &'a &'d int { x }";
 		input += "{ }";
@@ -213,14 +213,14 @@ public class FunctionTests {
 	// =================================================================
 
 	@Test
-	public void test_0x018b3() throws IOException {
+	public void test_0x030() throws IOException {
 		String input = "fn f(mut x : &'a int, mut y : &'a int) { x = y; }";
 		input += " { let mut u = 1; f(&u,&u); }";
 		check(input,Value.Unit);
 	}
 
 	@Test
-	public void test_0x018b4() throws IOException {
+	public void test_0x031() throws IOException {
 		String input = "fn f(mut x : &'a mut int, mut y : &'a mut int) { x = y; }";
 		input += " { let mut u = 1; let mut v = 2; f(&mut u,&mut v); }";
 		check(input,Value.Unit);
@@ -228,48 +228,126 @@ public class FunctionTests {
 
 
 	@Test
-	public void test_0x018c() throws IOException {
+	public void test_0x032() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b int) { *x = y; }";
 		input += " { let mut x = 0; { let mut y = 1; { let mut p = &x; f(&mut p,&y) } } }";
 		check(input,Value.Unit);
 	}
 
 	@Test
-	public void test_0x018d() throws IOException {
+	public void test_0x033() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b int) { *x = y; }";
 		input += " { let mut x = 0; { let mut y = 1; { let mut p = &y; f(&mut p,&x) } } }";
 		check(input,Value.Unit);
 	}
+
+	@Test
+	public void test_0x034() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c int, mut z : &'b &'c int) { }";
+		input += " { let mut u = 1; { let mut v = 2; let mut p = &u; { let mut q = &v; let mut w = f(&mut q, &u, &p); } } }";
+		check(input,Value.Unit);
+	}
+
 
 	// =================================================================
 	// Side-Effect (Valid) Tests
 	// =================================================================
 
 	@Test
-	public void test_0x013() throws IOException {
+	public void test_0x040() throws IOException {
 		String input = "fn write(mut x : []int) { *x = 1; }";
 		input += " { 1 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x014() throws IOException {
+	public void test_0x041() throws IOException {
 		String input = "fn write(mut x : &'a mut int) { *x = 1; }";
 		input += " { 1 }";
 		check(input,One);
 	}
 
 	@Test
-	public void test_0x015() throws IOException {
+	public void test_0x042() throws IOException {
 		String input = "fn write(mut x : &'a mut &'a int, mut y : &'a int) { *x = y; }";
 		input += " { }";
 		check(input, Value.Unit);
 	}
 
 	@Test
-	public void test_0x016() throws IOException {
+	public void test_0x043() throws IOException {
 		String input = "fn write(mut x : &'a mut &'b int, mut y : &'b int) { *x = y; }";
 		input += " { }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x044() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'a mut int) -> &'a mut int { y }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &mut v); let mut a = &mut u; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x045() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'a mut int) -> &'a int { x }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &mut v); let mut a = &mut v; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x046() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'b int) -> &'b int { y }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &v); let mut a = &mut u; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x047() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'b int) -> &'a int { x }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &v); let mut a = &mut v; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x048() throws IOException {
+		String input = "fn f(mut x : &'a mut int, mut y : &'b mut int) -> &'b mut int { y }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&mut u, &mut v); let mut a = &mut u; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x049() throws IOException {
+		String input = "fn f(mut x : &'a mut int, mut y : &'b mut int) -> &'a mut int { x }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&mut u, &mut v); let mut a = &mut v; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x04A() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b mut int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &u; let mut w = f(&mut p, &mut v); let mut a = &mut v; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x04B() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b mut int, mut y : &'b int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &mut u; let mut w = f(&mut p, &v); let mut a = &mut v; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x04C() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &u; let mut w = f(&mut p, &v); let mut a = &mut v; }";
+		check(input, Value.Unit);
+	}
+
+	@Test
+	public void test_0x04D() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b mut int, mut y : &'c mut int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &mut u; let mut w = f(&mut p, &mut v); let mut a = &mut v; }";
 		check(input, Value.Unit);
 	}
 
@@ -290,56 +368,56 @@ public class FunctionTests {
 	// =================================================================
 
 	@Test
-	public void test_0x051() throws IOException {
+	public void test_0x060() throws IOException {
 		String input = "fn id(mut x : int) -> []int { x }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x052() throws IOException {
+	public void test_0x061() throws IOException {
 		String input = "fn id(mut x : int) -> &'a int { x }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x053() throws IOException {
+	public void test_0x062() throws IOException {
 		String input = "fn id(mut x : int) -> &'a mut int { x }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x054() throws IOException {
+	public void test_0x063() throws IOException {
 		String input = "fn id(mut x : &'a int) -> &'a mut int { x }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x055() throws IOException {
+	public void test_0x064() throws IOException {
 		String input = "fn id(mut x : &'a int) -> &'a int { let mut y = 0; &y }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x056() throws IOException {
+	public void test_0x065() throws IOException {
 		String input = "fn id(mut x : &'a mut int) -> &'a mut int { let mut y = 0; &mut y }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x057() throws IOException {
+	public void test_0x066() throws IOException {
 		String input = "fn id(mut x : &'a mut int) -> &'b mut int { x }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x057b() throws IOException {
+	public void test_0x067() throws IOException {
 		// Prove covariance of immutable borrow
 		String input = "fn f(mut x : &'a &'b int, mut y : &'a &'a int) -> &'a &'b int { y }";
 		input += " { }";
@@ -347,7 +425,7 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x057c() throws IOException {
+	public void test_0x068() throws IOException {
 		// Prove contravariance of mutable borrow
 		String input = "fn f(mut x : &'a mut &'b int) -> &'a mut &'a int { y }";
 		input += " { }";
@@ -355,7 +433,7 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x057d() throws IOException {
+	public void test_0x069() throws IOException {
 		// This should work I think?
 		//
 		// 'a smaller than 'b
@@ -372,21 +450,21 @@ public class FunctionTests {
 	// =================================================================
 
 	@Test
-	public void test_0x057e() throws IOException {
+	public void test_0x070() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b int) { *x = y; }";
 		input += " { let mut x = 0; { let mut p = &x; { let mut y = 1; f(&mut p,&y) } } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x057f() throws IOException {
+	public void test_0x071() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b &'c int) -> &'c int { !*x }";
 		input += " { let mut u = 1; { let mut v = &u; let mut w = &u; let mut x = f(&mut v, &w); !*w } }";
 		checkInvalid(input);
 	}
 
 	@Test
-	public void test_0x057g() throws IOException {
+	public void test_0x072() throws IOException {
 		// Immutable borrows not contra-variant
 		String input = "fn f(mut x : &'a &'b int, mut y1 : &'b &'c int, mut y2 : &'d &'b int) -> &'a &'c int { x }";
 		input += "{ }";
@@ -394,7 +472,7 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x057h() throws IOException {
+	public void test_0x073() throws IOException {
 		// Mutable borrows not covariant
 		String input = "fn f(mut x : &'a mut &'b int, mut y1 : &'b &'c int, mut y2 : &'d &'b int) -> &'a mut &'d int { x }";
 		input += "{ }";
@@ -402,7 +480,7 @@ public class FunctionTests {
 	}
 
 	@Test
-	public void test_0x057i() throws IOException {
+	public void test_0x074() throws IOException {
 		// Mutable borrows not contra-variant
 		String input = "fn f(mut x : &'a mut &'b int, mut y1 : &'b &'c int, mut y2 : &'d &'b int) -> &'a mut &'c int { x }";
 		input += "{ }";
@@ -414,12 +492,101 @@ public class FunctionTests {
 	// =================================================================
 
 	@Test
-	public void test_0x058() throws IOException {
+	public void test_0x080() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int) { let mut y = 0; *x = &y; }";
 		input += " { }";
 		checkInvalid(input);
 	}
 
+
+	@Test
+	public void test_0x081() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'a mut int) -> &'a mut int { y }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &mut v); let mut a = &mut v; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x082() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'a mut int) -> &'a int { x }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &mut v); let mut a = &mut u; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x083() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'b int) -> &'b int { y }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &v); let mut a = &mut v; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x084() throws IOException {
+		String input = "fn f(mut x : &'a int, mut y : &'b int) -> &'a int { x }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&u, &v); let mut a = &mut u; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x085() throws IOException {
+		String input = "fn f(mut x : &'a mut int, mut y : &'b mut int) -> &'b mut int { y }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&mut u, &mut v); let mut a = &mut v; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x086() throws IOException {
+		String input = "fn f(mut x : &'a mut int, mut y : &'b mut int) -> &'a mut int { x }";
+		input += " { let mut u = 1; let mut v = 2; let mut w = f(&mut u, &mut v); let mut a = &mut u; }";
+		checkInvalid(input);
+	}
+
+
+	@Test
+	public void test_0x087() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &u; let mut w = f(&mut p, &v); let mut a = &mut u; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x088() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'b int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &u; let mut w = f(&mut p, &v); let mut a = &mut v; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x089() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b mut int, mut y : &'b mut int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &mut u; let mut w = f(&mut p, &mut v); let mut a = &mut u; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x08A() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b mut int, mut y : &'b mut int) { }";
+		input += " { let mut u = 1; let mut v = 2; let mut p = &mut u; let mut w = f(&mut p, &mut v); let mut a = &mut v; }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x08B() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c int, mut z : &'b &'c int) { }";
+		input += " { let mut u = 1; { let mut v = 2;  let mut p = &u; { let mut q = &v; f(&mut q, &u, &p); } let mut a = &mut u; } } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x08C() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c int, mut z : &'b &'c int) { }";
+		input += " { let mut u = 1; { let mut v = 2;  let mut p = &u; { let mut q = &v; f(&mut q, &u, &p);  } let mut a = &mut v; } } }";
+		checkInvalid(input);
+	}
+
+	// =================================================================
+	// Helpers
+	// =================================================================
 
 	public static void check(String input, Value output) throws IOException {
 		// Allocate the global lifetime. This is the lifetime where all heap allocated

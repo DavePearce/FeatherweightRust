@@ -200,6 +200,15 @@ public class Functions {
 			public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type);
 
 			/**
+			 * Check whether a given type is a supertype of this signature,under a given
+			 * binding or not.
+			 *
+			 * @param binding
+			 * @param type
+			 */
+			public boolean isSupertype(Map<String, Lifetime> binding, Environment env, Type type);
+
+			/**
 			 * Visit all matching signature types.
 			 *
 			 * @param <T>
@@ -208,7 +217,21 @@ public class Functions {
 			 */
 			public <T extends Signature> void consume(Class<T> kind, Consumer<T> consumer);
 
-			public static class Unit extends SyntacticElement.Impl implements Signature {
+			public static abstract class AbstractSignature extends SyntacticElement.Impl implements Signature {
+				public AbstractSignature(Attribute... attributes) {
+					super(attributes);
+				}
+
+				@Override
+				public <T extends Signature> void consume(Class<T> kind, Consumer<T> consumer) {
+					if(kind.isInstance(this)) {
+						consumer.accept((T) this);
+					}
+				}
+
+			}
+
+			public static class Unit extends AbstractSignature {
 				public Unit(Attribute... attributes) {
 					super(attributes);
 				}
@@ -229,10 +252,8 @@ public class Functions {
 				}
 
 				@Override
-				public <T extends Signature> void consume(Class<T> kind, Consumer<T> consumer) {
-					if(kind.isInstance(this)) {
-						consumer.accept((T) this);
-					}
+				public boolean isSupertype(Map<String, Lifetime> binding, Environment env, Type type) {
+					return type instanceof Type.Unit;
 				}
 
 				@Override
@@ -241,7 +262,7 @@ public class Functions {
 				}
 			}
 
-			public static class Int extends SyntacticElement.Impl implements Signature {
+			public static class Int extends AbstractSignature {
 				public Int(Attribute... attributes) {
 					super(attributes);
 				}
@@ -262,18 +283,17 @@ public class Functions {
 				}
 
 				@Override
-				public <T extends Signature> void consume(Class<T> kind, Consumer<T> consumer) {
-					if(kind.isInstance(this)) {
-						consumer.accept((T) this);
-					}
+				public boolean isSupertype(Map<String, Lifetime> binding, Environment env, Type type) {
+					return type instanceof Type.Int;
 				}
+
 				@Override
 				public String toString() {
 					return "int";
 				}
 			}
 
-			public static class Box extends SyntacticElement.Impl implements Signature {
+			public static class Box extends AbstractSignature {
 				private final Signature operand;
 
 				public Box(Signature element, Attribute... attributes) {
@@ -298,14 +318,17 @@ public class Functions {
 
 				@Override
 				public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type) {
-					return (type instanceof Type.Box) && operand.isSubtype(binding, env, ((Type.Box) type).element());
+					return (type instanceof Type.Box)&& operand.isSubtype(binding, env, ((Type.Box) type).element());
+				}
+
+				@Override
+				public boolean isSupertype(Map<String, Lifetime> binding, Environment env, Type type) {
+					return (type instanceof Type.Box)&& operand.isSupertype(binding, env, ((Type.Box) type).element());
 				}
 
 				@Override
 				public <T extends Signature> void consume(Class<T> kind, Consumer<T> consumer) {
-					if(kind.isInstance(this)) {
-						consumer.accept((T) this);
-					}
+					super.consume(kind, consumer);
 					operand.consume(kind, consumer);
 				}
 
@@ -315,7 +338,7 @@ public class Functions {
 				}
 			}
 
-			public static class Borrow extends SyntacticElement.Impl implements Signature {
+			public static class Borrow extends AbstractSignature {
 				private final String lifetime;
 				private final boolean mut;
 				private final Signature operand;
@@ -392,7 +415,7 @@ public class Functions {
 				}
 
 				@Override
-				public boolean isSubtype(Map<String, Lifetime> binding, Environment env, Type type) {
+				public boolean isSubtype(Map<String, Lifetime> binding, Environment R, Type type) {
 					if (type instanceof Type.Borrow) {
 						Type.Borrow b = (Type.Borrow) type;
 						if (b.isMutable() == mut) {
@@ -400,14 +423,40 @@ public class Functions {
 							//
 							for (LVal lv : b.lvals()) {
 								// Need to decide whether this is a candidate for this borrow, or not.
-								Pair<Type, Lifetime> p = lv.typeOf(env);
+								Pair<Type, Lifetime> p = lv.typeOf(R);
 								Type T = p.first();
 								Lifetime m = p.second();
+								// Check co-/contra-variance
+								if (!m.contains(l) || !operand.isSubtype(binding, R, T)) {
+									return false;
+								} else if(mut && (!l.contains(m) || !operand.isSupertype(binding, R, T))) {
+									// mutable borrows are invariant.
+									return false;
+								}
+							}
+							return true;
+						}
+					}
+					return false;
+				}
 
-								// FIXME: mutable borrows should be invariant.
-
-								// Check whether outlives bound lifetime
-								if (!m.contains(l) || !operand.isSubtype(binding, env, T)) {
+				@Override
+				public boolean isSupertype(Map<String, Lifetime> binding, Environment R, Type type) {
+					if (type instanceof Type.Borrow) {
+						Type.Borrow b = (Type.Borrow) type;
+						if (b.isMutable() == mut) {
+							Lifetime l = binding.get(lifetime);
+							//
+							for (LVal lv : b.lvals()) {
+								// Need to decide whether this is a candidate for this borrow, or not.
+								Pair<Type, Lifetime> p = lv.typeOf(R);
+								Type T = p.first();
+								Lifetime m = p.second();
+								// Check co-/contra-variance
+								if (!l.contains(m) || !operand.isSupertype(binding, R, T)) {
+									return false;
+								} else if(mut && (!m.contains(l) || !operand.isSubtype(binding, R, T))) {
+									// mutable borrows are invariant.
 									return false;
 								}
 							}
@@ -580,6 +629,7 @@ public class Functions {
 		 * @return
 		 */
 		public Map<String,Lifetime> bind(Pair<String, Signature>[] parameters, Type[] arguments, Environment R) {
+			System.out.println("*** BINDING: " + Arrays.toString(parameters) + " WITH: " + Arrays.toString(arguments) + " IN: " + R);
 			// Extract all known abstract lifetimes
 			String[] abstractLifetimes = extractLifetimes(parameters);
 			// Extract all reachable concrete lifetimes
@@ -587,10 +637,13 @@ public class Functions {
 			// Enumerate every possible binding
 			outer:
 			for(Map<String,Lifetime> binding : generate(abstractLifetimes,concreteLifetimes)) {
+				System.out.print("CANDIDATE: " + binding + " --> ");
 				for (int i = 0; i != arguments.length; ++i) {
+					System.out.print("[" + i + "]");
 					Signature sith = parameters[i].second();
 					Type tith = arguments[i];
 					if(!sith.isSubtype(binding, R, tith)) {
+						System.out.println(" !(" + sith + " :> " + tith + ")");
 						continue outer;
 					}
 				}

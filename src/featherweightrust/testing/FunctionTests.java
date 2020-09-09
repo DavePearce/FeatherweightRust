@@ -185,17 +185,46 @@ public class FunctionTests {
 		check(input, One);
 	}
 
+	@Test
 	public void test_0x018a() throws IOException {
 		// Prove covariance of immutable borrow
-		String input = "fn f(x : &'a &'b int) -> &'a &'a int { y }";
-		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v); *w }";
+		String input = "fn f(x : &'a &'b int) -> &'a &'a int { x }";
+		input += " { let mut u = 1; let mut v = &u; let mut w = f(&v); !**w }";
 		check(input, One);
+	}
+
+	@Test
+	public void test_0x018b() throws IOException {
+		String input = "fn f(x : &'a mut &'b int) -> &'a int { !*x }";
+		input += " { let mut u = 1; { let mut v = &u; let mut w = f(&mut v); !*w } }";
+		check(input, One);
+	}
+
+	@Test
+	public void test_0x018b2() throws IOException {
+		// Immutable borrows co-variant
+		String input = "fn f(x : &'a &'b int, c1 : &'b &'c int, c2 : &'d &'b int) -> &'a &'d int { x }";
+		input += "{ }";
+		check(input,Value.Unit);
 	}
 
 	// =================================================================
 	// Parameter (Valid) Tests
 	// =================================================================
 
+	@Test
+	public void test_0x018c() throws IOException {
+		String input = "fn f(x : &'a mut &'b int, y : &'b int) { *x = y; }";
+		input += " { let mut x = 0; { let mut y = 1; { let mut p = &x; f(&mut p,&y) } } }";
+		check(input,Value.Unit);
+	}
+
+	@Test
+	public void test_0x018d() throws IOException {
+		String input = "fn f(x : &'a mut &'b int, y : &'b int) { *x = y; }";
+		input += " { let mut x = 0; { let mut y = 1; { let mut p = &y; f(&mut p,&x) } } }";
+		check(input,Value.Unit);
+	}
 
 	// =================================================================
 	// Side-Effect (Valid) Tests
@@ -294,6 +323,7 @@ public class FunctionTests {
 		checkInvalid(input);
 	}
 
+	@Test
 	public void test_0x057b() throws IOException {
 		// Prove covariance of immutable borrow
 		String input = "fn f(x : &'a &'b int, y : &'a &'a int) -> &'a &'b int { y }";
@@ -301,6 +331,7 @@ public class FunctionTests {
 		checkInvalid(input);
 	}
 
+	@Test
 	public void test_0x057c() throws IOException {
 		// Prove contravariance of mutable borrow
 		String input = "fn f(x : &'a mut &'b int) -> &'a mut &'a int { y }";
@@ -308,7 +339,7 @@ public class FunctionTests {
 		checkInvalid(input);
 	}
 
-
+	@Test
 	public void test_0x057d() throws IOException {
 		// This should work I think?
 		//
@@ -325,6 +356,43 @@ public class FunctionTests {
 	// Parameter (Invalid) Tests
 	// =================================================================
 
+	@Test
+	public void test_0x057e() throws IOException {
+		String input = "fn f(x : &'a mut &'b int, y : &'b int) { *x = y; }";
+		input += " { let mut x = 0; { let mut p = &x; { let mut y = 1; f(&mut p,&y) } } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x057f() throws IOException {
+		String input = "fn f(x : &'a mut &'b int, y : &'b &'c int) -> &'c int { !*x }";
+		input += " { let mut u = 1; { let mut v = &u; let mut w = &u; let mut x = f(&mut v, &w); !*w } }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x057g() throws IOException {
+		// Immutable borrows not contra-variant
+		String input = "fn f(x : &'a &'b int, c1 : &'b &'c int, c2 : &'d &'b int) -> &'a &'c int { x }";
+		input += "{ }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x057h() throws IOException {
+		// Mutable borrows not covariant
+		String input = "fn f(x : &'a mut &'b int, c1 : &'b &'c int, c2 : &'d &'b int) -> &'a mut &'d int { x }";
+		input += "{ }";
+		checkInvalid(input);
+	}
+
+	@Test
+	public void test_0x057i() throws IOException {
+		// Mutable borrows not contra-variant
+		String input = "fn f(x : &'a mut &'b int, c1 : &'b &'c int, c2 : &'d &'b int) -> &'a mut &'c int { x }";
+		input += "{ }";
+		checkInvalid(input);
+	}
 
 	// =================================================================
 	// Side-Effect (Invalid) Tests

@@ -162,11 +162,25 @@ public abstract class AbstractMachine {
 		 * Drop all locations created within a given lifetime.
 		 *
 		 * @param lifetime
+		 * @param temporaries items currently live which are not on the stack or in the
+		 *                    heap. This is needed only for debugging.
 		 * @return
 		 */
-		public State drop(BitSet locations) {
-			return new State(stack, heap.drop(locations));
+		public State drop(Lifetime m, Value... temporaries) {
+			BitSet locations = findAll(m);
+			return new State(stack.pop(m), heap.drop(locations, temporaries));
 		}
+
+		/**
+		 * Push a new stack frame onto this state.
+		 *
+		 * @param m
+		 * @return
+		 */
+		public State push(Lifetime m) {
+			return new State(stack.push(m), heap);
+		}
+
 
 		/**
 		 * Find all locations allocated in a given lifetime
@@ -176,10 +190,6 @@ public abstract class AbstractMachine {
 		 */
 		public BitSet findAll(Lifetime lifetime) {
 			return heap.findAll(lifetime);
-		}
-
-		public void push(Map<String, Reference> frame) {
-
 		}
 
 		@Override
@@ -195,12 +205,16 @@ public abstract class AbstractMachine {
 	 *
 	 */
 	public static class StackFrame {
+		private final StackFrame parent;
+		private final Lifetime lifetime;
 		private final HashMap<String, Reference> locations;
 
 		/**
 		 * Construct an initial (empty) call stack
 		 */
 		public StackFrame() {
+			this.parent = null;
+			this.lifetime = null;
 			this.locations = new HashMap<>();
 		}
 
@@ -209,7 +223,9 @@ public abstract class AbstractMachine {
 		 *
 		 * @param locations
 		 */
-		private StackFrame(HashMap<String, Reference> locations) {
+		private StackFrame(StackFrame parent, Lifetime lifetime, HashMap<String, Reference> locations) {
+			this.parent = parent;
+			this.lifetime = lifetime;
 			this.locations = locations;
 		}
 
@@ -234,6 +250,27 @@ public abstract class AbstractMachine {
 		}
 
 		/**
+		 * Push an empty frame on this stack
+		 */
+		public StackFrame push(Lifetime lifetime) {
+			return new StackFrame(this, lifetime, new HashMap<>());
+		}
+
+		/**
+		 * Pop a given scope of this stack.
+		 *
+		 * @param lifetime
+		 * @return
+		 */
+		public StackFrame pop(Lifetime lifetime) {
+			if(this.lifetime == lifetime) {
+				return parent;
+			} else {
+				return this;
+			}
+		}
+
+		/**
 		 * Bind a given name to a given location producing an updated stack. Observe
 		 * that the name may already exist, in which case the original binding is simply
 		 * lost.
@@ -250,12 +287,16 @@ public abstract class AbstractMachine {
 			// Update new mapping
 			nlocations.put(name, location);
 			//
-			return new StackFrame(nlocations);
+			return new StackFrame(parent, lifetime, nlocations);
 		}
 
 		@Override
 		public String toString() {
-			return locations.toString();
+			String r = locations.toString();
+			if(parent != null) {
+				r += parent.toString();
+			}
+			return r;
 		}
 	}
 
@@ -351,13 +392,13 @@ public abstract class AbstractMachine {
 		 * @param location
 		 * @return
 		 */
-		public Store drop(BitSet locations) {
+		public Store drop(BitSet locations, Value... temporaries) {
 			Slot[] ncells = Arrays.copyOf(cells, cells.length);
 			for (int i = locations.nextSetBit(0); i != -1; i = locations.nextSetBit(i + 1)) {
 				destroy(ncells, i);
 			}
 			// Check the heap invariant still holds!
-			assert heapInvariant(ncells);
+			assert heapInvariant(ncells,temporaries);
 			// Done
 			return new Store(ncells);
 		}
@@ -503,7 +544,7 @@ public abstract class AbstractMachine {
 		 * @param slots
 		 * @return
 		 */
-		private static boolean heapInvariant(Slot[] slots) {
+		private static boolean heapInvariant(Slot[] slots, Value... temporaries) {
 			int[] owners = new int[slots.length];
 			// First, mark all owned locations
 			for(int i=0;i!=slots.length;++i) {
@@ -512,13 +553,19 @@ public abstract class AbstractMachine {
 					markOwners(ith.contents(),owners);
 				}
 			}
-			// Second look for any heap locations which are not owned.
+			// Second, mark temporary value(s)
+			for(int i=0;i!=temporaries.length;++i) {
+				markOwners(temporaries[i], owners);
+			}
+			// Third. look for any heap locations which are not owned.
 			for(int i=0;i!=slots.length;++i) {
 				Slot ith = slots[i];
 				if(ith != null) {
 					if (ith.hasGlobalLifetime() && owners[i] != 1) {
+						System.out.println("FAILED_A(" + i + ")");
 						return false;
 					} else if(hasDanglingReference(ith.contents(),slots)) {
+						System.out.println("FAILED_B(" + i + ")");
 						return false;
 					}
 				}

@@ -291,9 +291,11 @@ public class ControlFlow {
 			Slot Cx = R.get(x);
 			check(Cx != null, BorrowChecker.UNDECLARED_VARIABLE, lv);
 			// Determine type being read
-			Type T2 = typeOf(R,lv);
+			Pair<Type,Lifetime> p = lv.typeOf(R);
 			// Sanity check type
-			check(T2 != null, LVAL_INVALID, lv);
+			check(p != null, LVAL_INVALID, lv);
+			// Extract type
+			Type T2 = p.first();
 			// Sanity check type is moveable
 			check(T2.defined(), LVAL_MOVED, lv);
 			// Check variable readable (e.g. not mutably borrowed)
@@ -301,7 +303,6 @@ public class ControlFlow {
 			// Done
 			return new Pair<>(R,T2);
 		}
-
 	}
 
 	public static final BorrowChecker.Extension TYPING = new Typing();

@@ -28,8 +28,12 @@ import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.core.Syntax.Term.Access;
 import featherweightrust.extensions.ControlFlow;
+import featherweightrust.extensions.Functions;
+import featherweightrust.extensions.Functions.Syntax.FunctionDeclaration;
+import featherweightrust.extensions.Functions.Syntax.Signature;
 import featherweightrust.extensions.Tuples;
 import featherweightrust.io.Lexer.*;
+import featherweightrust.util.Pair;
 import featherweightrust.util.SyntacticElement.Attribute;
 import featherweightrust.util.SyntaxError;
 
@@ -43,6 +47,66 @@ public class Parser {
 	public Parser(String sourcefile, List<Token> tokens) {
 		this.sourcefile = sourcefile;
 		this.tokens = new ArrayList<>(tokens);
+	}
+
+	public List<FunctionDeclaration> parseDeclarations() {
+		ArrayList<FunctionDeclaration> declarations = new ArrayList<>();
+		while (index < tokens.size() && tokens.get(index).text.equals("fn")) {
+			declarations.add(parseFunctionDeclaration());
+		}
+		return declarations;
+	}
+
+	public FunctionDeclaration parseFunctionDeclaration() {
+		matchKeyword("fn");
+		String name = matchIdentifier().text;
+		match("(");
+		ArrayList<Pair<String, Signature>> params = new ArrayList<>();
+		while (index < tokens.size() && !(tokens.get(index) instanceof RightBrace)) {
+			if (!params.isEmpty()) {
+				match(",");
+			}
+			matchKeyword("mut");
+			String param = matchIdentifier().text;
+			match(":");
+			Signature sig = parseSignature();
+			params.add(new Pair<>(param, sig));
+		}
+		match(")");
+		Signature ret = new Signature.Unit(sourceAttr(index - 1, index - 1));
+		if(index < tokens.size() && (tokens.get(index) instanceof RightArrow)) {
+			match("->");
+			ret = parseSignature();
+		}
+		Lifetime globalLifetime = new Lifetime();
+		Term.Block body = parseStatementBlock(new Context(), globalLifetime);
+		Pair<String, Signature>[] params_array = params.toArray(new Pair[params.size()]);
+		return new FunctionDeclaration(name, params_array, ret, body);
+	}
+
+	public Signature parseSignature() {
+		int start = index;
+		Token lookahead = tokens.get(index);
+		//
+		if (lookahead.text.equals("int")) {
+			matchKeyword("int");
+			return new Signature.Int(sourceAttr(start, index - 1));
+		} else if(lookahead.text.equals("[]")) {
+			match("[]");
+			Signature operand = parseSignature();
+			return new Signature.Box(operand,sourceAttr(start, index - 1));
+		} else {
+			match("&");
+			match("'");
+			String lifetime = matchIdentifier().text;
+			boolean mut = false;
+			if(index < tokens.size() && tokens.get(index).text.equals("mut")) {
+				matchKeyword("mut");
+				mut = true;
+			}
+			Signature operand = parseSignature();
+			return new Signature.Borrow(lifetime, mut, operand,sourceAttr(start, index - 1));
+		}
 	}
 
 	/**
@@ -117,6 +181,8 @@ public class Parser {
 			t = new Value.Integer(val, sourceAttr(start, index - 1));
 		} else if (lookahead.text.equals("box")) {
 			t = parseBox(context, lifetime, consumed);
+		} else if (lookahead instanceof Identifier && (index+1) < tokens.size() && tokens.get(index+1) instanceof LeftBrace) {
+			t = parseInvocation(context, lifetime, consumed);
 		} else {
 			t = parseAssignmentOrDereference(context, lifetime, consumed);
 		}
@@ -187,6 +253,32 @@ public class Parser {
 		Term.Block falseBlock = parseStatementBlock(context,lifetime);
 		// Return extended term
 		return new ControlFlow.Syntax.IfElse(eq, lhs, rhs, trueBlock, falseBlock, sourceAttr(start, index - 1));
+	}
+
+	/**
+	 * Parse a function invocation.
+	 *
+	 * @param context
+	 * @param lifetime
+	 * @param consumed
+	 * @return
+	 */
+	public Term parseInvocation(Context context, Lifetime lifetime, boolean consumed) {
+		int start = index;
+		// match function name
+		String name = matchIdentifier().text;
+		ArrayList<Term> arguments = new ArrayList<>();
+		// parse argument list
+		match("(");
+		while(index < tokens.size() && !(tokens.get(index) instanceof RightBrace)) {
+			if(arguments.size() > 0) {
+				match(",");
+			}
+			arguments.add(parseTerm(context, lifetime, consumed));
+		}
+		match(")");
+		Term[] args = arguments.toArray(new Term[arguments.size()]);
+		return new Functions.Syntax.Invoke(name, args, sourceAttr(start, index - 1));
 	}
 
 	public Term parseBracketedExpression(Context context, Lifetime lifetime, boolean consumed) {

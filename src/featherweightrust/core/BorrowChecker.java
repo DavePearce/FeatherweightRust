@@ -418,7 +418,7 @@ public class BorrowChecker extends AbstractTransformer<BorrowChecker.Environment
 	 *               in Rust, these only occur when assigning directly to variables.
 	 * @return
 	 */
-	protected Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
+	public Environment write(Environment R1, LVal lv, Type T1, boolean strong) {
 		Path path = lv.path();
 		// Extract target cell
 		Slot Cx = R1.get(lv.name());

@@ -351,6 +351,20 @@ public class FunctionTests {
 		check(input, Value.Unit);
 	}
 
+	@Test
+	public void test_0x04E() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c int, mut z : &'b &'c int) { }";
+		input += " { let mut u = 1; { let mut v = 2;  let mut p = &u; { let mut q = &v; f(&mut q, &u, &p);  } let mut a = &mut v; } } }";
+		check(input,Value.Unit);
+	}
+
+	@Test
+	public void test_0x04F() throws IOException {
+		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c mut int, mut z : &'b &'c int) { }";
+		input += " { let mut u = 1; { let mut v = 2; let mut w = 3; let mut p = &u; { let mut q = &v; f(&mut q, &mut w, &p);  let mut a = &mut w; } } }";
+		check(input,Value.Unit);
+	}
+
 	// =================================================================
 	// Straightforward (Invalid) Tests
 	// =================================================================
@@ -580,7 +594,7 @@ public class FunctionTests {
 	@Test
 	public void test_0x08C() throws IOException {
 		String input = "fn f(mut x : &'a mut &'b int, mut y : &'c int, mut z : &'b &'c int) { }";
-		input += " { let mut u = 1; { let mut v = 2;  let mut p = &u; { let mut q = &v; f(&mut q, &u, &p);  } let mut a = &mut v; } } }";
+		input += " { let mut u = 1; { let mut v = 2;  let mut p = &u; { let mut q = &v; f(&mut q, &u, &p); let mut a = &mut v; } } }";
 		checkInvalid(input);
 	}
 

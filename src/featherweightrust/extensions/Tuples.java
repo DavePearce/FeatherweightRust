@@ -21,13 +21,12 @@ import featherweightrust.core.BorrowChecker;
 import featherweightrust.core.BorrowChecker.Environment;
 
 import java.util.Arrays;
-import java.util.function.Predicate;
+import java.util.function.Consumer;
 
 import featherweightrust.core.OperationalSemantics;
 import featherweightrust.core.Syntax.LVal;
 import featherweightrust.core.Syntax.Lifetime;
 import featherweightrust.core.Syntax.Path;
-import featherweightrust.core.Syntax.Path.Deref;
 import featherweightrust.core.Syntax.Path.Element;
 import featherweightrust.core.Syntax.Term;
 import featherweightrust.core.Syntax.Term.AbstractTerm;
@@ -35,7 +34,6 @@ import featherweightrust.core.Syntax.Type;
 import featherweightrust.core.Syntax.Value;
 import featherweightrust.core.Syntax.Value.Reference;
 import featherweightrust.util.Pair;
-import featherweightrust.util.SyntaxError;
 import featherweightrust.util.AbstractMachine.State;
 import featherweightrust.util.AbstractMachine.Store;
 
@@ -255,8 +253,8 @@ public class Tuples {
 			}
 
 			@Override
-			public <T extends Type> T extract(Class<T> type, Predicate<T> pred) {
-				// NOTE: don't need to implement this yet.
+			public <T extends Type> void consume(Class<T> type, Consumer<T> pred) {
+				// NOTE: don't need to implement this yet (though we could).
 				throw new UnsupportedOperationException();
 			}
 		}

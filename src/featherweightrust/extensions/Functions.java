@@ -691,7 +691,6 @@ public class Functions {
 		 * @return
 		 */
 		public Map<String,Lifetime> bind(Pair<String, Signature>[] parameters, Type[] arguments, Environment R) {
-			System.out.println("*** BINDING: " + Arrays.toString(parameters) + " WITH: " + Arrays.toString(arguments) + " IN: " + R);
 			// Extract all known abstract lifetimes
 			String[] abstractLifetimes = extractLifetimes(parameters);
 			// Extract all reachable concrete lifetimes
@@ -699,17 +698,13 @@ public class Functions {
 			// Enumerate every possible binding
 			outer:
 			for(Map<String,Lifetime> binding : generate(abstractLifetimes,concreteLifetimes)) {
-				System.out.print("CANDIDATE: " + binding + " --> ");
 				for (int i = 0; i != arguments.length; ++i) {
-					System.out.print("[" + i + "]");
 					Signature sith = parameters[i].second();
 					Type tith = arguments[i];
 					if(!sith.isSubtype(binding, R, tith)) {
-						System.out.println(" !(" + sith + " :> " + tith + ")");
 						continue outer;
 					}
 				}
-				System.out.println(" ... OK!");
 				// Found candidate!
 				return binding;
 			}

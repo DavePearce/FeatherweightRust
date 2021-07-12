@@ -562,10 +562,8 @@ public abstract class AbstractMachine {
 				Slot ith = slots[i];
 				if(ith != null) {
 					if (ith.hasGlobalLifetime() && owners[i] != 1) {
-						System.out.println("FAILED_A(" + i + ")");
 						return false;
 					} else if(hasDanglingReference(ith.contents(),slots)) {
-						System.out.println("FAILED_B(" + i + ")");
 						return false;
 					}
 				}

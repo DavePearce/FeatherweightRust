@@ -54,7 +54,7 @@ public class ParallelExperiment<T> {
 	 * Number of programs each thread to process in one go. This can make a real
 	 * difference to the overall performance.
 	 */
-	private int batchSize = 200;
+	private int batchSize = 10000;
 
 	/**
 	 * An estimate for how many items there are to iterate over. This is only used

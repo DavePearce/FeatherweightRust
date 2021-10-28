@@ -1319,6 +1319,34 @@ public class CoreTests {
 	}
 
 	// ==============================================================
+	// Tricky reborrowing examples?
+	// ==============================================================
+
+	@Test
+	public void test_0x0500() throws IOException {
+		String input = "{ let mut x = 0; let mut y = &x; y = &*y } ";
+		checkInvalid(input);
+	}
+	
+	@Test
+	public void test_0x0501() throws IOException {
+		String input = "{ let mut x = 0; let mut y = &mut x; y = &mut *y } ";
+		checkInvalid(input);
+	}
+	
+	@Test
+	public void test_0x0502() throws IOException {
+		String input = "{ let mut x = 0; let mut y = &x; let mut z = &*y; y = &*z; }";
+		checkInvalid(input);
+	}
+	
+	@Test
+	public void test_0x0503() throws IOException {
+		String input = "{ let mut x = 0; let mut y = &mut x; let mut z = &mut *y; y = &mut *z; }";
+		checkInvalid(input);
+	}
+	
+	// ==============================================================
 	// Helpers
 	// ==============================================================
 
